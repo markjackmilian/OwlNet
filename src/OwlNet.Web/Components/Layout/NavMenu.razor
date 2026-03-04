@@ -2,12 +2,27 @@
 
 @inject NavigationManager NavigationManager
 
-@* Sidebar navigation using MudBlazor NavMenu component *@
-<MudNavMenu>
+@* Sidebar navigation using MudBlazor NavMenu with grouped sections.
+   Inspired by the "Mud Mini" dashboard design — section labels provide
+   visual grouping while MudNavLinks handle routing and active-state highlighting. *@
+<MudNavMenu Rounded="true" Color="Color.Primary">
+
+    @* ── Section: General ──────────────────────────────────────────────── *@
+    @* Section label styled as uppercase overline text with muted color,
+       matching the "Mud Mini" dashboard sidebar aesthetic. *@
+    <MudText Typo="Typo.overline" Class="nav-section-label mt-2 px-4">
+        General
+    </MudText>
+
     <MudNavLink Href="/" Match="NavLinkMatch.All"
-                Icon="@Icons.Material.Filled.Home">
-        Home
+                Icon="@Icons.Material.Filled.Dashboard">
+        Dashboard
     </MudNavLink>
+
+    @* ── Section: Account ──────────────────────────────────────────────── *@
+    <MudText Typo="Typo.overline" Class="nav-section-label mt-4 px-4">
+        Account
+    </MudText>
 
     @* Identity account links — show profile/logout when authenticated, register/login otherwise *@
     <AuthorizeView>

@@ -1,7 +1,8 @@
 @inherits LayoutComponentBase
 
-@* MudBlazor theme provider with dark/light mode toggle support *@
-<MudThemeProvider @bind-IsDarkMode="_isDarkMode" />
+@* MudBlazor theme provider — uses the custom OwlNet violet/indigo theme.
+   Dark mode is two-way bound so the toggle in the AppBar updates the provider. *@
+<MudThemeProvider Theme="@OwlNetTheme.Theme" @bind-IsDarkMode="_isDarkMode" />
 
 @* MudBlazor service providers for popovers, dialogs, and snackbar notifications *@
 <MudPopoverProvider />
@@ -9,35 +10,54 @@
 <MudSnackbarProvider />
 
 <MudLayout>
-    @* Top application bar — contains drawer toggle, app title, and dark mode switch *@
-    <MudAppBar Elevation="1">
+    @* Top application bar — flat (Elevation 0) with dense layout for a minimal header.
+       Left side: drawer toggle + decorative search button.
+       Right side: dark mode toggle, notification bell, and user avatar placeholder. *@
+    <MudAppBar Elevation="0" Dense="true">
         <MudIconButton Icon="@Icons.Material.Filled.Menu"
                        Color="Color.Inherit"
                        Edge="Edge.Start"
                        OnClick="@ToggleDrawer"
                        aria-label="Toggle navigation drawer" />
-        <MudText Typo="Typo.h6" Class="ml-3">OwlNet</MudText>
+        <MudIconButton Icon="@Icons.Material.Filled.Search"
+                       Color="Color.Inherit"
+                       aria-label="Search (coming soon)" />
         <MudSpacer />
         @* Dark/light mode toggle — icon changes based on current mode *@
         <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
                        Color="Color.Inherit"
                        OnClick="@ToggleDarkMode"
                        aria-label="Toggle dark mode" />
+        @* Notification bell — decorative placeholder for future notification system *@
+        <MudIconButton Icon="@Icons.Material.Filled.Notifications"
+                       Color="Color.Inherit"
+                       aria-label="Notifications" />
+        @* User avatar placeholder — will be replaced with real user data when auth is wired up *@
+        <MudAvatar Size="Size.Small" Class="ml-2" aria-label="User menu">
+            <MudIcon Icon="@Icons.Material.Filled.Person" />
+        </MudAvatar>
     </MudAppBar>
 
-    @* Collapsible left-side drawer containing the navigation menu *@
+    @* Collapsible left-side drawer — flat (Elevation 0) with a right border for separation.
+       The border is applied via global CSS (app.css) targeting .mud-drawer because Blazor
+       CSS isolation scoping attributes are not present on MudBlazor-rendered elements. *@
     <MudDrawer @bind-Open="_drawerOpen"
                ClipMode="DrawerClipMode.Always"
-               Elevation="2">
-        <MudDrawerHeader>
-            <MudText Typo="Typo.h6">Navigation</MudText>
+               Elevation="0">
+        @* Brand header — owl icon + app name styled as a compact brand mark *@
+        <MudDrawerHeader Class="brand-header">
+            <MudIcon Icon="@Icons.Material.Filled.NightsStay"
+                     Color="Color.Primary"
+                     Size="Size.Large" />
+            <MudText Typo="Typo.h6" Color="Color.Primary" Class="ml-2">OwlNet</MudText>
         </MudDrawerHeader>
         <NavMenu />
     </MudDrawer>
 
-    @* Main content area with error boundary for graceful failure handling *@
+    @* Main content area — full width with comfortable padding for modern dashboard feel.
+       ErrorBoundary wraps the routed page content for graceful failure handling. *@
     <MudMainContent>
-        <MudContainer MaxWidth="MaxWidth.Large" Class="py-4">
+        <MudContainer MaxWidth="MaxWidth.False" Class="pa-6">
             <ErrorBoundary @ref="_errorBoundary">
                 <ChildContent>
                     @Body

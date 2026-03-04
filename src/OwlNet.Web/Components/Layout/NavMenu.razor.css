@@ -1,1 +1,26 @@
-/* NavMenu scoped styles — minimal since MudNavMenu handles styling via the MudBlazor theme system */
+/*
+ * NavMenu scoped styles — supplements MudBlazor's NavMenu theming
+ * with spacing and section-label styling for the grouped navigation layout.
+ *
+ * Section labels use the theme's TextSecondary color so they adapt
+ * automatically to light/dark mode without hardcoded color values.
+ */
+
+/* Section group labels — small, uppercase, muted headings that visually
+   separate navigation groups (e.g., "General", "Account").
+   Color uses the MudBlazor theme variable for TextSecondary to stay
+   consistent across light and dark modes. */
+::deep .nav-section-label {
+    color: var(--mud-palette-text-secondary);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    padding-bottom: 4px;
+    /* Prevent the label from being selectable — it's decorative, not interactive */
+    user-select: none;
+}
+
+/* Add a bit of vertical breathing room between nav link items
+   for a more spacious, modern sidebar feel. */
+::deep .mud-nav-link {
+    margin-bottom: 2px;
+}

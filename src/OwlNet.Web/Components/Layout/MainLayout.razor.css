@@ -1,5 +1,12 @@
 /* MainLayout scoped styles — minimal since MudBlazor handles most styling via its theme system */
 
+/* Brand header — aligns the owl icon and "OwlNet" text horizontally within the
+   drawer header for a compact brand mark appearance. */
+.brand-header {
+    display: flex;
+    align-items: center;
+}
+
 /* Error boundary card — provides spacing around the error fallback content */
 .error-card {
     margin: 2rem;

@@ -37,6 +37,14 @@ h1:focus {
     color: var(--mud-palette-error);
 }
 
+/* Navigation drawer — right border provides subtle separation from main content
+   in place of elevation shadow, adapting to light/dark mode via theme variable.
+   Placed in global CSS because Blazor CSS isolation scoping attributes are not
+   present on MudBlazor-rendered elements, so ::deep in scoped CSS does not work. */
+.mud-drawer {
+    border-right: 1px solid var(--mud-palette-divider);
+}
+
 /* ============================================================
    Identity SSR form utility classes
    These replicate Bootstrap form styling for Identity pages
