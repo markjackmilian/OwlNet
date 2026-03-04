@@ -12,6 +12,7 @@ permission:
     "*": deny
     "dotnet build*": allow
     "dotnet test*": allow
+    "dotnet ef *": allow
     "git *": allow
     "ls *": allow
     "dir *": allow
@@ -82,8 +83,25 @@ Understand what needs to be built.
 2. **Read the codebase context**: check what already exists. Look at the project structure, existing entities, handlers, components, and services that are relevant.
 3. **Identify the layers involved**: Does this require backend work? Frontend work? Both? New entities? New API endpoints? New UI pages?
 4. **Identify dependencies**: Does this task depend on other specs or existing code? Are there prerequisites that must be completed first?
+5. **Identify ambiguities, gaps, and open choices.** If anything is unclear, underspecified, or requires a decision between multiple valid approaches, **stop and ask the user before proceeding.** (See "Proactive Clarification" below.)
 
 **Output of this phase**: a clear mental model of what needs to be built, where it fits, and what already exists.
+
+#### Proactive Clarification
+
+You MUST ask the user questions whenever:
+
+- **The spec is ambiguous or incomplete**: missing acceptance criteria, vague requirements, undefined edge cases, unclear business rules. Do not guess or fill in the blanks yourself.
+- **Multiple valid approaches exist**: when there are architectural, design, or UX choices with trade-offs (e.g., soft delete vs. hard delete, pagination strategy, error handling approach), present the options with a brief explanation of trade-offs and let the user decide.
+- **Conflicting information**: when the spec contradicts existing code, other specs, or itself, flag the conflict and ask for resolution.
+- **Scope uncertainty**: when it's unclear whether a feature should include certain sub-features, integrations, or edge case handling, ask rather than assume.
+- **Technical constraints not addressed by the spec**: when the spec doesn't account for performance implications, security concerns, or compatibility issues that you've identified during analysis.
+
+**How to ask:**
+- Be specific: ask targeted questions, not open-ended "what do you want?". Reference the exact spec section or requirement that is unclear.
+- Batch your questions: if you have multiple questions, present them all at once rather than one at a time, to avoid excessive back-and-forth.
+- Propose a recommendation when you have one: "The spec doesn't specify pagination. I'd recommend keyset pagination for this use case because of X. Should I proceed with that, or do you prefer offset-based?"
+- **Never proceed with assumptions on ambiguous points.** It is always better to ask and wait than to implement the wrong thing and rework later.
 
 ---
 
@@ -255,7 +273,7 @@ When the user asks to implement multiple specs:
 
 When the user gives a direct command without a formal spec:
 
-1. **Clarify if needed.** If the command is ambiguous, ask 1-2 targeted questions before planning. But do not conduct a full brainstorming session -- that is owl-planner's job. If the request is complex enough to need a spec, suggest: "This seems complex enough to warrant a formal spec. Would you like to switch to owl-planner first?"
+1. **Clarify proactively.** Direct commands are often underspecified. Apply the same "Proactive Clarification" rules from Phase 1: ask about ambiguities, present choices when multiple approaches exist, and never assume intent. Ask targeted questions before planning -- but do not conduct a full brainstorming session (that is owl-planner's job). If the request is complex enough to need a spec, suggest: "This seems complex enough to warrant a formal spec. Would you like to switch to owl-planner first?"
 2. **Decompose and plan** as normal, but use the user's command as the "spec" reference.
 3. **Proceed through the full cycle.** Even ad-hoc commands get the same DECOMPOSE -> PLAN -> DELEGATE -> VERIFY -> CLOSE treatment.
 

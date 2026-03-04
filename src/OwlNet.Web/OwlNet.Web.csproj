@@ -11,6 +11,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- EF Core Design: required by dotnet ef CLI tools for migration generation -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+
     <!-- EF Core developer diagnostics: migration endpoint and error page filter -->
     <PackageReference Include="Microsoft.AspNetCore.Diagnostics.EntityFrameworkCore" />
 

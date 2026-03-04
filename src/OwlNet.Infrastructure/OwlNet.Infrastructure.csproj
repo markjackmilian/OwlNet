@@ -1,5 +1,51 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!--
+    EF Core dual-provider migration isolation.
+
+    EF Core identifies migrations by the [Migration("id")] attribute and scans ALL classes
+    in the assembly that carry [DbContext(typeof(ApplicationDbContext))]. When both SqlServer
+    and Sqlite migration sets live in the same assembly, the migration names (e.g.
+    "InitialCreate") and the ApplicationDbContextModelSnapshot class collide.
+
+    Fix: conditionally exclude the OTHER provider's migration files from compilation.
+
+    • During migration generation, set EF_PROVIDER to the target provider so only that
+      provider's migration files are compiled. The DesignTimeDbContextFactory also reads
+      this value (or the CLI passthrough arg) to select the correct provider.
+    • During normal/runtime builds, EF_PROVIDER defaults to "Sqlite" (matching the
+      default DatabaseProvider in appsettings.json). Only the active provider's migrations
+      are compiled, avoiding ModelSnapshot and [Migration] attribute collisions.
+    • For production SqlServer deployments, set EF_PROVIDER=SqlServer in the CI/CD build.
+
+    Usage:
+      # Generate Sqlite migration (default — EF_PROVIDER not needed)
+      dotnet ef migrations add InitialCreate \
+        - -project src/OwlNet.Infrastructure \
+        - -startup-project src/OwlNet.Web \
+        - -output-dir Persistence/Migrations/Sqlite
+
+      # Generate SqlServer migration
+      set EF_PROVIDER=SqlServer
+      dotnet ef migrations add InitialCreate \
+        - -project src/OwlNet.Infrastructure \
+        - -startup-project src/OwlNet.Web \
+        - -output-dir Persistence/Migrations/SqlServer \
+        - - SqlServer
+  -->
+  <PropertyGroup>
+    <EfProvider Condition="'$(EF_PROVIDER)' != ''">$(EF_PROVIDER)</EfProvider>
+    <EfProvider Condition="'$(EF_PROVIDER)' == ''">Sqlite</EfProvider>
+  </PropertyGroup>
+
+  <!-- Exclude the OTHER provider's migrations to prevent [Migration] name and ModelSnapshot collisions -->
+  <ItemGroup Condition="'$(EfProvider)' == 'SqlServer'">
+    <Compile Remove="Persistence\Migrations\Sqlite\**" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(EfProvider)' == 'Sqlite'">
+    <Compile Remove="Persistence\Migrations\SqlServer\**" />
+  </ItemGroup>
+
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
