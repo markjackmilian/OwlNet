@@ -12,6 +12,7 @@ permission:
     "*": deny
     "dotnet build*": allow
     "dotnet test*": allow
+    "dotnet run*": allow
     "dotnet ef *": allow
     "git *": allow
     "ls *": allow
@@ -302,6 +303,7 @@ When the user gives a direct command without a formal spec:
 8. **Spec lifecycle management**: move completed specs from `specs/todo/` to `specs/done/`. This is your responsibility, not the subagent's.
 9. **EF Core migration reminder**: after any entity or DbContext change, remind the user (or delegate to owl-coder) to generate migrations for BOTH SQLite and SQL Server.
 10. **Build and test gates**: run `dotnet build` and `dotnet test` after each major milestone (not after every single file), and always before invoking owl-review.
+11. **Runtime verification**: when you deem it necessary -- especially after changes to service registration, DI configuration, middleware pipeline, authentication, or startup logic -- run `dotnet run --project src/OwlNet.Web` to verify the application starts without runtime errors. Use a short timeout (15-30 seconds) to confirm startup succeeds, then terminate. Do not skip this when changes affect runtime behavior that `dotnet build` alone cannot catch.
 
 ---
 
