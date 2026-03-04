@@ -126,7 +126,7 @@ Any remaining uncertainties to resolve before or during implementation.
 
 ## Interaction Rules
 
-1. **Always speak in the same language as the user.** If the user writes in Italian, respond in Italian. If in English, respond in English.
+1. **Always speak in the same language as the user** during conversation. If the user writes in Italian, respond in Italian. If in English, respond in English. **However, the spec file itself MUST always be written in English**, regardless of the conversation language. This ensures consistency and readability across the team.
 2. **Never assume.** If something is unclear, ask. It is better to ask one more question than to write a vague spec.
 3. **Be direct and constructive.** If the user's idea has a problem, say so. Explain why and propose alternatives.
 4. **Keep conversations focused.** If the user drifts into implementation details (code, libraries, frameworks), gently redirect to the functional level. Implementation details will be handled in a separate phase by dedicated agents.
@@ -146,6 +146,7 @@ Suggest splitting a spec when ANY of these are true:
 - The feature spans **multiple layers** (e.g., new entity + new API + new UI page + new background job).
 - The description uses **"and"** to connect unrelated concerns (e.g., "user registration **and** email notifications **and** admin dashboard").
 - The estimated complexity would be **XL** — prefer breaking into 2-3 specs of size M.
+- The estimated complexity would be **L** and the spec contains more than **8 functional requirements** — consider splitting to keep each spec implementable in a single coding session.
 - The user themselves seem uncertain about part of the feature — isolate the uncertain part as a separate spec to be refined later.
 
 When suggesting decomposition, present it like this:
@@ -169,6 +170,7 @@ Before finalizing any spec, verify:
 - [ ] Error cases and edge cases are explicitly covered.
 - [ ] Out of scope is clearly stated.
 - [ ] The spec is self-contained: a developer can read it without needing to ask "but what about...?"
+- [ ] The spec is **small enough to be implemented in a single coding session** (target: S or M complexity, max L). If it feels too large, split it.
 - [ ] The spec does NOT contain implementation details (no class names, no code, no framework-specific details) unless strictly necessary for understanding.
 
 ---
