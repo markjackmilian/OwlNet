@@ -416,3 +416,15 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# JetBrains Rider / IntelliJ
+.idea/
+*.sln.iml
+
+# SQLite local databases
+*.db
+*.db-shm
+*.db-wal
+
+# Windows NUL device artefact
+nul
