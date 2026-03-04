@@ -1,0 +1,38 @@
+/* OwlNet global styles — kept minimal; Fluent UI design tokens handle theming */
+
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+}
+
+/* Focus outline reset — Fluent UI components provide their own focus indicators */
+h1:focus {
+    outline: none;
+}
+
+/* Blazor error boundary fallback styling
+   Uses Fluent Design tokens so the banner adapts to dark/light theme */
+.blazor-error-boundary {
+    background: var(--error);
+    padding: 1rem;
+    color: var(--neutral-foreground-rest);
+}
+
+.blazor-error-boundary::after {
+    content: "An error has occurred.";
+}
+
+/* Form validation styling for Identity account pages (which still use raw HTML forms)
+   Uses Fluent Design tokens for theme-consistent validation indicators */
+.valid.modified:not([type=checkbox]) {
+    outline: 1px solid var(--success);
+}
+
+.invalid {
+    outline: 1px solid var(--error);
+}
+
+.validation-message {
+    color: var(--error);
+}

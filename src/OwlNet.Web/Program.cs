@@ -1,0 +1,126 @@
+using DispatchR.Extensions;
+using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.FluentUI.AspNetCore.Components;
+using OwlNet.Application;
+using OwlNet.Infrastructure;
+using OwlNet.Infrastructure.Identity;
+using OwlNet.Web.Components;
+using OwlNet.Web.Components.Account;
+using Serilog;
+
+// ---------------------------------------------------------------------------
+// Serilog Bootstrap
+// ---------------------------------------------------------------------------
+// Create an early logger so that startup errors are captured before the host
+// is fully built. This is replaced by the configuration-driven logger below.
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console()
+    .CreateBootstrapLogger();
+
+try
+{
+    Log.Information("Starting OwlNet web application");
+
+    var builder = WebApplication.CreateBuilder(args);
+
+    // -----------------------------------------------------------------------
+    // Serilog — replace the default ASP.NET Core logging with Serilog.
+    // Full configuration (sinks, enrichers, minimum levels) is read from
+    // appsettings.json / appsettings.{Environment}.json so that operators
+    // can tune logging without recompilation.
+    // -----------------------------------------------------------------------
+    builder.Services.AddSerilog(
+        (services, loggerConfiguration) => loggerConfiguration
+            .ReadFrom.Configuration(builder.Configuration)
+            .ReadFrom.Services(services));
+
+    // -----------------------------------------------------------------------
+    // Application & Infrastructure layers (Clean Architecture DI extensions)
+    // -----------------------------------------------------------------------
+    builder.Services.AddApplication();
+    builder.Services.AddInfrastructure(builder.Configuration);
+
+    // -----------------------------------------------------------------------
+    // DispatchR — CQRS mediator pipeline (registered in composition root)
+    // Discovers handlers, pipeline behaviors, and notification handlers
+    // from the Application assembly.
+    // -----------------------------------------------------------------------
+    builder.Services.AddDispatchR(
+        typeof(OwlNet.Application.DependencyInjection).Assembly,
+        withPipelines: true,
+        withNotifications: true);
+
+    // -----------------------------------------------------------------------
+    // Blazor Server — Razor components with interactive server-side rendering
+    // -----------------------------------------------------------------------
+    builder.Services.AddRazorComponents()
+        .AddInteractiveServerComponents();
+
+    // -----------------------------------------------------------------------
+    // Fluent UI Blazor — Microsoft Fluent Design System components
+    // -----------------------------------------------------------------------
+    builder.Services.AddFluentUIComponents();
+
+    // -----------------------------------------------------------------------
+    // ASP.NET Core Identity — authentication & authorization scaffolding
+    // -----------------------------------------------------------------------
+    builder.Services.AddCascadingAuthenticationState();
+    builder.Services.AddScoped<IdentityRedirectManager>();
+    builder.Services.AddScoped<AuthenticationStateProvider, IdentityRevalidatingAuthenticationStateProvider>();
+
+    builder.Services.AddAuthentication(options =>
+        {
+            options.DefaultScheme = IdentityConstants.ApplicationScheme;
+            options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
+        })
+        .AddIdentityCookies();
+
+    builder.Services.AddDatabaseDeveloperPageExceptionFilter();
+
+    builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
+
+    // -----------------------------------------------------------------------
+    // Build the application
+    // -----------------------------------------------------------------------
+    var app = builder.Build();
+
+    // -----------------------------------------------------------------------
+    // HTTP Request Pipeline
+    // -----------------------------------------------------------------------
+    if (app.Environment.IsDevelopment())
+    {
+        app.UseMigrationsEndPoint();
+    }
+    else
+    {
+        app.UseExceptionHandler("/Error", createScopeForErrors: true);
+        app.UseHsts();
+    }
+
+    app.UseHttpsRedirection();
+    app.UseStaticFiles();
+    app.UseAntiforgery();
+
+    // Serilog request logging — emits a single structured log event per HTTP
+    // request with timing, status code, and path information.
+    app.UseSerilogRequestLogging();
+
+    app.MapStaticAssets();
+    app.MapRazorComponents<App>()
+        .AddInteractiveServerRenderMode();
+
+    // Identity account endpoints (login, logout, external auth callbacks, etc.)
+    app.MapAdditionalIdentityEndpoints();
+
+    app.Run();
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Application terminated unexpectedly");
+}
+finally
+{
+    // Ensure all buffered log events are flushed to sinks before process exit
+    Log.CloseAndFlush();
+}

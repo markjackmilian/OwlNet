@@ -1,0 +1,71 @@
+@implements IDisposable
+
+@inject NavigationManager NavigationManager
+
+@* Sidebar navigation using Fluent UI NavMenu component *@
+<FluentNavMenu Width="250" Title="Navigation">
+    <FluentNavLink Href="/" Match="NavLinkMatch.All"
+                   Icon="@(new Icons.Regular.Size24.Home())"
+                   IconColor="Color.Accent">
+        Home
+    </FluentNavLink>
+
+    @* Identity account links — show profile/logout when authenticated, register/login otherwise *@
+    <AuthorizeView>
+        <Authorized>
+            <FluentNavLink Href="Account/Manage"
+                           Icon="@(new Icons.Regular.Size24.Person())"
+                           IconColor="Color.Accent">
+                @context.User.Identity?.Name
+            </FluentNavLink>
+            <FluentNavLink Href="@_logoutUrl"
+                           Icon="@(new Icons.Regular.Size24.ArrowExit())"
+                           IconColor="Color.Accent">
+                Logout
+            </FluentNavLink>
+        </Authorized>
+        <NotAuthorized>
+            <FluentNavLink Href="Account/Register"
+                           Icon="@(new Icons.Regular.Size24.PersonAdd())"
+                           IconColor="Color.Accent">
+                Register
+            </FluentNavLink>
+            <FluentNavLink Href="Account/Login"
+                           Icon="@(new Icons.Regular.Size24.PersonKey())"
+                           IconColor="Color.Accent">
+                Login
+            </FluentNavLink>
+        </NotAuthorized>
+    </AuthorizeView>
+</FluentNavMenu>
+
+@code {
+    /// <summary>
+    /// Tracks the current URL for the logout return-URL parameter.
+    /// </summary>
+    private string? _currentUrl;
+
+    /// <summary>
+    /// Computed logout URL that includes the current page as the return destination.
+    /// Note: The actual logout is handled by the Identity POST endpoint; this link
+    /// navigates to a page that performs the POST.
+    /// </summary>
+    private string _logoutUrl => $"Account/Logout?returnUrl={Uri.EscapeDataString(_currentUrl ?? "")}";
+
+    protected override void OnInitialized()
+    {
+        _currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+        NavigationManager.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        _currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= OnLocationChanged;
+    }
+}

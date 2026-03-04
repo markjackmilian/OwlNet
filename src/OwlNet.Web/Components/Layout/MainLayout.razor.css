@@ -1,0 +1,12 @@
+/* MainLayout scoped styles — minimal since Fluent UI handles most styling via design tokens */
+
+/* Error boundary card — provides spacing around the error fallback content */
+.error-card {
+    margin: 2rem;
+    padding: 2rem;
+}
+
+/* Retry button inside the error boundary — adds top spacing to separate from the message */
+.error-retry-button {
+    margin-top: 1rem;
+}

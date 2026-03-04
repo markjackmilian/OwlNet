@@ -1,0 +1,22 @@
+@page "/not-found"
+@layout MainLayout
+
+@* 404 page — uses Fluent UI components for visual consistency *@
+<PageTitle>Not Found</PageTitle>
+
+<FluentCard Style="max-width: 600px; margin: 2rem auto; text-align: center;">
+    <FluentStack Orientation="Orientation.Vertical" VerticalGap="16"
+                 HorizontalAlignment="HorizontalAlignment.Center">
+        <FluentIcon Value="@(new Icons.Regular.Size24.QuestionCircle())"
+                    Color="Color.Neutral" />
+        <FluentLabel Typo="Typography.H4">
+            Not Found
+        </FluentLabel>
+        <FluentLabel>
+            Sorry, the content you are looking for does not exist.
+        </FluentLabel>
+        <FluentAnchor Href="/" Appearance="Appearance.Accent">
+            Go to Home
+        </FluentAnchor>
+    </FluentStack>
+</FluentCard>
