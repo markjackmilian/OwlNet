@@ -11,15 +11,15 @@
 
 <PageTitle>Recovery code verification</PageTitle>
 
-<h1>Recovery code verification</h1>
-<hr />
+<MudText Typo="Typo.h4">Recovery code verification</MudText>
+<MudDivider Class="my-4" />
 <StatusMessage Message="@message" />
-<p>
+<MudText>
     You have requested to log in with a recovery code. This login will not be remembered until you provide
     an authenticator app code at log in or disable 2FA and log in again.
-</p>
-<div class="row">
-    <div class="col-md-4">
+</MudText>
+<MudGrid>
+    <MudItem xs="12" md="4">
         <EditForm Model="Input" FormName="login-with-recovery-code" OnValidSubmit="OnValidSubmitAsync" method="post">
             <DataAnnotationsValidator />
             <ValidationSummary class="text-danger" role="alert" />
@@ -28,10 +28,10 @@
                 <label for="Input.RecoveryCode" class="form-label">Recovery Code</label>
                 <ValidationMessage For="() => Input.RecoveryCode" class="text-danger" />
             </div>
-            <button type="submit" class="w-100 btn btn-lg btn-primary">Log in</button>
+            <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Size="Size.Large">Log in</MudButton>
         </EditForm>
-    </div>
-</div>
+    </MudItem>
+</MudGrid>
 
 @code {
     private string? message;

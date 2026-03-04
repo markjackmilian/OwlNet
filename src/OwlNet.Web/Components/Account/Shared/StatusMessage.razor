@@ -1,9 +1,14 @@
-﻿@if (!string.IsNullOrEmpty(DisplayMessage))
+@* StatusMessage: Displays a success or error alert based on a direct parameter
+   or a one-time cookie set by IdentityRedirectManager after a redirect. *@
+
+@if (!string.IsNullOrEmpty(DisplayMessage))
 {
-    var statusMessageClass = DisplayMessage.StartsWith("Error") ? "danger" : "success";
-    <div class="alert alert-@statusMessageClass" role="alert">
+    @* Determine severity from message prefix: "Error..." maps to Error, everything else to Success *@
+    <MudAlert Severity="@(DisplayMessage.StartsWith("Error") ? Severity.Error : Severity.Success)"
+              Variant="Variant.Filled"
+              Class="my-2">
         @DisplayMessage
-    </div>
+    </MudAlert>
 }
 
 @code {

@@ -1,7 +1,7 @@
 using DispatchR.Extensions;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.FluentUI.AspNetCore.Components;
+using MudBlazor.Services;
 using OwlNet.Application;
 using OwlNet.Infrastructure;
 using OwlNet.Infrastructure.Identity;
@@ -58,9 +58,9 @@ try
         .AddInteractiveServerComponents();
 
     // -----------------------------------------------------------------------
-    // Fluent UI Blazor — Microsoft Fluent Design System components
+    // MudBlazor — Material Design component library
     // -----------------------------------------------------------------------
-    builder.Services.AddFluentUIComponents();
+    builder.Services.AddMudServices();
 
     // -----------------------------------------------------------------------
     // ASP.NET Core Identity — authentication & authorization scaffolding

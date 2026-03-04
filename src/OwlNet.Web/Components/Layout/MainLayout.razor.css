@@ -1,4 +1,4 @@
-/* MainLayout scoped styles — minimal since Fluent UI handles most styling via design tokens */
+/* MainLayout scoped styles — minimal since MudBlazor handles most styling via its theme system */
 
 /* Error boundary card — provides spacing around the error fallback content */
 .error-card {

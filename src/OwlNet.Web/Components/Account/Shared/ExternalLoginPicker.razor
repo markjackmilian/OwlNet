@@ -1,4 +1,4 @@
-﻿@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication
 @using Microsoft.AspNetCore.Identity
 @using OwlNet.Infrastructure.Identity
 
@@ -7,25 +7,36 @@
 
 @if (externalLogins.Length == 0)
 {
-    <div>
-        <p>
-            There are no external authentication services configured. See this <a href="https://go.microsoft.com/fwlink/?LinkID=532715">article
-            about setting up this ASP.NET application to support logging in via external services</a>.
-        </p>
-    </div>
+    @* Informational message when no external auth providers are registered *@
+    <MudText>
+        There are no external authentication services configured. See this
+        <MudLink Href="https://go.microsoft.com/fwlink/?LinkID=532715" Target="_blank">
+            article about setting up this ASP.NET application to support logging in via external services</MudLink>.
+    </MudText>
 }
 else
 {
-    <form class="form-horizontal" action="Account/PerformExternalLogin" method="post">
+    @* SSR form: posts to the external login endpoint.
+       AntiforgeryToken and hidden ReturnUrl must remain as raw HTML form elements. *@
+    <form action="Account/PerformExternalLogin" method="post">
         <div>
             <AntiforgeryToken />
             <input type="hidden" name="ReturnUrl" value="@ReturnUrl" />
-            <p>
+            <MudStack Row="true" Spacing="2" Class="my-2" Wrap="Wrap.Wrap">
                 @foreach (var provider in externalLogins)
                 {
-                    <button type="submit" class="btn btn-primary" name="provider" value="@provider.Name" title="Log in using your @provider.DisplayName account">@provider.DisplayName</button>
+                    @* Each button submits the form with the provider name.
+                       Using native type="submit" and name/value for SSR compatibility. *@
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               ButtonType="ButtonType.Submit"
+                               name="provider"
+                               value="@provider.Name"
+                               title="@($"Log in using your {provider.DisplayName} account")">
+                        @provider.DisplayName
+                    </MudButton>
                 }
-            </p>
+            </MudStack>
         </div>
     </form>
 }

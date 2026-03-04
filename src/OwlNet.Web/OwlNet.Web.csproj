@@ -30,9 +30,8 @@
     <!-- DispatchR: CQRS mediator — registered in composition root per Clean Architecture -->
     <PackageReference Include="DispatchR.Mediator" />
 
-    <!-- Fluent UI Blazor: Microsoft Fluent Design System component library -->
-    <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components" />
-    <PackageReference Include="Microsoft.FluentUI.AspNetCore.Components.Icons" />
+    <!-- MudBlazor: Material Design component library for Blazor -->
+    <PackageReference Include="MudBlazor" />
   </ItemGroup>
 
 </Project>

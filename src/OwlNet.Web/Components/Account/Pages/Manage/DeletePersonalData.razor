@@ -13,13 +13,11 @@
 
 <StatusMessage Message="@message" />
 
-<h3>Delete Personal Data</h3>
+<MudText Typo="Typo.h6">Delete Personal Data</MudText>
 
-<div class="alert alert-warning" role="alert">
-    <p>
-        <strong>Deleting this data will permanently remove your account, and this cannot be recovered.</strong>
-    </p>
-</div>
+<MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Class="my-2">
+    <strong>Deleting this data will permanently remove your account, and this cannot be recovered.</strong>
+</MudAlert>
 
 <div>
     <EditForm Model="Input" FormName="delete-user" OnValidSubmit="OnValidSubmitAsync" method="post">
@@ -33,7 +31,7 @@
                 <ValidationMessage For="() => Input.Password" class="text-danger" />
             </div>
         }
-        <button class="w-100 btn btn-lg btn-danger" type="submit">Delete data and close my account</button>
+        <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Error" FullWidth="true" Size="Size.Large">Delete data and close my account</MudButton>
     </EditForm>
 </div>
 

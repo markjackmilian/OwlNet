@@ -1,59 +1,94 @@
 @inherits LayoutComponentBase
 
-@* Fluent Design theme with persistent dark/light mode storage *@
-<FluentDesignTheme StorageName="owlnet-theme" />
+@* MudBlazor theme provider with dark/light mode toggle support *@
+<MudThemeProvider @bind-IsDarkMode="_isDarkMode" />
 
-<FluentLayout>
-    <FluentHeader>
-        <FluentLabel Typo="Typography.H4" Color="Color.Fill">
-            OwlNet
-        </FluentLabel>
-    </FluentHeader>
+@* MudBlazor service providers for popovers, dialogs, and snackbar notifications *@
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
 
-    <FluentStack Orientation="Orientation.Horizontal" Width="100%">
-        @* Sidebar navigation *@
+<MudLayout>
+    @* Top application bar — contains drawer toggle, app title, and dark mode switch *@
+    <MudAppBar Elevation="1">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu"
+                       Color="Color.Inherit"
+                       Edge="Edge.Start"
+                       OnClick="@ToggleDrawer"
+                       aria-label="Toggle navigation drawer" />
+        <MudText Typo="Typo.h6" Class="ml-3">OwlNet</MudText>
+        <MudSpacer />
+        @* Dark/light mode toggle — icon changes based on current mode *@
+        <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+                       Color="Color.Inherit"
+                       OnClick="@ToggleDarkMode"
+                       aria-label="Toggle dark mode" />
+    </MudAppBar>
+
+    @* Collapsible left-side drawer containing the navigation menu *@
+    <MudDrawer @bind-Open="_drawerOpen"
+               ClipMode="DrawerClipMode.Always"
+               Elevation="2">
+        <MudDrawerHeader>
+            <MudText Typo="Typo.h6">Navigation</MudText>
+        </MudDrawerHeader>
         <NavMenu />
+    </MudDrawer>
 
-        @* Main content area with error boundary for graceful failure handling *@
-        <FluentBodyContent>
+    @* Main content area with error boundary for graceful failure handling *@
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.Large" Class="py-4">
             <ErrorBoundary @ref="_errorBoundary">
                 <ChildContent>
                     @Body
                 </ChildContent>
                 <ErrorContent>
-                    <FluentCard Class="error-card">
-                        <FluentLabel Typo="Typography.H5">
-                            Something went wrong
-                        </FluentLabel>
-                        <FluentLabel>
-                            An unexpected error occurred. Please try again.
-                        </FluentLabel>
-                        <FluentButton Appearance="Appearance.Accent"
-                                      OnClick="@RecoverFromError"
-                                      Class="error-retry-button">
-                            Retry
-                        </FluentButton>
-                    </FluentCard>
+                    <MudCard Class="error-card">
+                        <MudCardContent>
+                            <MudText Typo="Typo.h5">
+                                Something went wrong
+                            </MudText>
+                            <MudText>
+                                An unexpected error occurred. Please try again.
+                            </MudText>
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Primary"
+                                       OnClick="@RecoverFromError"
+                                       Class="error-retry-button">
+                                Retry
+                            </MudButton>
+                        </MudCardContent>
+                    </MudCard>
                 </ErrorContent>
             </ErrorBoundary>
-        </FluentBodyContent>
-    </FluentStack>
-
-    <FluentFooter>
-        <FluentLabel Alignment="HorizontalAlignment.Center">
-            OwlNet &copy; @DateTime.Now.Year
-        </FluentLabel>
-    </FluentFooter>
-</FluentLayout>
-
-@* Fluent UI service providers for toasts, dialogs, and tooltips *@
-<FluentToastProvider />
-<FluentDialogProvider />
-<FluentTooltipProvider />
-<FluentMessageBarProvider />
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
 
 @code {
     private ErrorBoundary? _errorBoundary;
+
+    /// <summary>
+    /// Controls whether the navigation drawer is open or collapsed.
+    /// Defaults to open so the user sees navigation on first load.
+    /// </summary>
+    private bool _drawerOpen = true;
+
+    /// <summary>
+    /// Controls whether dark mode is active.
+    /// Bound to <see cref="MudThemeProvider"/> via @bind-IsDarkMode.
+    /// </summary>
+    private bool _isDarkMode;
+
+    /// <summary>
+    /// Toggles the navigation drawer between open and collapsed states.
+    /// </summary>
+    private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+
+    /// <summary>
+    /// Toggles between dark and light theme modes.
+    /// </summary>
+    private void ToggleDarkMode() => _isDarkMode = !_isDarkMode;
 
     /// <summary>
     /// Recovers from a rendering error by resetting the error boundary state.

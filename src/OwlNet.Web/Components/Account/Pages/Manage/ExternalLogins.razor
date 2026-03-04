@@ -14,8 +14,8 @@
 <StatusMessage />
 @if (currentLogins?.Count > 0)
 {
-    <h3>Registered Logins</h3>
-    <table class="table">
+    <MudText Typo="Typo.h6">Registered Logins</MudText>
+    <MudSimpleTable>
         <tbody>
             @foreach (var login in currentLogins)
             {
@@ -29,7 +29,7 @@
                                 <div>
                                     <input type="hidden" name="@nameof(LoginProvider)" value="@login.LoginProvider" />
                                     <input type="hidden" name="@nameof(ProviderKey)" value="@login.ProviderKey" />
-                                    <button type="submit" class="btn btn-primary" title="Remove this @login.ProviderDisplayName login from your account">Remove</button>
+                                    <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" title="@($"Remove this {login.ProviderDisplayName} login from your account")">Remove</MudButton>
                                 </div>
                             </form>
                         }
@@ -41,21 +41,21 @@
                 </tr>
             }
         </tbody>
-    </table>
+    </MudSimpleTable>
 }
 @if (otherLogins?.Count > 0)
 {
-    <h4>Add another service to log in.</h4>
-    <hr />
-    <form class="form-horizontal" action="Account/Manage/LinkExternalLogin" method="post">
+    <MudText Typo="Typo.subtitle1">Add another service to log in.</MudText>
+    <MudDivider Class="my-4" />
+    <form action="Account/Manage/LinkExternalLogin" method="post">
         <AntiforgeryToken />
         <div>
             <p>
                 @foreach (var provider in otherLogins)
                 {
-                    <button type="submit" class="btn btn-primary" name="Provider" value="@provider.Name" title="Log in using your @provider.DisplayName account">
+                    <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" name="Provider" value="@provider.Name" title="@($"Log in using your {provider.DisplayName} account")">
                         @provider.DisplayName
-                    </button>
+                    </MudButton>
                 }
             </p>
         </div>

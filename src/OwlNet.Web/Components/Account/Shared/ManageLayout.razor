@@ -1,17 +1,21 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 @layout OwlNet.Web.Components.Layout.MainLayout
 
-<h1>Manage your account</h1>
+@* Page heading for the account management section *@
+<MudText Typo="Typo.h4" Class="mb-2">Manage your account</MudText>
 
-<div>
-    <h2>Change your account settings</h2>
-    <hr />
-    <div class="row">
-        <div class="col-lg-3">
-            <ManageNavMenu />
-        </div>
-        <div class="col-lg-9">
-            @Body
-        </div>
-    </div>
-</div>
+<MudText Typo="Typo.h5" Class="mb-2">Change your account settings</MudText>
+<MudDivider Class="mb-4" />
+
+@* Responsive two-column layout: navigation sidebar + page content *@
+<MudGrid>
+    @* Left column: account management navigation menu *@
+    <MudItem xs="12" md="3">
+        <ManageNavMenu />
+    </MudItem>
+
+    @* Right column: routed page body content *@
+    <MudItem xs="12" md="9">
+        @Body
+    </MudItem>
+</MudGrid>

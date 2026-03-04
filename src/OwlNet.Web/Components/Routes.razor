@@ -1,7 +1,8 @@
 @using OwlNet.Web.Components.Account.Shared
 
 @* Application router with Identity-aware authorization.
-   Unauthenticated users are redirected to the login page. *@
+   Unauthenticated users are redirected to the login page.
+   The <NotFound> section provides a fallback for unmatched routes. *@
 <Router AppAssembly="typeof(Program).Assembly">
     <Found Context="routeData">
         <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
@@ -11,4 +12,23 @@
         </AuthorizeRouteView>
         <FocusOnNavigate RouteData="routeData" Selector="h1" />
     </Found>
+    <NotFound>
+        @* Fallback UI for routes that don't match any page component *@
+        <LayoutView Layout="typeof(Layout.MainLayout)">
+            <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="mt-16">
+                <MudIcon Icon="@Icons.Material.Filled.SearchOff" Size="Size.Large" Color="Color.Secondary" />
+                <MudText Typo="Typo.h4">Page Not Found</MudText>
+                <MudText Typo="Typo.body1" Color="Color.Secondary">
+                    Sorry, the page you requested could not be found.
+                </MudText>
+                <MudButton Href="/"
+                           Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Home"
+                           Class="mt-4">
+                    Go Home
+                </MudButton>
+            </MudStack>
+        </LayoutView>
+    </NotFound>
 </Router>

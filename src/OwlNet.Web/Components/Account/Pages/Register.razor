@@ -17,15 +17,15 @@
 
 <PageTitle>Register</PageTitle>
 
-<h1>Register</h1>
+<MudText Typo="Typo.h4">Register</MudText>
 
-<div class="row">
-    <div class="col-lg-6">
+<MudGrid>
+    <MudItem xs="12" lg="6">
         <StatusMessage Message="@Message" />
         <EditForm Model="Input" method="post" OnValidSubmit="RegisterUser" FormName="register">
             <DataAnnotationsValidator />
-            <h2>Create a new account.</h2>
-            <hr />
+            <MudText Typo="Typo.h5">Create a new account.</MudText>
+            <MudDivider Class="my-4" />
             <ValidationSummary class="text-danger" role="alert" />
             <div class="form-floating mb-3">
                 <InputText @bind-Value="Input.Email" id="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="name@example.com" />
@@ -42,17 +42,17 @@
                 <label for="Input.ConfirmPassword">Confirm Password</label>
                 <ValidationMessage For="() => Input.ConfirmPassword" class="text-danger" />
             </div>
-            <button type="submit" class="w-100 btn btn-lg btn-primary">Register</button>
+            <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Size="Size.Large">Register</MudButton>
         </EditForm>
-    </div>
-    <div class="col-lg-4 col-lg-offset-2">
+    </MudItem>
+    <MudItem xs="12" lg="4">
         <section>
-            <h3>Use another service to register.</h3>
-            <hr />
+            <MudText Typo="Typo.h6">Use another service to register.</MudText>
+            <MudDivider Class="my-4" />
             <ExternalLoginPicker />
         </section>
-    </div>
-</div>
+    </MudItem>
+</MudGrid>
 
 @code {
     private IEnumerable<IdentityError>? identityErrors;

@@ -2,42 +2,37 @@
 
 @inject NavigationManager NavigationManager
 
-@* Sidebar navigation using Fluent UI NavMenu component *@
-<FluentNavMenu Width="250" Title="Navigation">
-    <FluentNavLink Href="/" Match="NavLinkMatch.All"
-                   Icon="@(new Icons.Regular.Size24.Home())"
-                   IconColor="Color.Accent">
+@* Sidebar navigation using MudBlazor NavMenu component *@
+<MudNavMenu>
+    <MudNavLink Href="/" Match="NavLinkMatch.All"
+                Icon="@Icons.Material.Filled.Home">
         Home
-    </FluentNavLink>
+    </MudNavLink>
 
     @* Identity account links — show profile/logout when authenticated, register/login otherwise *@
     <AuthorizeView>
         <Authorized>
-            <FluentNavLink Href="Account/Manage"
-                           Icon="@(new Icons.Regular.Size24.Person())"
-                           IconColor="Color.Accent">
+            <MudNavLink Href="Account/Manage"
+                        Icon="@Icons.Material.Filled.Person">
                 @context.User.Identity?.Name
-            </FluentNavLink>
-            <FluentNavLink Href="@_logoutUrl"
-                           Icon="@(new Icons.Regular.Size24.ArrowExit())"
-                           IconColor="Color.Accent">
+            </MudNavLink>
+            <MudNavLink Href="@_logoutUrl"
+                        Icon="@Icons.Material.Filled.Logout">
                 Logout
-            </FluentNavLink>
+            </MudNavLink>
         </Authorized>
         <NotAuthorized>
-            <FluentNavLink Href="Account/Register"
-                           Icon="@(new Icons.Regular.Size24.PersonAdd())"
-                           IconColor="Color.Accent">
+            <MudNavLink Href="Account/Register"
+                        Icon="@Icons.Material.Filled.PersonAdd">
                 Register
-            </FluentNavLink>
-            <FluentNavLink Href="Account/Login"
-                           Icon="@(new Icons.Regular.Size24.PersonKey())"
-                           IconColor="Color.Accent">
+            </MudNavLink>
+            <MudNavLink Href="Account/Login"
+                        Icon="@Icons.Material.Filled.Login">
                 Login
-            </FluentNavLink>
+            </MudNavLink>
         </NotAuthorized>
     </AuthorizeView>
-</FluentNavMenu>
+</MudNavMenu>
 
 @code {
     /// <summary>
