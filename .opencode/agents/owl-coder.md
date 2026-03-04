@@ -1,5 +1,5 @@
 ---
-description: Expert .NET developer for OwlNet. Specializes in clean architecture, design patterns, DispatchR mediator, EF Core with dual-provider (SQLite + SQL Server) migrations, Microsoft Agent Framework, and writing highly testable code.
+description: Expert .NET developer for OwlNet. Specializes in clean architecture, design patterns, DispatchR mediator, EF Core with dual-provider (SQLite + SQL Server) migrations, Microsoft Agent Framework, structured logging with ILogger/Serilog, and writing highly testable code.
 mode: subagent
 temperature: 0.2
 color: "#512BD4"
@@ -186,7 +186,161 @@ dotnet ef database update --project src/Infrastructure --startup-project src/Api
 - Use `decimal(18,2)` for money fields; be aware SQLite stores decimals as TEXT.
 - Use `DateTimeOffset` instead of `DateTime` for timestamps.
 
-### 3. Microsoft Agent Framework
+### 3. Structured Logging with ILogger and Serilog
+
+You use **`ILogger<T>`** (from `Microsoft.Extensions.Logging`) as the logging abstraction throughout the codebase, backed by **Serilog** as the logging provider. Every functional flow must be traced with detailed, structured log messages.
+
+**Package references:**
+- `Serilog.AspNetCore` - ASP.NET Core integration (includes `Serilog`, `Serilog.Extensions.Hosting`, `Serilog.Extensions.Logging`)
+- `Serilog.Sinks.Console` - Console output with structured formatting
+- `Serilog.Sinks.File` - File output with rolling policies
+- `Serilog.Enrichers.Environment` - Machine name, environment enrichers
+- `Serilog.Enrichers.Thread` - Thread ID enricher
+- `Serilog.Expressions` - For advanced filtering and output templates (optional)
+
+**Serilog configuration in `Program.cs`:**
+```csharp
+using Serilog;
+
+Log.Logger = new LoggerConfiguration()
+    .ReadFrom.Configuration(builder.Configuration)
+    .Enrich.FromLogContext()
+    .Enrich.WithMachineName()
+    .Enrich.WithThreadId()
+    .CreateLogger();
+
+builder.Host.UseSerilog();
+
+// After building the app:
+app.UseSerilogRequestLogging(options =>
+{
+    options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
+    {
+        diagnosticContext.Set("RequestHost", httpContext.Request.Host.Value);
+        diagnosticContext.Set("UserAgent", httpContext.Request.Headers.UserAgent.ToString());
+    };
+});
+```
+
+**Serilog configuration in `appsettings.json`:**
+```json
+{
+  "Serilog": {
+    "Using": ["Serilog.Sinks.Console", "Serilog.Sinks.File"],
+    "MinimumLevel": {
+      "Default": "Information",
+      "Override": {
+        "Microsoft": "Warning",
+        "Microsoft.EntityFrameworkCore": "Warning",
+        "System": "Warning"
+      }
+    },
+    "WriteTo": [
+      { "Name": "Console" },
+      {
+        "Name": "File",
+        "Args": {
+          "path": "logs/owlnet-.log",
+          "rollingInterval": "Day",
+          "retainedFileCountLimit": 30,
+          "outputTemplate": "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] [{SourceContext}] {Message:lj}{NewLine}{Exception}"
+        }
+      }
+    ],
+    "Enrich": ["FromLogContext", "WithMachineName", "WithThreadId"]
+  }
+}
+```
+
+**Injecting and using `ILogger<T>` in handlers:**
+```csharp
+public sealed class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, ValueTask<Result<Guid>>>
+{
+    private readonly IOrderRepository _orderRepository;
+    private readonly ILogger<CreateOrderCommandHandler> _logger;
+
+    public CreateOrderCommandHandler(IOrderRepository orderRepository, ILogger<CreateOrderCommandHandler> logger)
+    {
+        _orderRepository = orderRepository;
+        _logger = logger;
+    }
+
+    public async ValueTask<Result<Guid>> Handle(CreateOrderCommand request, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Creating order for customer {CustomerId} with {ItemCount} items",
+            request.CustomerId, request.Items.Count);
+
+        var order = Order.Create(request.CustomerId, request.Items);
+
+        await _orderRepository.AddAsync(order, cancellationToken);
+
+        _logger.LogInformation("Order {OrderId} created successfully for customer {CustomerId}",
+            order.Id, request.CustomerId);
+
+        return Result.Success(order.Id);
+    }
+}
+```
+
+**Logging pipeline behavior for DispatchR (cross-cutting):**
+```csharp
+public sealed class LoggingBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, ValueTask<TResponse>>
+    where TRequest : class, IRequest<TRequest, ValueTask<TResponse>>
+{
+    public required IRequestHandler<TRequest, ValueTask<TResponse>> NextPipeline { get; set; }
+
+    private readonly ILogger<LoggingBehavior<TRequest, TResponse>> _logger;
+
+    public LoggingBehavior(ILogger<LoggingBehavior<TRequest, TResponse>> logger)
+    {
+        _logger = logger;
+    }
+
+    public async ValueTask<TResponse> Handle(TRequest request, CancellationToken cancellationToken)
+    {
+        var requestName = typeof(TRequest).Name;
+
+        _logger.LogInformation("[START] Handling {RequestName} | Payload: {@Request}", requestName, request);
+
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            var response = await NextPipeline.Handle(request, cancellationToken);
+            stopwatch.Stop();
+
+            _logger.LogInformation("[END] Handled {RequestName} in {ElapsedMs}ms", requestName, stopwatch.ElapsedMilliseconds);
+
+            return response;
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            _logger.LogError(ex, "[FAILED] {RequestName} failed after {ElapsedMs}ms", requestName, stopwatch.ElapsedMilliseconds);
+            throw;
+        }
+    }
+}
+```
+
+**Key rules:**
+- **Always inject `ILogger<T>`** where `T` is the consuming class. Never use the non-generic `ILogger`.
+- **Use structured logging** with named placeholders (`{OrderId}`, `{CustomerId}`) — NEVER use string interpolation (`$"...{variable}"`). Serilog captures structured properties only with named templates.
+- **Log at appropriate levels:**
+  - `LogDebug` — Detailed diagnostic info, disabled in production.
+  - `LogInformation` — Key functional flow milestones: start/end of operations, state transitions, business events.
+  - `LogWarning` — Recoverable issues, fallback paths, unexpected but handled conditions.
+  - `LogError` — Failed operations with exception context.
+  - `LogCritical` — Application-level failures requiring immediate attention.
+- **Every handler must log:** entry point with input parameters, successful completion with relevant output, and any failure with exception details.
+- **Use `LogContext.PushProperty`** for enriching logs with correlation data within a scope (e.g., `UserId`, `TenantId`).
+- **Never log sensitive data:** passwords, tokens, API keys, PII. Mask or omit them.
+- **Register `LoggingBehavior<,>` first** in DispatchR pipeline order so all requests are traced.
+- **Use `app.UseSerilogRequestLogging()`** instead of the default ASP.NET Core request logging for richer HTTP request logs.
+- **In tests**, inject `NullLogger<T>` or `ILogger<T>` mocks — logging should never break tests.
+
+---
+
+### 4. Microsoft Agent Framework
 
 You use **Microsoft Agent Framework** (`microsoft/agent-framework`) for building, orchestrating, and deploying AI agents in .NET.
 
