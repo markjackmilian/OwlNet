@@ -69,7 +69,7 @@ h1:focus {
 
 /* ── Section group labels ────────────────────────────────────────────────
    Small, uppercase, muted headings that visually separate navigation
-   groups (e.g., "General", "Account").
+   groups (e.g., "Main", "Settings", "Account").
    Uses DrawerText at reduced opacity so the labels feel secondary
    relative to the nav link text on the dark violet background. */
 .mud-drawer .nav-section-label {
@@ -124,13 +124,129 @@ h1:focus {
 }
 
 /* ── Mini / collapsed drawer ─────────────────────────────────────────────
-   When the drawer is in mini mode MudBlazor hides the link text and
-   centers the icon automatically.  We just need to ensure the padding
-   and border-radius still look good at the narrower width. */
+   When the drawer is in mini mode (72 px) ONLY the centered icon should
+   be visible — no text, no badges, no truncated labels.
+
+   MudBlazor's built-in mini-mode text hiding only works when the nav
+   link has plain text content (rendered into .mud-nav-link-text).  When
+   we use child content (e.g., a <div class="nav-link-content"> wrapper
+   for badge support), MudBlazor does NOT auto-hide it.  So we use CSS
+   to forcibly hide ALL text/content elements and center the icon. */
+
+/* Hide the MudBlazor-rendered text span (covers plain-text nav links) */
+.mud-drawer.mud-drawer--mini .mud-nav-link .mud-nav-link-text {
+    display: none !important;
+}
+
+/* Hide our custom child content wrapper (covers badge nav links) */
+.mud-drawer.mud-drawer--mini .mud-nav-link .nav-link-content {
+    display: none !important;
+}
+
+/* Center the icon and remove horizontal padding so it sits in the
+   middle of the 72 px mini drawer width */
 .mud-drawer.mud-drawer--mini .mud-nav-link {
     justify-content: center;
-    padding-left: 0;
-    padding-right: 0;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    min-height: 48px;
+}
+
+/* Remove the icon's default right margin so it's truly centered
+   (MudBlazor adds margin-right to create space between icon and text) */
+.mud-drawer.mud-drawer--mini .mud-nav-link .mud-nav-link-icon {
+    margin: 0 !important;
+}
+
+/* ── Nav link content wrapper ────────────────────────────────────────────
+   Flex container inside MudNavLink child content that positions the
+   link text on the left and the badge on the right.
+   width:100% ensures the flex container fills the available space
+   so justify-content:space-between works correctly. */
+.mud-drawer .nav-link-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+}
+
+/* ── Nav link badges ─────────────────────────────────────────────────────
+   Small rounded pill badges shown to the right of nav link text.
+   Used for decorative notification counts (e.g., "10" on Home, "2" on Users).
+   Semi-transparent background blends with the dark violet sidebar. */
+.mud-drawer .nav-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 10px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1;
+    color: #fff;
+    flex-shrink: 0;
+    margin-left: 8px;
+}
+
+/* Primary badge variant — uses the theme primary color for high-emphasis counts */
+.mud-drawer .nav-badge--primary {
+    background-color: var(--mud-palette-primary);
+}
+
+/* Secondary badge variant — uses a semi-transparent white for lower-emphasis counts */
+.mud-drawer .nav-badge--secondary {
+    background-color: rgba(255, 255, 255, 0.2);
+    color: var(--mud-palette-drawer-text);
+}
+
+/* ── Drawer search field ─────────────────────────────────────────────────
+   Styles the MudTextField inside the drawer search bar to blend with
+   the dark violet sidebar. Uses semi-transparent white for the background
+   and border so it adapts to any drawer background color.
+   The !important overrides are needed because MudBlazor's Outlined variant
+   applies its own background and border colors inline. */
+.mud-drawer .drawer-search-field .mud-input-outlined .mud-input-outlined-border {
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    border-radius: 10px;
+}
+
+.mud-drawer .drawer-search-field .mud-input.mud-input-outlined {
+    background-color: rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+}
+
+/* Search field text and placeholder — use drawer text color for readability */
+.mud-drawer .drawer-search-field .mud-input-outlined input {
+    color: var(--mud-palette-drawer-text) !important;
+}
+
+.mud-drawer .drawer-search-field .mud-input-outlined input::placeholder {
+    color: var(--mud-palette-drawer-icon) !important;
+    opacity: 1;
+}
+
+/* Search adornment icon — use drawer icon color for the search magnifying glass */
+.mud-drawer .drawer-search-field .mud-input-adornment-start .mud-icon-root {
+    color: var(--mud-palette-drawer-icon) !important;
+}
+
+/* Search field label — use drawer icon color for the floating label */
+.mud-drawer .drawer-search-field .mud-input-label {
+    color: var(--mud-palette-drawer-icon) !important;
+}
+
+/* Search field focus state — slightly brighter border to indicate focus */
+.mud-drawer .drawer-search-field .mud-input-outlined:focus-within .mud-input-outlined-border {
+    border-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+/* ── Drawer dividers ─────────────────────────────────────────────────────
+   Dividers inside the drawer use a semi-transparent white to be visible
+   against the dark violet background without being too prominent. */
+.mud-drawer .mud-divider {
+    border-color: rgba(255, 255, 255, 0.12) !important;
 }
 
 /* ============================================================

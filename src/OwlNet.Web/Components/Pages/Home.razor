@@ -1,618 +1,571 @@
 @page "/"
 
 @* ═══════════════════════════════════════════════════════════════════════════════
-   OwlNet Dashboard — Home Page
+   OwlNet Kanban Dashboard — Home Page
    ═══════════════════════════════════════════════════════════════════════════════
-   A rich, visually impressive mock dashboard that showcases the OwlNet violet
-   theme (Poppins font, rounded corners, deep violet palette) with entirely
-   hardcoded data. No backend calls, no services — just beautiful UI.
+   A showcase Kanban board with three status columns (In Progress, Reviewed,
+   Completed), drag-and-drop task cards, priority badges, avatar groups, and
+   engagement stats. All data is hardcoded — no backend calls.
 
    Layout structure:
-   ┌──────────────────────────────────────────────────────────────────────┐
-   │ Header: "Dashboard" title + "Create Project" button                 │
-   ├──────────────────────────────────────────┬───────────────────────────┤
-   │ Stats cards (4 across)                   │                           │
-   ├──────────────────────────────────────────┤  Right sidebar panel      │
-   │ Project cards (6 in 2×3 grid)            │  - Design Team            │
-   ├──────────────────────────────────────────┤  - 72% circular progress  │
-   │ Recent activity table                    │  - Quick stats            │
-   ├──────────────────────────────────────────┤  - Upcoming event         │
-   │ Charts (donut + bar)                     │  - Messages               │
-   └──────────────────────────────────────────┴───────────────────────────┘
+   ┌─────────────────────────────────────────────────────────────────┐
+   │ Kanban Dashboard 🤖              [🔍] [Share ↗] [📤] [+]       │
+   ├─────────────────────────────────────────────────────────────────┤
+   │ By Status | By Total Tasks (12) | Tasks Due | ... | Sort By ▼  │
+   ├─────────────────────────────────────────────────────────────────┤
+   │ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐             │
+   │ │ 25 In Progr +│ │ 8 Reviewed  +│ │ 2 Completed +│             │
+   │ ├──────────────┤ ├──────────────┤ ├──────────────┤             │
+   │ │ [Card 1]     │ │ [Card 1]     │ │ [Card 1]     │             │
+   │ │ [Card 2]     │ │ [Card 2]     │ │ [Card 2]     │             │
+   │ │ ...          │ │ ...          │ │ ...          │             │
+   │ └──────────────┘ └──────────────┘ └──────────────┘             │
+   └─────────────────────────────────────────────────────────────────┘
 
-   Render mode: InteractiveServer (inherited from App.razor routing logic —
-   this page is NOT an Account page, so it gets interactive rendering).
+   Drag & drop: Uses MudBlazor's MudDropContainer<T> / MudDropZone<T> for
+   functional card reordering between columns. Dropping a card into a new
+   column updates its KanbanStatus.
+
+   Render mode: InteractiveServer (inherited from App.razor routing).
    ═══════════════════════════════════════════════════════════════════════════════ *@
 
-<PageTitle>Dashboard — OwlNet</PageTitle>
+<PageTitle>Kanban Dashboard — OwlNet</PageTitle>
 
 @* ── Section 1: Page Header ──────────────────────────────────────────────────
-   Title + subtitle on the left, "Create Project" action button on the right.
-   Uses MudStack with Row + SpaceBetween for a clean header layout. *@
+   Title with emoji on the left, action buttons on the right.
+   Matches the reference: search, share, upload, and add buttons. *@
 <MudStack Row="true"
-          Justify="Justify.SpaceBetween"
-          AlignItems="AlignItems.Center"
-          Class="mb-6">
-    <div>
-        <MudText Typo="Typo.h3">Dashboard</MudText>
-        <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mt-1">
-            Welcome back, Sullivan
-        </MudText>
-    </div>
-    <MudButton Variant="Variant.Filled"
-               Color="Color.Primary"
-               StartIcon="@Icons.Material.Filled.Add"
-               Size="Size.Large"
-               Class="create-project-btn">
-        Create Project
-    </MudButton>
+           Justify="Justify.SpaceBetween"
+           AlignItems="AlignItems.Center"
+           Class="mb-4">
+    <MudText Typo="Typo.h4" Style="font-weight: 700;">
+        Kanban Dashboard 🤖
+    </MudText>
+    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+        @* Search icon button *@
+        <MudIconButton Icon="@Icons.Material.Filled.Search"
+                       Size="Size.Medium"
+                       aria-label="Search tasks" />
+        @* Share button — filled primary with icon *@
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Share"
+                   Size="Size.Small"
+                   Class="kanban-share-btn">
+            Share
+        </MudButton>
+        @* Upload icon button *@
+        <MudIconButton Icon="@Icons.Material.Filled.FileUpload"
+                       Size="Size.Medium"
+                       aria-label="Upload file" />
+        @* Add new task button *@
+        <MudIconButton Icon="@Icons.Material.Filled.Add"
+                       Size="Size.Medium"
+                       Color="Color.Primary"
+                       Variant="Variant.Filled"
+                       aria-label="Add new task" />
+    </MudStack>
 </MudStack>
 
-@* ── Main layout: Left content (8 cols) + Right sidebar (4 cols) ─────────────
-   The outer MudGrid splits the page into a main content area and a sidebar.
-   On small screens (xs/sm), both collapse to full width for mobile. *@
-<MudGrid Spacing="4">
+@* ── Section 2: Tab Bar + Sort Dropdown ──────────────────────────────────────
+   Horizontal tabs for different views, with a "Sort By" dropdown on the right.
+   The tab bar uses MudTabs with Elevation=0 for a flat, inline look. *@
+<MudStack Row="true"
+           Justify="Justify.SpaceBetween"
+           AlignItems="AlignItems.Center"
+           Class="mb-5">
+    <MudTabs Elevation="0"
+             Rounded="true"
+             ApplyEffectsToContainer="true"
+             Class="kanban-tabs"
+             Color="Color.Primary">
+        <MudTabPanel Text="By Status" />
+        <MudTabPanel>
+            @* Custom tab header with a count badge *@
+            <TabContent>
+                <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                    <MudText Typo="Typo.body2">By Total Tasks</MudText>
+                    <MudChip T="string"
+                             Size="Size.Small"
+                             Color="Color.Primary"
+                             Variant="Variant.Filled"
+                             Class="kanban-tab-badge">
+                        @_tasks.Count
+                    </MudChip>
+                </MudStack>
+            </TabContent>
+        </MudTabPanel>
+        <MudTabPanel Text="Tasks Due" />
+        <MudTabPanel Text="Extra Tasks" />
+        <MudTabPanel Text="Tasks Completed" />
+    </MudTabs>
 
-    @* ═══════════════════════════════════════════════════════════════════════════
-       LEFT COLUMN — Main content area (8/12 columns on md+)
-       ═══════════════════════════════════════════════════════════════════════════ *@
-    <MudItem xs="12" md="8">
+    @* Sort dropdown — positioned to the right of the tabs *@
+    <MudSelect T="string"
+               Value="@_sortBy"
+               ValueChanged="@(v => _sortBy = v)"
+               Label="Sort By"
+               Variant="Variant.Outlined"
+               Dense="true"
+               Margin="Margin.Dense"
+               Class="kanban-sort-select">
+        <MudSelectItem Value="@("Newest")">Newest</MudSelectItem>
+        <MudSelectItem Value="@("Oldest")">Oldest</MudSelectItem>
+        <MudSelectItem Value="@("Priority")">Priority</MudSelectItem>
+    </MudSelect>
+</MudStack>
 
-        @* ── Section 2: Stats Cards Row ──────────────────────────────────────
-           Four KPI cards showing key project metrics. Each card has:
-           - A colored avatar with an icon (visual anchor)
-           - A large bold number (the metric)
-           - A descriptive label (secondary text)
-           Responsive: 2 per row on sm, 4 per row on md+. *@
-        <MudGrid Spacing="3" Class="mb-4">
-            @foreach (var stat in _statsCards)
-            {
-                <MudItem xs="6" sm="6" md="3">
-                    <MudCard Elevation="0" Class="stat-card pa-4">
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
-                            @* Colored avatar acts as a visual icon badge *@
-                            <MudAvatar Color="@stat.Color"
-                                       Variant="Variant.Filled"
-                                       Size="Size.Large"
-                                       Class="stat-avatar">
-                                <MudIcon Icon="@stat.Icon" />
-                            </MudAvatar>
-                            <div>
-                                <MudText Typo="Typo.h4">@stat.Value</MudText>
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                    @stat.Label
-                                </MudText>
-                            </div>
-                        </MudStack>
-                    </MudCard>
-                </MudItem>
-            }
-        </MudGrid>
+@* ── Section 3: Kanban Board (Drag & Drop) ───────────────────────────────────
+   MudDropContainer wraps the entire board. Each column is a MudDropZone
+   identified by the KanbanStatus enum name. Cards can be dragged between
+   columns, and the ItemDropped handler updates the task's status.
 
-        @* ── Section 3: Project Cards ────────────────────────────────────────
-           Six project cards arranged in a 3-column grid (2 rows of 3 on desktop).
-           Each card showcases:
-           - A colored chip with the project name
-           - A description line
-           - A progress bar showing completion percentage
-           - An avatar group (team members) + metadata icons (comments, attachments)
-           This section demonstrates MudChip, MudProgressLinear, and MudAvatarGroup. *@
-        <MudText Typo="Typo.h5" Class="mb-3">Projects</MudText>
-        <MudGrid Spacing="3" Class="mb-4">
-            @foreach (var project in _projects)
-            {
-                <MudItem xs="12" sm="6" md="4">
-                    <MudCard Elevation="0" Class="project-card">
-                        <MudCardContent>
-                            @* Project name chip — color-coded per project for visual variety *@
-                            <MudChip T="string"
-                                     Color="@project.ChipColor"
-                                     Size="Size.Small"
-                                     Class="mb-3">
-                                @project.Name
-                            </MudChip>
+   MudBlazor 9.1.0 API:
+   - Items: the full list of draggable items
+   - ItemsSelector: Func<T, string, bool> — returns true if item belongs to zone
+   - ItemDropped: EventCallback<MudItemDropInfo<T>> — fires on drop
+   - ItemRenderer: RenderFragment<T> — renders each card
+   - ChildContent: the zone layout (columns) *@
+<MudDropContainer T="KanbanTask"
+                  Items="_tasks"
+                  ItemsSelector="@((item, zone) => item.Status.ToString() == zone)"
+                  ItemDropped="OnItemDropped"
+                  Class="kanban-drop-container">
+    <ChildContent>
+        <div class="kanban-board">
+            @* ── Column: In Progress ─────────────────────────────────────── *@
+            <div class="kanban-column">
+                <div class="kanban-column-header kanban-column-header--indigo">
+                    <div class="kanban-column-count">@GetColumnCount(KanbanStatus.InProgress)</div>
+                    <span class="kanban-column-title">In Progress</span>
+                    <MudIconButton Icon="@Icons.Material.Filled.Add"
+                                   Size="Size.Small"
+                                   Class="kanban-column-add"
+                                   aria-label="Add task to In Progress" />
+                </div>
+                <MudDropZone T="KanbanTask"
+                             Identifier="InProgress"
+                             AllowReorder="true"
+                             Class="kanban-dropzone" />
+            </div>
 
-                            @* Brief description of the project's current phase *@
-                            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
-                                @project.Description
-                            </MudText>
+            @* ── Column: Reviewed ────────────────────────────────────────── *@
+            <div class="kanban-column">
+                <div class="kanban-column-header kanban-column-header--orange">
+                    <div class="kanban-column-count">@GetColumnCount(KanbanStatus.Reviewed)</div>
+                    <span class="kanban-column-title">Reviewed</span>
+                    <MudIconButton Icon="@Icons.Material.Filled.Add"
+                                   Size="Size.Small"
+                                   Class="kanban-column-add"
+                                   aria-label="Add task to Reviewed" />
+                </div>
+                <MudDropZone T="KanbanTask"
+                             Identifier="Reviewed"
+                             AllowReorder="true"
+                             Class="kanban-dropzone" />
+            </div>
 
-                            @* Progress bar — shows completion percentage with a label *@
-                            <MudStack Row="true"
-                                      Justify="Justify.SpaceBetween"
-                                      AlignItems="AlignItems.Center"
-                                      Class="mb-2">
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                    Progress
-                                </MudText>
-                                <MudText Typo="Typo.caption" Style="font-weight: 600;">
-                                    @(project.Progress)%
-                                </MudText>
-                            </MudStack>
-                            <MudProgressLinear Color="@project.ChipColor"
-                                               Value="@project.Progress"
-                                               Rounded="true"
-                                               Size="Size.Small"
-                                               Class="mb-3" />
+            @* ── Column: Completed ───────────────────────────────────────── *@
+            <div class="kanban-column">
+                <div class="kanban-column-header kanban-column-header--green">
+                    <div class="kanban-column-count">@GetColumnCount(KanbanStatus.Completed)</div>
+                    <span class="kanban-column-title">Completed</span>
+                    <MudIconButton Icon="@Icons.Material.Filled.Add"
+                                   Size="Size.Small"
+                                   Class="kanban-column-add"
+                                   aria-label="Add task to Completed" />
+                </div>
+                <MudDropZone T="KanbanTask"
+                             Identifier="Completed"
+                             AllowReorder="true"
+                             Class="kanban-dropzone" />
+            </div>
+        </div>
+    </ChildContent>
 
-                            @* Bottom row: team member avatars + comment/attachment counts *@
-                            <MudStack Row="true"
-                                      Justify="Justify.SpaceBetween"
-                                      AlignItems="AlignItems.Center">
-                                @* Team member avatar group — shows overlapping initials *@
-                                <MudAvatarGroup Max="3" Spacing="2" MaxSize="Size.Small">
-                                    @foreach (var member in project.TeamMembers)
-                                    {
-                                        <MudAvatar Color="Color.Primary"
-                                                   Variant="Variant.Filled"
-                                                   Size="Size.Small"
-                                                   Class="team-avatar">
-                                            @member
-                                        </MudAvatar>
-                                    }
-                                </MudAvatarGroup>
+    @* ── Item Renderer: Task Card ────────────────────────────────────────────
+       Each card displays:
+       1. Priority badge (colored pill)
+       2. Title (bold)
+       3. Description (gray, clamped to 3 lines)
+       4. Footer: avatar group (left) + comment/view counts (right) *@
+    <ItemRenderer>
+        <div class="kanban-card">
+            @* Priority badge — colored pill indicating task urgency *@
+            <span class="kanban-card-priority @GetPriorityClass(context.Priority)">
+                @GetPriorityLabel(context.Priority)
+            </span>
 
-                                @* Metadata: comments and attachments count *@
-                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-                                    <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center">
-                                        <MudIcon Icon="@Icons.Material.Outlined.ChatBubbleOutline"
-                                                 Size="Size.Small"
-                                                 Class="mud-text-secondary" />
-                                        <MudText Typo="Typo.caption" Class="mud-text-secondary ml-1">
-                                            @project.Comments
-                                        </MudText>
-                                    </MudStack>
-                                    <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center">
-                                        <MudIcon Icon="@Icons.Material.Outlined.AttachFile"
-                                                 Size="Size.Small"
-                                                 Class="mud-text-secondary" />
-                                        <MudText Typo="Typo.caption" Class="mud-text-secondary ml-1">
-                                            @project.Attachments
-                                        </MudText>
-                                    </MudStack>
-                                </MudStack>
-                            </MudStack>
-                        </MudCardContent>
-                    </MudCard>
-                </MudItem>
-            }
-        </MudGrid>
+            @* Task title *@
+            <MudText Typo="Typo.subtitle1" Class="kanban-card-title">
+                @context.Title
+            </MudText>
 
-        @* ── Section 5: Recent Activity Table ────────────────────────────────
-           A MudTable showing recent project activity with status chips,
-           progress percentages, team size, and due dates.
-           Demonstrates MudTable with ToolBarContent, HeaderContent, RowTemplate,
-           and colored MudChip for status badges. *@
-        <MudCard Elevation="0" Class="mb-4">
-            <MudTable Items="@_recentActivity"
-                      Hover="true"
-                      Dense="true"
-                      Breakpoint="Breakpoint.Sm"
-                      Elevation="0"
-                      T="ActivityItem">
-                <ToolBarContent>
-                    <MudText Typo="Typo.h5">Recent Activity</MudText>
-                    <MudSpacer />
-                    <MudButton Variant="Variant.Text"
-                               Color="Color.Primary"
-                               EndIcon="@Icons.Material.Filled.ArrowForward"
-                               Size="Size.Small">
-                        View All
-                    </MudButton>
-                </ToolBarContent>
-                <HeaderContent>
-                    <MudTh>Project</MudTh>
-                    <MudTh>Status</MudTh>
-                    <MudTh>Progress</MudTh>
-                    <MudTh>Team</MudTh>
-                    <MudTh>Due Date</MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <MudTd DataLabel="Project">
-                        <MudText Typo="Typo.body2" Style="font-weight: 500;">
-                            @context.Project
-                        </MudText>
-                    </MudTd>
-                    <MudTd DataLabel="Status">
-                        @* Status chip — color-coded to indicate project health at a glance *@
-                        <MudChip T="string"
-                                 Color="@context.StatusColor"
-                                 Size="Size.Small"
-                                 Variant="Variant.Filled">
-                            @context.Status
-                        </MudChip>
-                    </MudTd>
-                    <MudTd DataLabel="Progress">
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                            <MudProgressLinear Color="@context.StatusColor"
-                                               Value="@context.Progress"
-                                               Rounded="true"
-                                               Size="Size.Small"
-                                               Style="width: 80px;" />
-                            <MudText Typo="Typo.caption">@(context.Progress)%</MudText>
-                        </MudStack>
-                    </MudTd>
-                    <MudTd DataLabel="Team">
-                        <MudText Typo="Typo.body2">@context.Team members</MudText>
-                    </MudTd>
-                    <MudTd DataLabel="Due Date">
-                        <MudText Typo="Typo.body2">@context.DueDate</MudText>
-                    </MudTd>
-                </RowTemplate>
-            </MudTable>
-        </MudCard>
+            @* Task description — clamped to 3 lines via CSS *@
+            <MudText Typo="Typo.body2" Class="kanban-card-description">
+                @context.Description
+            </MudText>
 
-        @* ── Section 6: Charts ───────────────────────────────────────────────
-           Two charts side by side:
-           - Donut chart: project status distribution (visual breakdown)
-           - Bar chart: tasks completed over the last 6 months (trend)
-           Demonstrates MudChart with ChartType.Donut and ChartType.Bar. *@
-        <MudGrid Spacing="3">
-            @* Donut chart — shows the distribution of project statuses *@
-            <MudItem xs="12" sm="6">
-                <MudCard Elevation="0" Class="chart-card">
-                    <MudCardContent>
-                        <MudText Typo="Typo.h6" Class="mb-4">Project Overview</MudText>
-                        <MudChart T="double"
-                                  ChartType="ChartType.Donut"
-                                  ChartSeries="@_donutSeries"
-                                  ChartLabels="@_donutLabels"
-                                  Width="100%"
-                                  Height="250px"
-                                  LegendPosition="Position.Bottom" />
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-
-            @* Bar chart — shows tasks completed per month over the last 6 months *@
-            <MudItem xs="12" sm="6">
-                <MudCard Elevation="0" Class="chart-card">
-                    <MudCardContent>
-                        <MudText Typo="Typo.h6" Class="mb-4">Tasks Completed</MudText>
-                        <MudChart T="double"
-                                  ChartType="ChartType.Bar"
-                                  ChartSeries="@_barSeries"
-                                  ChartLabels="@_barLabels"
-                                  Width="100%"
-                                  Height="250px"
-                                  ChartOptions="@_chartOptions" />
-                    </MudCardContent>
-                </MudCard>
-            </MudItem>
-        </MudGrid>
-    </MudItem>
-
-    @* ═══════════════════════════════════════════════════════════════════════════
-       RIGHT COLUMN — Sidebar panel (4/12 columns on md+)
-       Contains team info, overall progress, quick stats, upcoming event, messages.
-       ═══════════════════════════════════════════════════════════════════════════ *@
-    <MudItem xs="12" md="4">
-        <MudStack Spacing="3">
-
-            @* ── Sidebar: Design Team Card ───────────────────────────────────
-               Shows the team identity with an avatar, name, and member count.
-               The violet-tinted background reinforces the brand palette. *@
-            <MudCard Elevation="0" Class="sidebar-card">
-                <MudCardContent>
-                    <MudStack AlignItems="AlignItems.Center" Spacing="3">
-                        <MudAvatar Color="Color.Primary"
-                                   Variant="Variant.Filled"
-                                   Size="Size.Large">
-                            <MudIcon Icon="@Icons.Material.Filled.Groups" Size="Size.Large" />
-                        </MudAvatar>
-                        <MudText Typo="Typo.h6">Design Team</MudText>
-                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                            12 Members
-                        </MudText>
-                        @* Overlapping avatars showing team members *@
-                        <MudAvatarGroup Max="5" Spacing="3" MaxSize="Size.Medium">
-                            <MudAvatar Color="Color.Primary" Variant="Variant.Filled">SU</MudAvatar>
-                            <MudAvatar Color="Color.Secondary" Variant="Variant.Filled">AK</MudAvatar>
-                            <MudAvatar Color="Color.Info" Variant="Variant.Filled">JD</MudAvatar>
-                            <MudAvatar Color="Color.Warning" Variant="Variant.Filled">MR</MudAvatar>
-                            <MudAvatar Color="Color.Success" Variant="Variant.Filled">LP</MudAvatar>
-                            <MudAvatar Color="Color.Error" Variant="Variant.Filled">TN</MudAvatar>
-                        </MudAvatarGroup>
-                    </MudStack>
-                </MudCardContent>
-            </MudCard>
-
-            @* ── Sidebar: Overall Progress ───────────────────────────────────
-               A large circular progress indicator showing 72% overall completion.
-               The circular chart is the visual centerpiece of the sidebar. *@
-            <MudCard Elevation="0" Class="sidebar-card">
-                <MudCardContent>
-                    <MudText Typo="Typo.h6" Class="mb-4" Align="Align.Center">
-                        Overall Progress
-                    </MudText>
-                    <MudStack AlignItems="AlignItems.Center" Spacing="2">
-                        @* Large circular progress — 72% completion with primary color *@
-                        <div class="circular-progress-wrapper">
-                            <MudProgressCircular Color="Color.Primary"
-                                                 Size="Size.Large"
-                                                 Value="72">
-                                <ChildContent>
-                                    <MudText Typo="Typo.h5">72%</MudText>
-                                </ChildContent>
-                            </MudProgressCircular>
-                        </div>
-                        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">
-                            72 of 100 tasks completed
-                        </MudText>
-                    </MudStack>
-                </MudCardContent>
-            </MudCard>
-
-            @* ── Sidebar: Quick Stats Grid ───────────────────────────────────
-               A compact 2×2 grid of key numbers for at-a-glance status.
-               Uses MudSimpleTable for a clean, minimal layout. *@
-            <MudCard Elevation="0" Class="sidebar-card">
-                <MudCardContent>
-                    <MudText Typo="Typo.h6" Class="mb-3">Quick Stats</MudText>
-                    <MudGrid Spacing="2">
-                        @foreach (var qs in _quickStats)
-                        {
-                            <MudItem xs="6">
-                                <MudPaper Elevation="0" Class="quick-stat-item pa-3">
-                                    <MudText Typo="Typo.h5" Color="@qs.Color">
-                                        @qs.Value
-                                    </MudText>
-                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                        @qs.Label
-                                    </MudText>
-                                </MudPaper>
-                            </MudItem>
-                        }
-                    </MudGrid>
-                </MudCardContent>
-            </MudCard>
-
-            @* ── Sidebar: Upcoming Event ─────────────────────────────────────
-               A card highlighting the next scheduled event with date, time,
-               and a calendar icon. Gives the dashboard a "live" feel. *@
-            <MudCard Elevation="0" Class="sidebar-card">
-                <MudCardContent>
-                    <MudText Typo="Typo.h6" Class="mb-3">Upcoming Event</MudText>
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
-                        <MudAvatar Color="Color.Warning"
-                                   Variant="Variant.Filled"
-                                   Size="Size.Large">
-                            <MudIcon Icon="@Icons.Material.Filled.Event" />
-                        </MudAvatar>
-                        <div>
-                            <MudText Typo="Typo.subtitle2">Sprint Review</MudText>
-                            <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                                Sunday, 20 December
-                            </MudText>
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                08:00 – 11:00 AM
-                            </MudText>
-                        </div>
-                    </MudStack>
-                    <MudDivider Class="my-3" />
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
-                        <MudAvatar Color="Color.Info"
-                                   Variant="Variant.Filled"
-                                   Size="Size.Large">
-                            <MudIcon Icon="@Icons.Material.Filled.VideoCall" />
-                        </MudAvatar>
-                        <div>
-                            <MudText Typo="Typo.subtitle2">Design Sync</MudText>
-                            <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                                Monday, 21 December
-                            </MudText>
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                02:00 – 03:00 PM
-                            </MudText>
-                        </div>
-                    </MudStack>
-                </MudCardContent>
-            </MudCard>
-
-            @* ── Sidebar: Internal Messages ──────────────────────────────────
-               A compact message list showing recent team communications.
-               Uses MudBadge on the header for unread count. *@
-            <MudCard Elevation="0" Class="sidebar-card">
-                <MudCardContent>
-                    <MudStack Row="true"
-                              Justify="Justify.SpaceBetween"
-                              AlignItems="AlignItems.Center"
-                              Class="mb-3">
-                        <MudText Typo="Typo.h6">Messages</MudText>
-                        <MudBadge Content="3"
-                                  Color="Color.Error"
-                                  Overlap="true">
-                            <MudIcon Icon="@Icons.Material.Filled.Mail"
-                                     Color="Color.Default" />
-                        </MudBadge>
-                    </MudStack>
-
-                    @* Message list — each item shows sender avatar, name, preview, and time *@
-                    @foreach (var msg in _messages)
+            @* Footer row: avatars on left, stats on right *@
+            <div class="kanban-card-footer">
+                @* Avatar group — shows team member initials with overflow count *@
+                <MudAvatarGroup Max="3"
+                                Spacing="2"
+                                MaxSize="Size.Small"
+                                MaxColor="Color.Primary"
+                                Class="kanban-avatar-group">
+                    @foreach (var initials in context.Avatars)
                     {
-                        <MudStack Row="true"
-                                  AlignItems="AlignItems.Start"
-                                  Spacing="2"
-                                  Class="message-item pa-2 rounded-lg">
-                            <MudAvatar Color="@msg.AvatarColor"
-                                       Variant="Variant.Filled"
-                                       Size="Size.Small">
-                                @msg.Initials
-                            </MudAvatar>
-                            <div class="message-content">
-                                <MudStack Row="true"
-                                          Justify="Justify.SpaceBetween"
-                                          AlignItems="AlignItems.Center">
-                                    <MudText Typo="Typo.subtitle2">@msg.Sender</MudText>
-                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                        @msg.Time
-                                    </MudText>
-                                </MudStack>
-                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                    @msg.Preview
-                                </MudText>
-                            </div>
-                        </MudStack>
+                        <MudAvatar Size="Size.Small"
+                                   Variant="Variant.Filled"
+                                   Color="@GetAvatarColor(initials)"
+                                   Class="kanban-avatar">
+                            @initials
+                        </MudAvatar>
                     }
-                </MudCardContent>
-            </MudCard>
+                </MudAvatarGroup>
 
-        </MudStack>
-    </MudItem>
-</MudGrid>
+                @* Engagement stats: comments and views *@
+                <div class="kanban-card-stats">
+                    @* Comment count *@
+                    <span class="kanban-card-stat">
+                        <MudIcon Icon="@Icons.Material.Outlined.ChatBubbleOutline"
+                                 Size="Size.Small" />
+                        @FormatCount(context.Comments)
+                    </span>
+                    @* View count *@
+                    <span class="kanban-card-stat">
+                        <MudIcon Icon="@Icons.Material.Outlined.Visibility"
+                                 Size="Size.Small" />
+                        @FormatCount(context.Views)
+                    </span>
+                </div>
+            </div>
+        </div>
+    </ItemRenderer>
+</MudDropContainer>
 
 @code {
     // ═══════════════════════════════════════════════════════════════════════════
-    //  Static mock data — all hardcoded for theme showcase purposes.
-    //  In a real app, this data would come from MediatR queries via DI.
+    //  Enums — define the task priority levels and Kanban column statuses.
     // ═══════════════════════════════════════════════════════════════════════════
 
-    // ── Section 2: Stats card data ──────────────────────────────────────────
-
-    /// <summary>
-    /// KPI stat cards displayed at the top of the dashboard.
-    /// Each card shows a metric with an icon and color for quick visual scanning.
-    /// </summary>
-    private static readonly StatCard[] _statsCards =
-    [
-        new("Total Projects", "144", Icons.Material.Filled.Folder, Color.Primary),
-        new("In Progress", "72", Icons.Material.Filled.TrendingUp, Color.Info),
-        new("Completed", "56", Icons.Material.Filled.CheckCircle, Color.Success),
-        new("Waiting", "24", Icons.Material.Filled.HourglassEmpty, Color.Warning),
-    ];
-
-    // ── Section 3: Project card data ────────────────────────────────────────
-
-    /// <summary>
-    /// Mock project cards with progress, team members, and metadata.
-    /// Team members are represented by initials for the avatar group.
-    /// </summary>
-    private static readonly ProjectCard[] _projects =
-    [
-        new("Web Design", "Wireframing, mockups, client collaboration",
-            50, Color.Primary, ["SU", "AK", "JD"], 4, 3),
-        new("Mobile App", "iOS and Android native development",
-            30, Color.Info, ["MR", "LP", "TN", "SU"], 7, 5),
-        new("Dashboard", "Analytics dashboard with real-time data",
-            90, Color.Success, ["AK", "JD"], 2, 8),
-        new("App Development", "Backend API and microservices",
-            60, Color.Warning, ["LP", "TN", "MR"], 5, 4),
-        new("Landing Page", "Marketing site redesign and A/B testing",
-            70, Color.Error, ["SU", "AK", "JD", "MR", "LP"], 9, 6),
-        new("Web Development", "Full-stack web application build",
-            80, Color.Secondary, ["TN", "SU", "AK"], 3, 7),
-    ];
-
-    // ── Section 5: Recent activity table data ───────────────────────────────
-
-    /// <summary>
-    /// Recent activity items for the table section.
-    /// Status colors match the semantic meaning (In Progress = Info, Completed = Success, etc.).
-    /// </summary>
-    private static readonly ActivityItem[] _recentActivity =
-    [
-        new("Web Design", "In Progress", 50, Color.Info, "3", "Dec 25"),
-        new("Mobile App", "On Going", 30, Color.Warning, "4", "Jan 15"),
-        new("Dashboard", "Completed", 90, Color.Success, "2", "Dec 10"),
-        new("Landing Page", "In Progress", 70, Color.Info, "5", "Jan 20"),
-    ];
-
-    // ── Section 6: Chart data ───────────────────────────────────────────────
-
-    /// <summary>
-    /// Donut chart series — a single series containing the distribution of project statuses.
-    /// MudBlazor v9 uses ChartSeries&lt;T&gt; for all chart types including donut/pie.
-    /// Data is wrapped in ChartData&lt;double&gt; which takes an IReadOnlyList&lt;double&gt;.
-    /// </summary>
-    private static readonly List<ChartSeries<double>> _donutSeries =
-    [
-        new() { Name = "Status", Data = new ChartData<double>(new double[] { 50, 30, 15, 5 }) },
-    ];
-
-    /// <summary>Donut chart labels — matches the data array order.</summary>
-    private static readonly string[] _donutLabels = ["In Progress", "Completed", "Waiting", "Overdue"];
-
-    /// <summary>Bar chart series — tasks completed per month over the last 6 months.</summary>
-    private static readonly List<ChartSeries<double>> _barSeries =
-    [
-        new() { Name = "Tasks", Data = new ChartData<double>(new double[] { 18, 25, 32, 28, 42, 38 }) },
-    ];
-
-    /// <summary>Bar chart X-axis labels — month abbreviations.</summary>
-    private static readonly string[] _barLabels = ["Aug", "Sep", "Oct", "Nov", "Dec", "Jan"];
-
-    /// <summary>
-    /// Bar chart rendering options — uses BarChartOptions (v9 API) for axis chart configuration.
-    /// Minimal Y-axis ticks for a clean, uncluttered look.
-    /// </summary>
-    private static readonly BarChartOptions _chartOptions = new()
+    /// <summary>Task priority levels with distinct visual colors.</summary>
+    private enum TaskPriority
     {
-        YAxisTicks = 10,
-        MaxNumYAxisTicks = 5,
+        Important,
+        HighPriority,
+        Meh,
+        OK,
+        LowPriority,
+        IDontKnow,
+        MaybeImportant,
+        NotThatImportant
+    }
+
+    /// <summary>Kanban column statuses — each maps to a MudDropZone identifier.</summary>
+    private enum KanbanStatus
+    {
+        InProgress,
+        Reviewed,
+        Completed
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Data Model — KanbanTask holds all info needed to render a card.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Represents a single task card on the Kanban board.
+    /// Mutable Status property allows drag-and-drop to update the column.
+    /// </summary>
+    private class KanbanTask
+    {
+        /// <summary>Unique task identifier.</summary>
+        public int Id { get; set; }
+
+        /// <summary>Task title displayed prominently on the card.</summary>
+        public string Title { get; set; } = "";
+
+        /// <summary>Brief description shown below the title (clamped to 3 lines).</summary>
+        public string Description { get; set; } = "";
+
+        /// <summary>Priority level — determines the badge color and label.</summary>
+        public TaskPriority Priority { get; set; }
+
+        /// <summary>Current column — updated when the card is dropped in a new zone.</summary>
+        public KanbanStatus Status { get; set; }
+
+        /// <summary>Team member initials for the avatar group (e.g., "AW", "JD").</summary>
+        public List<string> Avatars { get; set; } = [];
+
+        /// <summary>Number of comments on this task.</summary>
+        public int Comments { get; set; }
+
+        /// <summary>Number of views/impressions on this task.</summary>
+        public int Views { get; set; }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  State — sort selection and task list
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>Currently selected sort option for the dropdown.</summary>
+    private string _sortBy = "Newest";
+
+    /// <summary>
+    /// All Kanban tasks — distributed across the three columns.
+    /// This is the single source of truth; MudDropContainer reads from this list
+    /// and the ItemsSelector filters by Status matching the zone Identifier.
+    /// </summary>
+    private readonly List<KanbanTask> _tasks =
+    [
+        // ── In Progress column ──────────────────────────────────────────────
+        new()
+        {
+            Id = 1,
+            Title = "UI/UX Design in the age of AI",
+            Description = "Explore how artificial intelligence is reshaping the landscape of user interface and experience design workflows.",
+            Priority = TaskPriority.Important,
+            Status = KanbanStatus.InProgress,
+            Avatars = ["AW", "JD", "MR"],
+            Comments = 11,
+            Views = 187
+        },
+        new()
+        {
+            Id = 2,
+            Title = "Responsive Website Design for 23 more clients",
+            Description = "Scale our responsive design system to accommodate twenty-three additional client projects with unique branding requirements.",
+            Priority = TaskPriority.Meh,
+            Status = KanbanStatus.InProgress,
+            Avatars = ["LP", "TN", "SU", "AK", "JD", "RW", "BM"],
+            Comments = 32,
+            Views = 115
+        },
+        new()
+        {
+            Id = 3,
+            Title = "Blog Copywriting (Low priority 🥱)",
+            Description = "Draft and publish blog articles covering design trends, case studies, and thought leadership pieces for the company blog.",
+            Priority = TaskPriority.OK,
+            Status = KanbanStatus.InProgress,
+            Avatars = ["SU", "AK"],
+            Comments = 987,
+            Views = 21800
+        },
+        new()
+        {
+            Id = 4,
+            Title = "Landing page for Azunyan senpai",
+            Description = "Design and develop a custom landing page with animated hero section and conversion-optimized layout for the Azunyan brand.",
+            Priority = TaskPriority.NotThatImportant,
+            Status = KanbanStatus.InProgress,
+            Avatars = ["JD", "MR", "LP"],
+            Comments = 5,
+            Views = 42
+        },
+        new()
+        {
+            Id = 5,
+            Title = "Design system token audit",
+            Description = "Review and update all design tokens across the component library to ensure consistency with the latest brand guidelines.",
+            Priority = TaskPriority.LowPriority,
+            Status = KanbanStatus.InProgress,
+            Avatars = ["TN", "AW"],
+            Comments = 14,
+            Views = 63
+        },
+        new()
+        {
+            Id = 6,
+            Title = "Accessibility compliance review",
+            Description = "Conduct a full WCAG 2.1 AA audit of the main product dashboard and fix all critical accessibility violations.",
+            Priority = TaskPriority.HighPriority,
+            Status = KanbanStatus.InProgress,
+            Avatars = ["SU", "JD", "AK", "MR"],
+            Comments = 45,
+            Views = 312
+        },
+        new()
+        {
+            Id = 7,
+            Title = "Mobile navigation redesign",
+            Description = "Rethink the mobile navigation pattern to improve discoverability and reduce the number of taps to reach key features.",
+            Priority = TaskPriority.MaybeImportant,
+            Status = KanbanStatus.InProgress,
+            Avatars = ["LP", "TN", "AW"],
+            Comments = 23,
+            Views = 89
+        },
+
+        // ── Reviewed column ─────────────────────────────────────────────────
+        new()
+        {
+            Id = 8,
+            Title = "User flow confirmation for finance app",
+            Description = "Validate the end-to-end user flow for the finance application including onboarding, transactions, and reporting screens.",
+            Priority = TaskPriority.Important,
+            Status = KanbanStatus.Reviewed,
+            Avatars = ["AW", "JD"],
+            Comments = 8,
+            Views = 112
+        },
+        new()
+        {
+            Id = 9,
+            Title = "Healthcare app wireframe flow 🤔",
+            Description = "Create detailed wireframes for the patient portal including appointment scheduling, medical records, and messaging features.",
+            Priority = TaskPriority.Important,
+            Status = KanbanStatus.Reviewed,
+            Avatars = ["MR", "LP", "TN", "SU", "AK", "JD"],
+            Comments = 221,
+            Views = 87200
+        },
+        new()
+        {
+            Id = 10,
+            Title = "E-commerce checkout optimization",
+            Description = "Streamline the checkout flow to reduce cart abandonment rate by simplifying form fields and adding progress indicators.",
+            Priority = TaskPriority.Meh,
+            Status = KanbanStatus.Reviewed,
+            Avatars = ["SU", "AK", "JD"],
+            Comments = 17,
+            Views = 245
+        },
+
+        // ── Completed column ────────────────────────────────────────────────
+        new()
+        {
+            Id = 11,
+            Title = "UI/UX Design in the age of AI",
+            Description = "Final deliverables for the AI-driven design research project including presentation deck and interactive prototype.",
+            Priority = TaskPriority.HighPriority,
+            Status = KanbanStatus.Completed,
+            Avatars = ["AW", "JD", "MR"],
+            Comments = 108000,
+            Views = 997
+        },
+        new()
+        {
+            Id = 12,
+            Title = "UI/UX Design in the age of AI",
+            Description = "Documentation and style guide updates reflecting the new AI-assisted design patterns adopted by the team.",
+            Priority = TaskPriority.LowPriority,
+            Status = KanbanStatus.Completed,
+            Avatars = ["LP", "TN", "SU"],
+            Comments = 17,
+            Views = 0
+        },
+        new()
+        {
+            Id = 13,
+            Title = "UI/UX Design in the age of AI",
+            Description = "Retrospective analysis of AI tool integration into the design workflow with metrics on productivity improvements.",
+            Priority = TaskPriority.IDontKnow,
+            Status = KanbanStatus.Completed,
+            Avatars = ["AK", "JD", "MR", "AW", "SU"],
+            Comments = 888,
+            Views = 12
+        },
+        new()
+        {
+            Id = 14,
+            Title = "UI/UX Design in the age of AI",
+            Description = "Supplementary research materials and competitor analysis for the AI design tools landscape report.",
+            Priority = TaskPriority.MaybeImportant,
+            Status = KanbanStatus.Completed,
+            Avatars = ["TN", "LP", "AW"],
+            Comments = 34,
+            Views = 156
+        },
+    ];
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Drag & Drop Handler
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Called when a task card is dropped into a new (or the same) drop zone.
+    /// Parses the zone identifier back to a KanbanStatus enum and updates the
+    /// task's Status property, which causes MudDropContainer to re-evaluate
+    /// which zone the card belongs to.
+    /// </summary>
+    private void OnItemDropped(MudItemDropInfo<KanbanTask> info)
+    {
+        if (info.Item is not null &&
+            Enum.TryParse<KanbanStatus>(info.DropzoneIdentifier, out var newStatus))
+        {
+            info.Item.Status = newStatus;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Helper Methods — formatting, color mapping, and column counts
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Returns the number of tasks currently in a given column.
+    /// Used by column headers to display the live count badge.
+    /// </summary>
+    private int GetColumnCount(KanbanStatus status) =>
+        _tasks.Count(t => t.Status == status);
+
+    /// <summary>
+    /// Maps a TaskPriority enum value to a CSS class name for the priority badge.
+    /// Each class applies a distinct background color matching the reference design.
+    /// </summary>
+    private static string GetPriorityClass(TaskPriority priority) => priority switch
+    {
+        TaskPriority.Important          => "kanban-card-priority--important",
+        TaskPriority.HighPriority       => "kanban-card-priority--high",
+        TaskPriority.Meh                => "kanban-card-priority--meh",
+        TaskPriority.OK                 => "kanban-card-priority--ok",
+        TaskPriority.LowPriority        => "kanban-card-priority--low",
+        TaskPriority.IDontKnow          => "kanban-card-priority--idk",
+        TaskPriority.MaybeImportant     => "kanban-card-priority--maybe",
+        TaskPriority.NotThatImportant   => "kanban-card-priority--not",
+        _                               => ""
     };
 
-    // ── Sidebar: Quick stats data ───────────────────────────────────────────
+    /// <summary>
+    /// Returns the human-readable label for a priority badge.
+    /// </summary>
+    private static string GetPriorityLabel(TaskPriority priority) => priority switch
+    {
+        TaskPriority.Important          => "Important",
+        TaskPriority.HighPriority       => "High Priority",
+        TaskPriority.Meh                => "Meh",
+        TaskPriority.OK                 => "OK",
+        TaskPriority.LowPriority        => "Low Priority",
+        TaskPriority.IDontKnow          => "I don't know",
+        TaskPriority.MaybeImportant     => "Maybe important",
+        TaskPriority.NotThatImportant   => "Not that Important",
+        _                               => ""
+    };
 
     /// <summary>
-    /// Quick stats for the sidebar 2×2 grid.
-    /// Provides an at-a-glance summary of project health.
+    /// Assigns a consistent MudBlazor Color to an avatar based on the initials string.
+    /// Uses a deterministic hash (sum of char codes × prime) so the same initials
+    /// always produce the same color, even across process restarts (.NET 6+
+    /// randomizes <see cref="string.GetHashCode"/> per process).
     /// </summary>
-    private static readonly QuickStat[] _quickStats =
-    [
-        new("Total", "144", Color.Default),
-        new("Completed", "56", Color.Success),
-        new("In Progress", "72", Color.Info),
-        new("Waiting", "24", Color.Warning),
-    ];
-
-    // ── Sidebar: Messages data ──────────────────────────────────────────────
+    private static Color GetAvatarColor(string initials)
+    {
+        // Deterministic hash — sum of character codes multiplied by prime
+        var hash = initials.Aggregate(0, (h, c) => h * 31 + c);
+        var colors = new[] { Color.Primary, Color.Secondary, Color.Tertiary, Color.Info, Color.Success, Color.Warning, Color.Error };
+        return colors[Math.Abs(hash) % colors.Length];
+    }
 
     /// <summary>
-    /// Mock internal messages for the sidebar message card.
-    /// Shows sender, preview text, time, and avatar color.
+    /// Formats large numbers into compact human-readable strings.
+    /// Examples: 987 → "987", 21800 → "21.8K", 108000 → "108K"
     /// </summary>
-    private static readonly MessageItem[] _messages =
-    [
-        new("Alice Kim", "AK", "Updated the wireframes for review...", "2m ago", Color.Primary),
-        new("James Dean", "JD", "Can we sync on the API contracts?", "15m ago", Color.Info),
-        new("Maria Ruiz", "MR", "Sprint retro notes are ready.", "1h ago", Color.Warning),
-    ];
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    //  Record types — lightweight immutable data carriers for the mock data.
-    //  Using records keeps the @code block clean and the data self-documenting.
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /// <summary>Data for a single KPI stat card (Section 2).</summary>
-    private sealed record StatCard(string Label, string Value, string Icon, Color Color);
-
-    /// <summary>Data for a single project card (Section 3).</summary>
-    private sealed record ProjectCard(
-        string Name,
-        string Description,
-        double Progress,
-        Color ChipColor,
-        string[] TeamMembers,
-        int Comments,
-        int Attachments);
-
-    /// <summary>Data for a single row in the recent activity table (Section 5).</summary>
-    private sealed record ActivityItem(
-        string Project,
-        string Status,
-        double Progress,
-        Color StatusColor,
-        string Team,
-        string DueDate);
-
-    /// <summary>Data for a single quick stat in the sidebar grid.</summary>
-    private sealed record QuickStat(string Label, string Value, Color Color);
-
-    /// <summary>Data for a single message in the sidebar message card.</summary>
-    private sealed record MessageItem(
-        string Sender,
-        string Initials,
-        string Preview,
-        string Time,
-        Color AvatarColor);
+    private static string FormatCount(int count) => count switch
+    {
+        >= 1_000_000 => $"{count / 1_000_000.0:0.#}M",
+        >= 1_000     => $"{count / 1_000.0:0.#}K",
+        _            => count.ToString()
+    };
 }

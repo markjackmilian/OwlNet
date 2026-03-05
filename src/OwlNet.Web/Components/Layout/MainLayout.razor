@@ -1,4 +1,7 @@
 @inherits LayoutComponentBase
+@implements IDisposable
+
+@inject NavigationManager NavigationManager
 
 @* MudBlazor theme provider — uses the custom OwlNet violet/indigo theme.
    Dark mode is two-way bound so the toggle in the AppBar updates the provider. *@
@@ -41,7 +44,7 @@
 
     @* ── Collapsible mini drawer (deep violet sidebar) ───────────────────
        Uses DrawerVariant.Mini so the drawer toggles between:
-         - Expanded (260px): shows icons + text labels
+         - Expanded (260px): shows icons + text labels + badges + footer
          - Mini/collapsed (72px): shows icons only, centered
        The deep violet background color comes from the theme palette
        (DrawerBackground) — no hardcoded colors here.
@@ -55,22 +58,99 @@
                Width="260px"
                OpenMiniOnHover="false">
 
-        @* ── Brand header ────────────────────────────────────────────────
-           Expanded: owl icon + "OwlNet" text side by side.
-           Mini: owl icon only, centered in the narrower drawer. *@
-        <div class="brand-header @(_drawerOpen ? "brand-header--expanded" : "brand-header--mini")">
-            <MudIcon Icon="@Icons.Material.Filled.NightsStay"
-                     Size="Size.Large"
-                     Class="brand-icon" />
+        @* Flex container to push the footer to the bottom of the drawer.
+           The nav menu section uses flex:1 to fill available space,
+           while the footer stays pinned at the bottom. *@
+        <div class="drawer-content">
+
+            @* ── Brand header ────────────────────────────────────────────
+               Expanded: owl icon + "OwlNet" text side by side.
+               Mini: owl icon only, centered in the narrower drawer. *@
+            <div class="brand-header @(_drawerOpen ? "brand-header--expanded" : "brand-header--mini")">
+                <MudIcon Icon="@Icons.Material.Filled.NightsStay"
+                         Size="Size.Large"
+                         Class="brand-icon" />
+                @if (_drawerOpen)
+                {
+                    <MudText Typo="Typo.h6" Class="brand-text ml-2">OwlNet</MudText>
+                }
+            </div>
+
+            @* ── Search bar ──────────────────────────────────────────────
+               Decorative search input shown only when the drawer is expanded.
+               Uses a semi-transparent background to blend with the dark violet
+               sidebar. No actual search functionality yet — placeholder only. *@
             @if (_drawerOpen)
             {
-                <MudText Typo="Typo.h6" Class="brand-text ml-2">OwlNet</MudText>
+                <div class="drawer-search">
+                    <MudTextField T="string"
+                                  Placeholder="Search"
+                                  Variant="Variant.Outlined"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Search"
+                                  Margin="Margin.Dense"
+                                  Class="drawer-search-field" />
+                </div>
             }
-        </div>
 
-        @* Navigation menu — receives the drawer state so it can hide
-           section labels and adjust layout in mini (collapsed) mode. *@
-        <NavMenu IsExpanded="_drawerOpen" />
+            @* ── Navigation menu ─────────────────────────────────────────
+               Scrollable area that fills the remaining vertical space between
+               the search bar and the footer. Receives the drawer state so it
+               can hide section labels and badges in mini (collapsed) mode. *@
+            <div class="drawer-nav-scroll">
+                <NavMenu IsExpanded="_drawerOpen" />
+            </div>
+
+            @* ── Drawer footer ───────────────────────────────────────────
+               Pinned to the bottom of the drawer via flexbox.
+               Contains: "Go Pro" upsell link + user profile with logout.
+               In mini mode, only the user avatar is shown (centered). *@
+            <div class="drawer-footer">
+                @if (_drawerOpen)
+                {
+                    @* "Go Pro" upsell section — decorative, no functionality yet.
+                       Styled as a subtle call-to-action with a star icon. *@
+                    <MudDivider Class="my-1" DividerType="DividerType.FullWidth" />
+                    <div class="drawer-go-pro">
+                        <MudIcon Icon="@Icons.Material.Filled.Star"
+                                 Size="Size.Small"
+                                 Class="go-pro-icon" />
+                        <MudText Typo="Typo.body2" Class="go-pro-text">Go Pro</MudText>
+                    </div>
+                    <MudDivider Class="my-1" DividerType="DividerType.FullWidth" />
+                }
+
+                @* User profile — shows avatar + name + role when expanded,
+                   or just a centered avatar in mini mode.
+                   Logout button navigates to the Identity logout endpoint
+                   with the current page as the return URL. *@
+                <AuthorizeView>
+                    <Authorized>
+                        <div class="drawer-user-profile @(_drawerOpen ? "" : "drawer-user-profile--mini")">
+                            <MudAvatar Size="Size.Medium" Color="Color.Primary" Class="drawer-user-avatar">
+                                @(context.User.Identity?.Name?.Substring(0, 1).ToUpper() ?? "U")
+                            </MudAvatar>
+                            @if (_drawerOpen)
+                            {
+                                <div class="drawer-user-info">
+                                    <MudText Typo="Typo.body2" Class="drawer-user-name">
+                                        @context.User.Identity?.Name
+                                    </MudText>
+                                    <MudText Typo="Typo.caption" Class="drawer-user-role">
+                                        Basic Member
+                                    </MudText>
+                                </div>
+                                <MudIconButton Icon="@Icons.Material.Filled.Logout"
+                                               Size="Size.Small"
+                                               Href="@_logoutUrl"
+                                               Class="drawer-logout-btn"
+                                               aria-label="Logout" />
+                            }
+                        </div>
+                    </Authorized>
+                </AuthorizeView>
+            </div>
+        </div>
     </MudDrawer>
 
     @* ── Main content area ───────────────────────────────────────────────
@@ -124,6 +204,33 @@
     private bool _isDarkMode;
 
     /// <summary>
+    /// Tracks the current URL for the logout return-URL parameter.
+    /// Updated on every navigation event so the logout link always
+    /// redirects back to the page the user was on.
+    /// </summary>
+    private string? _currentUrl;
+
+    /// <summary>
+    /// Computed logout URL that includes the current page as the return destination.
+    /// The actual logout is handled by the Identity POST endpoint; this link
+    /// navigates to a page that performs the POST.
+    /// </summary>
+    private string _logoutUrl => $"Account/Logout?returnUrl={Uri.EscapeDataString(_currentUrl ?? "")}";
+
+    protected override void OnInitialized()
+    {
+        // Track the current URL for the logout return-URL parameter
+        _currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+        NavigationManager.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        _currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
+        StateHasChanged();
+    }
+
+    /// <summary>
     /// Toggles the navigation drawer between expanded and mini (collapsed) states.
     /// </summary>
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
@@ -137,4 +244,9 @@
     /// Recovers from a rendering error by resetting the error boundary state.
     /// </summary>
     private void RecoverFromError() => _errorBoundary?.Recover();
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= OnLocationChanged;
+    }
 }

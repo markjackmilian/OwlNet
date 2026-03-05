@@ -1,54 +1,106 @@
-@implements IDisposable
-
-@inject NavigationManager NavigationManager
-
 @* Sidebar navigation using MudBlazor NavMenu with grouped sections.
    Designed for the deep violet drawer background — uses Color.Inherit so
    text and icon colors are driven by the theme's DrawerText / DrawerIcon
    palette values rather than the default body text color.
 
    Supports both expanded and mini drawer modes: when IsExpanded is false
-   (mini / collapsed), section labels are hidden because they don't fit
-   in the narrow 72 px mini-drawer width. *@
+   (mini / collapsed), section labels and badges are hidden because they
+   don't fit in the narrow 72 px mini-drawer width.
+
+   Nav structure matches the Kanban dashboard reference:
+     Main section:    Home (badge 10), Tasks, Users (badge 2), APIs
+     Settings section: Subscription, Settings, Help & Support *@
 <MudNavMenu Rounded="true" Color="Color.Inherit">
 
-    @* ── Section: General ──────────────────────────────────────────────── *@
+    @* ── Section: Main ────────────────────────────────────────────────── *@
     @* Section label — only rendered when the drawer is expanded.
        In mini mode the 72 px width can't accommodate text labels,
        so we hide them to keep the sidebar clean. *@
     @if (IsExpanded)
     {
         <MudText Typo="Typo.overline" Class="nav-section-label mt-2 px-4">
-            General
+            Main
         </MudText>
     }
 
+    @* Home — primary dashboard link with a decorative badge count.
+       Text and badge are always rendered as child content; CSS hides
+       everything except the icon when the drawer is in mini mode
+       (.mud-drawer--mini .nav-link-content { display: none }). *@
     <MudNavLink Href="/" Match="NavLinkMatch.All"
                 Icon="@Icons.Material.Filled.Dashboard">
-        Dashboard
+        <div class="nav-link-content">
+            <span>Home</span>
+            @if (IsExpanded)
+            {
+                <span class="nav-badge nav-badge--primary">10</span>
+            }
+        </div>
     </MudNavLink>
 
-    @* ── Section: Account ──────────────────────────────────────────────── *@
+    @* Tasks — assignment/task management link *@
+    <MudNavLink Href="/tasks" Match="NavLinkMatch.Prefix"
+                Icon="@Icons.Material.Filled.Assignment">
+        Tasks
+    </MudNavLink>
+
+    @* Users — user management link with a decorative badge count.
+       Same CSS-driven hiding approach as the Home link above. *@
+    <MudNavLink Href="/users" Match="NavLinkMatch.Prefix"
+                Icon="@Icons.Material.Filled.People">
+        <div class="nav-link-content">
+            <span>Users</span>
+            @if (IsExpanded)
+            {
+                <span class="nav-badge nav-badge--secondary">2</span>
+            }
+        </div>
+    </MudNavLink>
+
+    @* APIs — API management/documentation link *@
+    <MudNavLink Href="/apis" Match="NavLinkMatch.Prefix"
+                Icon="@Icons.Material.Filled.Code">
+        APIs
+    </MudNavLink>
+
+    @* ── Section: Settings ────────────────────────────────────────────── *@
     @if (IsExpanded)
     {
         <MudText Typo="Typo.overline" Class="nav-section-label mt-4 px-4">
-            Account
+            Settings
         </MudText>
     }
 
-    @* Identity account links — show profile/logout when authenticated, register/login otherwise *@
+    @* Subscription — plan/billing management *@
+    <MudNavLink Href="/subscription" Match="NavLinkMatch.Prefix"
+                Icon="@Icons.Material.Filled.CardMembership">
+        Subscription
+    </MudNavLink>
+
+    @* Settings — application settings *@
+    <MudNavLink Href="/settings" Match="NavLinkMatch.Prefix"
+                Icon="@Icons.Material.Filled.Settings">
+        Settings
+    </MudNavLink>
+
+    @* Help & Support — help center / documentation link *@
+    <MudNavLink Href="/help" Match="NavLinkMatch.Prefix"
+                Icon="@Icons.Material.Filled.HelpOutline">
+        Help &amp; Support
+    </MudNavLink>
+
+    @* ── Section: Account (not authenticated) ─────────────────────────── *@
+    @* Register/Login links — only shown when the user is NOT authenticated.
+       When authenticated, the user profile is shown in the drawer footer
+       (MainLayout.razor) instead of here, to match the dashboard reference. *@
     <AuthorizeView>
-        <Authorized>
-            <MudNavLink Href="Account/Manage"
-                        Icon="@Icons.Material.Filled.Person">
-                @context.User.Identity?.Name
-            </MudNavLink>
-            <MudNavLink Href="@_logoutUrl"
-                        Icon="@Icons.Material.Filled.Logout">
-                Logout
-            </MudNavLink>
-        </Authorized>
         <NotAuthorized>
+            @if (IsExpanded)
+            {
+                <MudText Typo="Typo.overline" Class="nav-section-label mt-4 px-4">
+                    Account
+                </MudText>
+            }
             <MudNavLink Href="Account/Register"
                         Icon="@Icons.Material.Filled.PersonAdd">
                 Register
@@ -65,41 +117,11 @@
     /// <summary>
     /// Indicates whether the parent drawer is in expanded (full-width) mode.
     /// When <c>false</c> the drawer is in mini/collapsed mode and section
-    /// labels are hidden because they don't fit the narrow width.
+    /// labels, badges, and extra content are hidden because they don't fit
+    /// the narrow 72 px width.
     /// Defaults to <c>true</c> so the component works correctly even when
     /// the parameter is not explicitly passed from the parent layout.
     /// </summary>
     [Parameter]
     public bool IsExpanded { get; set; } = true;
-
-    /// <summary>
-    /// Tracks the current URL for the logout return-URL parameter.
-    /// Updated on every navigation event so the logout link always
-    /// redirects back to the page the user was on.
-    /// </summary>
-    private string? _currentUrl;
-
-    /// <summary>
-    /// Computed logout URL that includes the current page as the return destination.
-    /// Note: The actual logout is handled by the Identity POST endpoint; this link
-    /// navigates to a page that performs the POST.
-    /// </summary>
-    private string _logoutUrl => $"Account/Logout?returnUrl={Uri.EscapeDataString(_currentUrl ?? "")}";
-
-    protected override void OnInitialized()
-    {
-        _currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
-        NavigationManager.LocationChanged += OnLocationChanged;
-    }
-
-    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
-    {
-        _currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
-        StateHasChanged();
-    }
-
-    public void Dispose()
-    {
-        NavigationManager.LocationChanged -= OnLocationChanged;
-    }
 }

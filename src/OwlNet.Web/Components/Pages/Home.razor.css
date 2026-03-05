@@ -1,111 +1,367 @@
 /* ═══════════════════════════════════════════════════════════════════════════════
-   Home.razor scoped styles — Dashboard page
+   Home.razor scoped styles — Kanban Dashboard
    ═══════════════════════════════════════════════════════════════════════════════
-   Minimal custom CSS to enhance the dashboard layout beyond what MudBlazor
-   utility classes provide. Uses CSS custom properties from the MudBlazor theme
-   (--mud-palette-*) so colors adapt automatically to light/dark mode.
+   Comprehensive styles for the Kanban board layout, column headers, task cards,
+   priority badges, and drag-and-drop visual feedback.
+
+   Color conventions:
+   - Column header colors are hardcoded (Kanban-specific, not theme-level).
+   - Priority badge colors are hardcoded (domain-specific visual encoding).
+   - All other colors use CSS custom properties from the MudBlazor theme
+     (--mud-palette-*) so they adapt to light/dark mode automatically.
    ═══════════════════════════════════════════════════════════════════════════════ */
 
-/* ── Stat cards ──────────────────────────────────────────────────────────────
-   Subtle border instead of elevation for a flat, modern card aesthetic.
-   The border uses the theme's divider color so it adapts to dark mode. */
-.stat-card {
+
+/* ── Share button ────────────────────────────────────────────────────────────
+   Slight padding boost for the header "Share" CTA button. */
+.kanban-share-btn {
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+
+/* ── Tab bar ─────────────────────────────────────────────────────────────────
+   Override MudTabs to render as a flat, inline tab strip without panel content
+   area taking up vertical space. */
+::deep .kanban-tabs .mud-tabs-panels {
+    display: none;
+}
+
+::deep .kanban-tabs .mud-tabs-toolbar {
+    background: transparent;
+}
+
+::deep .kanban-tab-badge {
+    min-height: 20px;
+    height: 20px;
+    font-size: 0.7rem;
+}
+
+
+/* ── Sort dropdown ───────────────────────────────────────────────────────────
+   Compact width for the "Sort By" select in the tab bar row. */
+.kanban-sort-select {
+    max-width: 160px;
+    min-width: 140px;
+}
+
+
+/* ── Drop container ──────────────────────────────────────────────────────────
+   Ensure the MudDropContainer doesn't add unwanted layout constraints. */
+.kanban-drop-container {
+    width: 100%;
+}
+
+
+/* ── Kanban Board ────────────────────────────────────────────────────────────
+   Horizontal flex layout for the three columns. Each column takes equal width
+   with a gap between them. On small screens, the board scrolls horizontally. */
+.kanban-board {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    overflow-x: auto;
+    padding-bottom: 16px;
+    min-height: 500px;
+}
+
+
+/* ── Kanban Column ───────────────────────────────────────────────────────────
+   Each column is a vertical flex container with a colored header and a
+   scrollable card area. Min-width ensures columns don't collapse too small. */
+.kanban-column {
+    flex: 1 1 0;
+    min-width: 300px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+
+/* ── Column Header ───────────────────────────────────────────────────────────
+   Colored rounded pill bar with: count circle | title | add button.
+   Uses flexbox for horizontal alignment. */
+.kanban-column-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: 12px;
+    margin-bottom: 12px;
+    color: #ffffff;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+/* Count badge — small circle on the left showing the number of items */
+.kanban-column-count {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 28px;
+    height: 28px;
+    padding: 0 6px;
+    border-radius: 8px;
+    background-color: rgba(255, 255, 255, 0.25);
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+/* Column title — fills available space between count and add button */
+.kanban-column-title {
+    flex: 1;
+}
+
+/* Add button — white icon on the colored header */
+::deep .kanban-column-add {
+    color: rgba(255, 255, 255, 0.8) !important;
+}
+
+::deep .kanban-column-add:hover {
+    color: #ffffff !important;
+    background-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+
+/* ── Column Header Color Variants ────────────────────────────────────────────
+   Hardcoded colors matching the reference design. These are Kanban-specific
+   visual encodings, not theme-level palette colors. */
+
+/* In Progress — Indigo (#4F46E5) */
+.kanban-column-header--indigo {
+    background-color: #4F46E5;
+}
+
+/* Reviewed — Orange (#F97316) */
+.kanban-column-header--orange {
+    background-color: #F97316;
+}
+
+/* Completed — Green (#22C55E) */
+.kanban-column-header--green {
+    background-color: #22C55E;
+}
+
+
+/* ── Drop Zone ───────────────────────────────────────────────────────────────
+   The MudDropZone renders as the card container within each column.
+   Subtle background tint, rounded corners, and vertical scrolling. */
+::deep .kanban-dropzone {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 200px;
+    padding: 4px;
+    border-radius: 12px;
+    transition: background-color 0.2s ease;
+}
+
+/* Visual feedback when dragging a card over a drop zone */
+::deep .kanban-dropzone.mud-drop-zone-drag {
+    background-color: var(--mud-palette-primary-lighten);
+    opacity: 0.7;
+}
+
+
+/* ── Task Card ───────────────────────────────────────────────────────────────
+   White card with rounded corners, subtle shadow, and hover lift effect.
+   Contains: priority badge, title, description, and footer row. */
+.kanban-card {
+    background-color: var(--mud-palette-surface);
     border: 1px solid var(--mud-palette-divider);
+    border-radius: 14px;
+    padding: 16px;
+    cursor: grab;
     transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-.stat-card:hover {
+.kanban-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.1);
 }
 
-/* ── Stat avatar ─────────────────────────────────────────────────────────────
-   Slightly larger than default to serve as a visual anchor in the stat card. */
-::deep .stat-avatar {
-    width: 52px;
-    height: 52px;
+.kanban-card:active {
+    cursor: grabbing;
+    transform: scale(0.98);
+}
+
+
+/* ── Priority Badge ──────────────────────────────────────────────────────────
+   Small colored pill at the top of each card indicating task urgency.
+   Uses inline-block for natural flow with rounded corners. */
+.kanban-card-priority {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    margin-bottom: 10px;
+    line-height: 1.4;
+}
+
+
+/* ── Priority Badge Color Variants ───────────────────────────────────────────
+   Each priority level has a distinct background + text color combination.
+   Colors are hardcoded because they represent domain-specific visual encoding
+   (not theme colors). Semi-transparent backgrounds with saturated text. */
+
+/* Important — Red/Coral */
+.kanban-card-priority--important {
+    background-color: #FEE2E2;
+    color: #DC2626;
+}
+
+/* High Priority — Deep Red */
+.kanban-card-priority--high {
+    background-color: #FEE2E2;
+    color: #B91C1C;
+}
+
+/* Meh — Blue */
+.kanban-card-priority--meh {
+    background-color: #DBEAFE;
+    color: #2563EB;
+}
+
+/* OK — Green */
+.kanban-card-priority--ok {
+    background-color: #DCFCE7;
+    color: #16A34A;
+}
+
+/* Low Priority — Amber/Yellow */
+.kanban-card-priority--low {
+    background-color: #FEF3C7;
+    color: #D97706;
+}
+
+/* I don't know — Purple */
+.kanban-card-priority--idk {
+    background-color: #EDE9FE;
+    color: #7C3AED;
+}
+
+/* Maybe important — Sky Blue */
+.kanban-card-priority--maybe {
+    background-color: #E0F2FE;
+    color: #0284C7;
+}
+
+/* Not that Important — Rose/Pink */
+.kanban-card-priority--not {
+    background-color: #FFE4E6;
+    color: #E11D48;
+}
+
+
+/* ── Card Title ──────────────────────────────────────────────────────────────
+   Bold, dark text for the task name. Single line with ellipsis overflow. */
+::deep .kanban-card-title {
+    font-weight: 700 !important;
+    margin-bottom: 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-height: 1.4;
+}
+
+
+/* ── Card Description ────────────────────────────────────────────────────────
+   Gray body text clamped to 3 lines with ellipsis. Prevents cards from
+   becoming excessively tall with long descriptions. */
+::deep .kanban-card-description {
+    color: var(--mud-palette-text-secondary) !important;
+    margin-bottom: 14px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    line-height: 1.5;
+}
+
+
+/* ── Card Footer ─────────────────────────────────────────────────────────────
+   Flex row with avatars on the left and engagement stats on the right. */
+.kanban-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+
+/* ── Avatar Group (in cards) ─────────────────────────────────────────────────
+   Compact avatars with smaller font for initials. */
+::deep .kanban-avatar-group {
     flex-shrink: 0;
 }
 
-/* ── Project cards ───────────────────────────────────────────────────────────
-   Same flat border treatment as stat cards, with hover lift effect. */
-.project-card {
-    border: 1px solid var(--mud-palette-divider);
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
-    height: 100%;
-}
-
-.project-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-}
-
-/* ── Team avatars inside project cards ───────────────────────────────────────
-   Smaller font size for initials in the compact avatar group. */
-::deep .team-avatar {
-    font-size: 0.65rem;
+::deep .kanban-avatar {
+    font-size: 0.6rem !important;
     font-weight: 600;
+    width: 28px !important;
+    height: 28px !important;
 }
 
-/* ── Sidebar cards ───────────────────────────────────────────────────────────
-   Consistent border treatment for all sidebar panel cards. */
-.sidebar-card {
-    border: 1px solid var(--mud-palette-divider);
-}
 
-/* ── Quick stat items ────────────────────────────────────────────────────────
-   Subtle background tint for the 2×2 quick stats grid items.
-   Uses the theme's background-gray for a gentle contrast against the card surface. */
-.quick-stat-item {
-    background-color: var(--mud-palette-background-gray);
-    border-radius: var(--mud-default-borderradius);
-    text-align: center;
-}
-
-/* ── Circular progress wrapper ───────────────────────────────────────────────
-   Scales up the MudProgressCircular to be a prominent visual element.
-   The transform is applied to the wrapper so it doesn't affect layout flow. */
-.circular-progress-wrapper {
+/* ── Card Stats ──────────────────────────────────────────────────────────────
+   Small icon + number pairs for comments and views. */
+.kanban-card-stats {
     display: flex;
-    justify-content: center;
     align-items: center;
-    padding: 16px 0;
+    gap: 12px;
+    flex-shrink: 0;
 }
 
-::deep .circular-progress-wrapper .mud-progress-circular {
-    width: 120px !important;
-    height: 120px !important;
+.kanban-card-stat {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 0.75rem;
+    color: var(--mud-palette-text-secondary);
 }
 
-/* ── Chart cards ─────────────────────────────────────────────────────────────
-   Consistent border treatment for chart containers. */
-.chart-card {
-    border: 1px solid var(--mud-palette-divider);
-    height: 100%;
+::deep .kanban-card-stat .mud-icon-root {
+    font-size: 1rem !important;
+    color: var(--mud-palette-text-secondary);
 }
 
-/* ── Message items ───────────────────────────────────────────────────────────
-   Hover effect on individual message rows for interactivity feedback. */
-.message-item {
-    transition: background-color 0.15s ease;
-    cursor: pointer;
+
+/* ── Drag-in-progress visual feedback ────────────────────────────────────────
+   When a card is being dragged, reduce its opacity in the original position
+   and add a subtle rotation to the dragged ghost for a polished feel. */
+::deep .mud-drop-item-dragging .kanban-card {
+    opacity: 0.5;
+    transform: rotate(2deg);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
 }
 
-.message-item:hover {
-    background-color: var(--mud-palette-background-gray);
+
+/* ── Responsive adjustments ──────────────────────────────────────────────────
+   On smaller screens, allow horizontal scrolling and reduce column min-width. */
+@media (max-width: 960px) {
+    .kanban-board {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .kanban-column {
+        min-width: 280px;
+    }
 }
 
-/* ── Message content ─────────────────────────────────────────────────────────
-   Ensures the message text area fills available width next to the avatar. */
-.message-content {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-}
+@media (max-width: 600px) {
+    .kanban-column {
+        min-width: 260px;
+    }
 
-/* ── Create Project button ───────────────────────────────────────────────────
-   Slight padding boost for the prominent CTA button in the header. */
-.create-project-btn {
-    padding-left: 24px;
-    padding-right: 24px;
+    .kanban-card {
+        padding: 12px;
+    }
 }
