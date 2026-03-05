@@ -2,6 +2,7 @@ using System.Reflection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using OwlNet.Domain.Entities;
 using OwlNet.Infrastructure.Identity;
 
 namespace OwlNet.Infrastructure.Persistence;
@@ -21,6 +22,11 @@ public sealed class ApplicationDbContext : IdentityDbContext<ApplicationUser, Id
         : base(options)
     {
     }
+
+    /// <summary>
+    /// Gets the set of <see cref="AppSetting"/> entities representing global application settings.
+    /// </summary>
+    public DbSet<AppSetting> AppSettings => Set<AppSetting>();
 
     /// <summary>
     /// Configures the model by applying Identity table mappings and all

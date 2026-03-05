@@ -1,10 +1,12 @@
 using DispatchR.Extensions;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using MudBlazor.Services;
 using OwlNet.Application;
 using OwlNet.Infrastructure;
 using OwlNet.Infrastructure.Identity;
+using OwlNet.Infrastructure.Persistence;
 using OwlNet.Web.Components;
 using OwlNet.Web.Components.Account;
 using Serilog;
@@ -83,6 +85,22 @@ try
     // Build the application
     // -----------------------------------------------------------------------
     var app = builder.Build();
+
+    // -----------------------------------------------------------------------
+    // Automatic Database Migration
+    // -----------------------------------------------------------------------
+    // Apply any pending EF Core migrations at startup to ensure the database
+    // schema is always up-to-date. This eliminates the need for manual
+    // `dotnet ef database update` commands during development and deployment.
+    Log.Information("Applying database migrations...");
+
+    using (var scope = app.Services.CreateScope())
+    {
+        var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        await dbContext.Database.MigrateAsync();
+    }
+
+    Log.Information("Database migrations applied successfully");
 
     // -----------------------------------------------------------------------
     // HTTP Request Pipeline

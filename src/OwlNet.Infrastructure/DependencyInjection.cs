@@ -2,8 +2,10 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using OwlNet.Application.Common.Interfaces;
 using OwlNet.Infrastructure.Identity;
 using OwlNet.Infrastructure.Persistence;
+using OwlNet.Infrastructure.Services;
 
 namespace OwlNet.Infrastructure;
 
@@ -51,6 +53,8 @@ public static class DependencyInjection
         services.AddIdentity<ApplicationUser, IdentityRole>()
             .AddEntityFrameworkStores<ApplicationDbContext>()
             .AddDefaultTokenProviders();
+
+        services.AddScoped<IAppSettingService, AppSettingService>();
 
         return services;
     }

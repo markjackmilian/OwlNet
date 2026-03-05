@@ -1,0 +1,226 @@
+@page "/settings"
+@using OwlNet.Application.Common.Interfaces
+@using OwlNet.Application.Common.Models
+
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Settings Page — Application Configuration Shell
+   ═══════════════════════════════════════════════════════════════════════════════
+   Container page that loads all application settings from the database and
+   displays configuration sections as MudBlazor cards. Each section is a
+   placeholder for a dedicated panel component (OpenCode Health Check, LLM
+   Provider) that will be implemented in future specs.
+
+   Data flow:
+   1. OnInitializedAsync calls LoadSettingsAsync()
+   2. LoadSettingsAsync fetches all settings via IAppSettingService.GetAllAsync()
+   3. On success: stores settings and renders section cards
+   4. On failure: shows error alert with a Retry button
+
+   Render mode: InteractiveServer (inherited from App.razor routing).
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+
+@inject IAppSettingService AppSettingService
+@inject ISnackbar Snackbar
+
+<PageTitle>Settings — OwlNet</PageTitle>
+
+@* ── Section 1: Page Header ──────────────────────────────────────────────────
+   Title and subtitle describing the purpose of the settings page. *@
+<MudStack Spacing="1" Class="mb-6">
+    <MudText Typo="Typo.h4">Settings</MudText>
+    <MudText Typo="Typo.body1" Color="Color.Secondary">
+        Manage application configuration and integrations.
+    </MudText>
+</MudStack>
+
+@* ── Section 2: Loading State ────────────────────────────────────────────────
+   Shown while settings are being fetched from the database.
+   Displays a linear progress bar and skeleton cards to indicate loading. *@
+@if (_isLoading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-4" />
+    <MudStack Spacing="4">
+        @* Skeleton card placeholders — one per expected section *@
+        @for (var i = 0; i < 2; i++)
+        {
+            <MudCard Outlined="true">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudSkeleton Width="40%" Height="28px" />
+                        <MudSkeleton Width="60%" Height="20px" Class="mt-1" />
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudSkeleton Width="80%" Height="20px" />
+                    <MudSkeleton Width="50%" Height="20px" Class="mt-2" />
+                </MudCardContent>
+            </MudCard>
+        }
+    </MudStack>
+}
+@* ── Section 3: Error State ──────────────────────────────────────────────────
+   Shown when loading settings fails (e.g., database unreachable).
+   Displays the error message and a Retry button to re-attempt loading. *@
+else if (_errorMessage is not null)
+{
+    <MudAlert Severity="Severity.Error"
+              Variant="Variant.Filled"
+              ShowCloseIcon="false"
+              Class="mb-4">
+        <MudStack Spacing="2">
+            <MudText Typo="Typo.body1">
+                Failed to load settings: @_errorMessage
+            </MudText>
+            <div>
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Default"
+                           StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="@LoadSettingsAsync"
+                           aria-label="Retry loading settings">
+                    Retry
+                </MudButton>
+            </div>
+        </MudStack>
+    </MudAlert>
+}
+@* ── Section 4: Settings Sections ────────────────────────────────────────────
+   Rendered when settings have loaded successfully. Each section is a card
+   with a header (icon + title + description) and content area. The content
+   areas are placeholders for future panel components. *@
+else
+{
+    <MudStack Spacing="4">
+
+        @* ── Card: OpenCode Health Check ─────────────────────────────────
+           Future home of the OpenCode integration health-check panel.
+           Will display connection status, version info, and diagnostics. *@
+        <MudCard Outlined="true">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudAvatar Color="Color.Primary" Variant="Variant.Filled" Rounded="true">
+                        <MudIcon Icon="@Icons.Material.Filled.MonitorHeart" />
+                    </MudAvatar>
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">OpenCode Health Check</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Monitor the status and connectivity of the OpenCode integration.
+                    </MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudText Typo="Typo.body2" Color="Color.Tertiary">
+                    Configuration coming soon...
+                </MudText>
+            </MudCardContent>
+        </MudCard>
+
+        @* ── Card: LLM Provider Configuration ────────────────────────────
+           Future home of the LLM provider configuration panel.
+           Will allow selecting and configuring AI model providers. *@
+        <MudCard Outlined="true">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudAvatar Color="Color.Secondary" Variant="Variant.Filled" Rounded="true">
+                        <MudIcon Icon="@Icons.Material.Filled.SmartToy" />
+                    </MudAvatar>
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">LLM Provider Configuration</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Configure AI model providers and connection settings.
+                    </MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudText Typo="Typo.body2" Color="Color.Tertiary">
+                    Configuration coming soon...
+                </MudText>
+            </MudCardContent>
+        </MudCard>
+
+    </MudStack>
+}
+
+@code {
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  State — loading flag, error message, and loaded settings
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>Indicates whether settings are currently being loaded from the database.</summary>
+    private bool _isLoading = true;
+
+    /// <summary>
+    /// Holds the error message when loading fails; <c>null</c> when there is no error.
+    /// Displayed in the error alert with a Retry option.
+    /// </summary>
+    private string? _errorMessage;
+
+    /// <summary>
+    /// All application settings loaded from the database.
+    /// Used by future panel components to read/display configuration values.
+    /// </summary>
+    private IReadOnlyList<AppSettingDto> _settings = [];
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Lifecycle — load settings on initialization
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSettingsAsync();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Data Loading — fetches all settings with error handling
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Loads all application settings from the database via <see cref="IAppSettingService"/>.
+    /// Manages the loading and error states so the UI reflects the current status.
+    /// Called from <see cref="OnInitializedAsync"/> and from the Retry button.
+    /// </summary>
+    private async Task LoadSettingsAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+        StateHasChanged();
+
+        var result = await AppSettingService.GetAllAsync();
+
+        if (result.IsSuccess)
+        {
+            _settings = result.Value;
+        }
+        else
+        {
+            _errorMessage = result.Error;
+        }
+
+        _isLoading = false;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Snackbar Helpers — reusable feedback methods for future panel components
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Displays a success snackbar notification.
+    /// Intended for use by child panel components after a successful save operation.
+    /// </summary>
+    /// <param name="message">The success message to display.</param>
+    private void ShowSuccessSnackbar(string message)
+    {
+        Snackbar.Add(message, Severity.Success);
+    }
+
+    /// <summary>
+    /// Displays an error snackbar notification.
+    /// Intended for use by child panel components when a save operation fails.
+    /// </summary>
+    /// <param name="message">The error message to display.</param>
+    private void ShowErrorSnackbar(string message)
+    {
+        Snackbar.Add(message, Severity.Error);
+    }
+}
