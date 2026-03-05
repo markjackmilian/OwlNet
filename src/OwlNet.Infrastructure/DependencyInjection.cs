@@ -56,6 +56,13 @@ public static class DependencyInjection
 
         services.AddScoped<IAppSettingService, AppSettingService>();
         services.AddSingleton<ICliService, CliService>();
+        services.AddSingleton<IEncryptionService, EncryptionService>();
+
+        services.AddHttpClient<ILlmProviderService, LlmProviderService>(client =>
+        {
+            client.BaseAddress = new Uri("https://openrouter.ai/api/v1/");
+            client.Timeout = TimeSpan.FromSeconds(15);
+        });
 
         return services;
     }

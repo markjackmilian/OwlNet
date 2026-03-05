@@ -137,4 +137,54 @@ public sealed class AppSettingService : IAppSettingService
                 $"An unexpected error occurred while saving setting '{key}'.");
         }
     }
+
+    /// <inheritdoc />
+    public async Task<Result> SaveBatchAsync(
+        IReadOnlyList<KeyValuePair<string, string>> settings,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            _logger.LogDebug("Saving batch of {SettingCount} settings", settings.Count);
+
+            foreach (var (key, value) in settings)
+            {
+                var existing = await _dbContext.AppSettings
+                    .FirstOrDefaultAsync(s => s.Key == key, cancellationToken);
+
+                if (existing is not null)
+                {
+                    _logger.LogDebug(
+                        "Setting {SettingKey} already exists, updating value", key);
+                    existing.UpdateValue(value);
+                }
+                else
+                {
+                    _logger.LogDebug(
+                        "Setting {SettingKey} does not exist, creating new entry", key);
+                    var setting = AppSetting.Create(key, value);
+                    _dbContext.AppSettings.Add(setting);
+                }
+            }
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation(
+                "Successfully saved batch of {SettingCount} settings", settings.Count);
+
+            return Result.Success();
+        }
+        catch (DbUpdateException ex)
+        {
+            _logger.LogError(ex, "Database error while saving batch of {SettingCount} settings",
+                settings.Count);
+            return Result.Failure("A database error occurred while saving settings.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to save batch of {SettingCount} settings",
+                settings.Count);
+            return Result.Failure("An unexpected error occurred while saving settings.");
+        }
+    }
 }

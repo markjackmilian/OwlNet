@@ -40,4 +40,15 @@ public interface IAppSettingService
     /// A <see cref="Result"/> indicating success or failure of the save operation.
     /// </returns>
     Task<Result> SaveAsync(string key, string value, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Creates or updates multiple settings atomically. All key-value pairs are persisted
+    /// in a single transaction so that either all succeed or none are committed.
+    /// </summary>
+    /// <param name="settings">The key-value pairs to save. Each key is upserted independently.</param>
+    /// <param name="cancellationToken">A token to cancel the asynchronous operation.</param>
+    /// <returns>
+    /// A <see cref="Result"/> indicating success or failure of the batch save operation.
+    /// </returns>
+    Task<Result> SaveBatchAsync(IReadOnlyList<KeyValuePair<string, string>> settings, CancellationToken cancellationToken = default);
 }
