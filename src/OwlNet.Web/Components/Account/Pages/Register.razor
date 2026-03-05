@@ -17,42 +17,83 @@
 
 <PageTitle>Register</PageTitle>
 
-<MudText Typo="Typo.h4">Register</MudText>
+@* ── Registration form content ─────────────────────────────────────────────
+   Renders inside AuthLayout's right panel. The AuthLayout already provides
+   the two-column structure (decorative brand panel + centered form area),
+   so this page only needs to supply the form content itself. *@
 
-<MudGrid>
-    <MudItem xs="12" lg="6">
-        <StatusMessage Message="@Message" />
-        <EditForm Model="Input" method="post" OnValidSubmit="RegisterUser" FormName="register">
-            <DataAnnotationsValidator />
-            <MudText Typo="Typo.h5">Create a new account.</MudText>
-            <MudDivider Class="my-4" />
-            <ValidationSummary class="text-danger" role="alert" />
-            <div class="form-floating mb-3">
-                <InputText @bind-Value="Input.Email" id="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="name@example.com" />
-                <label for="Input.Email">Email</label>
-                <ValidationMessage For="() => Input.Email" class="text-danger" />
-            </div>
-            <div class="form-floating mb-3">
-                <InputText type="password" @bind-Value="Input.Password" id="Input.Password" class="form-control" autocomplete="new-password" aria-required="true" placeholder="password" />
-                <label for="Input.Password">Password</label>
-                <ValidationMessage For="() => Input.Password" class="text-danger" />
-            </div>
-            <div class="form-floating mb-3">
-                <InputText type="password" @bind-Value="Input.ConfirmPassword" id="Input.ConfirmPassword" class="form-control" autocomplete="new-password" aria-required="true" placeholder="password" />
-                <label for="Input.ConfirmPassword">Confirm Password</label>
-                <ValidationMessage For="() => Input.ConfirmPassword" class="text-danger" />
-            </div>
-            <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Size="Size.Large">Register</MudButton>
-        </EditForm>
-    </MudItem>
-    <MudItem xs="12" lg="4">
-        <section>
-            <MudText Typo="Typo.h6">Use another service to register.</MudText>
-            <MudDivider Class="my-4" />
-            <ExternalLoginPicker />
-        </section>
-    </MudItem>
-</MudGrid>
+<MudText Typo="Typo.h4">Create an account</MudText>
+<MudText Typo="Typo.body2" Class="mb-5" Style="color: var(--mud-palette-text-secondary);">
+    Get started with OwlNet
+</MudText>
+
+<StatusMessage Message="@Message" />
+
+@* EditForm with SSR-compatible form submission (method="post").
+   Uses standard Blazor InputText — NOT MudTextField —
+   because this page is statically rendered (ExcludeFromInteractiveRouting). *@
+<EditForm Model="Input" method="post" OnValidSubmit="RegisterUser" FormName="register">
+    <DataAnnotationsValidator />
+    <ValidationSummary class="text-danger" role="alert" />
+
+    @* Email input — form-floating provides the floating label effect via CSS *@
+    <div class="form-floating mb-3">
+        <InputText @bind-Value="Input.Email"
+                   id="Input.Email"
+                   class="form-control"
+                   autocomplete="username"
+                   aria-required="true"
+                   placeholder="name@example.com" />
+        <label for="Input.Email" class="form-label">Email</label>
+        <ValidationMessage For="() => Input.Email" class="text-danger" />
+    </div>
+
+    @* Password input — form-floating with type="password" for masked entry *@
+    <div class="form-floating mb-3">
+        <InputText type="password"
+                   @bind-Value="Input.Password"
+                   id="Input.Password"
+                   class="form-control"
+                   autocomplete="new-password"
+                   aria-required="true"
+                   placeholder="password" />
+        <label for="Input.Password" class="form-label">Password</label>
+        <ValidationMessage For="() => Input.Password" class="text-danger" />
+    </div>
+
+    @* Confirm password input — must match the password field above *@
+    <div class="form-floating mb-3">
+        <InputText type="password"
+                   @bind-Value="Input.ConfirmPassword"
+                   id="Input.ConfirmPassword"
+                   class="form-control"
+                   autocomplete="new-password"
+                   aria-required="true"
+                   placeholder="password" />
+        <label for="Input.ConfirmPassword" class="form-label">Confirm Password</label>
+        <ValidationMessage For="() => Input.ConfirmPassword" class="text-danger" />
+    </div>
+
+    @* Submit button — full-width primary action *@
+    <div class="mb-4">
+        <MudButton ButtonType="ButtonType.Submit"
+                   Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   FullWidth="true"
+                   Size="Size.Large">
+            Register
+        </MudButton>
+    </div>
+
+    @* Navigation link — direct existing users to the login page *@
+    <div>
+        <MudText>
+            <MudLink Href="@(NavigationManager.GetUriWithQueryParameters("Account/Login", new Dictionary<string, object?> { ["ReturnUrl"] = ReturnUrl }))">
+                Already have an account? Log in
+            </MudLink>
+        </MudText>
+    </div>
+</EditForm>
 
 @code {
     private IEnumerable<IdentityError>? identityErrors;

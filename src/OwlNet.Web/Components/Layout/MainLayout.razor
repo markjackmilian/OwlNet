@@ -109,11 +109,18 @@
                                         Member
                                     </MudText>
                                 </div>
-                                <MudIconButton Icon="@Icons.Material.Rounded.Logout"
-                                               Size="Size.Small"
-                                               Href="@_logoutUrl"
-                                               Class="drawer-logout-btn"
-                                               aria-label="Logout" />
+                                @* POST form for logout — the /Account/Logout endpoint requires
+                                   POST + form-encoded returnUrl. Antiforgery is disabled on
+                                   this endpoint because tokens generated during SSR prerender
+                                   are unreliable when submitted from interactive circuits. *@
+                                <form method="post" action="Account/Logout" style="margin: 0;">
+                                    <input type="hidden" name="returnUrl" value="@_currentUrl" />
+                                    <MudIconButton Icon="@Icons.Material.Rounded.Logout"
+                                                   Size="Size.Small"
+                                                   ButtonType="ButtonType.Submit"
+                                                   Class="drawer-logout-btn"
+                                                   aria-label="Logout" />
+                                </form>
                             }
                         </div>
                     </Authorized>
@@ -164,9 +171,6 @@
 
     /// <summary>Tracks the current URL for the logout return-URL parameter.</summary>
     private string? _currentUrl;
-
-    /// <summary>Computed logout URL including the current page as return destination.</summary>
-    private string _logoutUrl => $"Account/Logout?returnUrl={Uri.EscapeDataString(_currentUrl ?? "")}";
 
     protected override void OnInitialized()
     {
