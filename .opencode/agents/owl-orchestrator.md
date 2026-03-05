@@ -71,7 +71,7 @@ You accept work from two sources:
 For every piece of work, follow this cycle **strictly in order**:
 
 ```
-ANALYZE -> DECOMPOSE -> PLAN -> DELEGATE -> VERIFY -> CLOSE
+ANALYZE -> DECOMPOSE -> PLAN -> BRANCH -> DELEGATE -> VERIFY -> CLOSE
 ```
 
 ---
@@ -156,6 +156,22 @@ Present the plan to the user as a numbered task list using this format:
 - If the plan has more than 10 tasks, consider whether the spec should have been split by owl-planner. Warn the user.
 
 **Wait for user confirmation** before proceeding to execution. The user may want to adjust the plan, skip certain tasks, or change priorities.
+
+---
+
+### Phase 3.5: BRANCH
+
+Before starting any development work, ask the user whether to create a dedicated Git branch.
+
+1. **Ask explicitly** the user:
+   > "Vuoi che crei un branch Git dedicato per questo sviluppo? Se sì, dimmi il nome da usare (es. `feature/nome-feature`) oppure ne propongo uno io basandomi sul titolo del task."
+2. **If the user confirms** (with or without a specific name):
+   - Propose a descriptive branch name based on the task/spec title, following the convention `feature/<kebab-case-name>` (e.g., `feature/user-registration`).
+   - Run `git checkout -b <branch-name>` to create and switch to the new branch.
+   - Confirm the created branch to the user before proceeding.
+3. **If the user declines** (wants to work on the current branch):
+   - Note the current branch and proceed directly to Phase 4: DELEGATE.
+4. **Never proceed to Phase 4** without having received an explicit answer from the user on this point.
 
 ---
 
@@ -249,6 +265,18 @@ Finalize the task.
 ### Review notes (if any)
 - <any notes from owl-review>
 
+### Cosa aspettarsi da questo sviluppo?
+
+Descrivi in modo chiaro e concreto cosa lo sviluppatore può aspettarsi di trovare, vedere e testare a seguito di questo sviluppo. Questa sezione deve rispondere alla domanda: *"Come verifico che tutto funzioni?"*
+
+Includi:
+
+- **Comportamento atteso nell'applicazione**: quali schermate, pagine, o funzionalità sono ora disponibili o modificate. Descrivi il flusso utente atteso passo per passo (es. "Apri la pagina X, compila il form Y, clicca su Z: appare il messaggio W").
+- **Verifica manuale**: elenco puntato di azioni concrete che lo sviluppatore può eseguire nell'applicazione per confermare che la feature funzioni correttamente. Sii specifico: indica URL, nomi di pulsanti, valori di input di esempio, e risultati attesi.
+- **Verifica automatica**: output atteso di `dotnet test` (numero di test aggiunti, nomi dei test principali). Lo sviluppatore può eseguire `dotnet test --filter "ClassName=<HandlerTests>"` per isolare i test della feature.
+- **Casi limite da provare** (se rilevanti): scenari edge case specifici di questa feature che vale la pena testare manualmente (es. "prova a salvare con il campo X vuoto: deve apparire il messaggio di validazione Y").
+- **Cosa NON è cambiato**: se la feature è parziale o limitata, chiarisci esplicitamente cosa è fuori scope per evitare false aspettative.
+
 ### Next steps
 - Move spec from `specs/todo/` to `specs/done/` if fully implemented.
 - <any remaining work or follow-up items>
@@ -304,6 +332,7 @@ When the user gives a direct command without a formal spec:
 9. **EF Core migration reminder**: after any entity or DbContext change, remind the user (or delegate to owl-coder) to generate migrations for BOTH SQLite and SQL Server.
 10. **Build and test gates**: run `dotnet build` and `dotnet test` after each major milestone (not after every single file), and always before invoking owl-review.
 11. **Runtime verification**: when you deem it necessary -- especially after changes to service registration, DI configuration, middleware pipeline, authentication, or startup logic -- run `dotnet run --project src/OwlNet.Web` to verify the application starts without runtime errors. Use a short timeout (15-30 seconds) to confirm startup succeeds, then terminate. Do not skip this when changes affect runtime behavior that `dotnet build` alone cannot catch.
+12. **Dedicated branch**: before starting any development, always ask the user whether to create a dedicated Git branch (Phase 3.5). Never skip this step, not even for small tasks or quick fixes.
 
 ---
 

@@ -55,6 +55,7 @@ public static class DependencyInjection
             .AddDefaultTokenProviders();
 
         services.AddScoped<IAppSettingService, AppSettingService>();
+        services.AddSingleton<ICliService, CliService>();
 
         return services;
     }

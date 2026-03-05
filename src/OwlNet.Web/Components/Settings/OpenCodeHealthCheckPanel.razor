@@ -1,0 +1,351 @@
+@using OwlNet.Application.Common.Interfaces
+@using OwlNet.Application.Common.Models
+
+@* ═══════════════════════════════════════════════════════════════════════════════
+   OpenCode Health Check Panel — Smart Component
+   ═══════════════════════════════════════════════════════════════════════════════
+   Self-contained panel that checks whether the OpenCode CLI tool is installed
+   on the host machine and allows the user to install it via NPM if missing.
+
+   State machine:
+   ┌──────────┐  success   ┌───────────┐
+   │ Checking  │──────────▶│ Installed  │  (green chip with version)
+   │ (spinner) │           └───────────┘
+   └─────┬────┘
+         │ failure
+         ▼
+   ┌──────────────┐  click Install   ┌─────────────┐  npm missing  ┌──────────────┐
+   │ NotInstalled  │────────────────▶│ (npm check)  │─────────────▶│ NpmNotFound   │
+   │ (red chip +   │                 └──────┬──────┘              │ (error alert)  │
+   │  install btn) │                        │ npm ok              └───────┬────────┘
+   └──────────────┘                         ▼                            │ retry
+                                     ┌─────────────┐  success   ┌───────────┐
+                                     │ Installing   │──────────▶│ Installed  │
+                                     │ (spinner)    │           └───────────┘
+                                     └──────┬──────┘
+                                            │ failure
+                                            ▼
+                                     ┌──────────────┐
+                                     │ InstallError  │  (error alert + manual guide + retry)
+                                     └──────────────┘
+
+   Services injected:
+   - ICliService  — executes CLI commands on the host OS
+   - ISnackbar    — shows toast notifications on success
+
+   Spec reference: specs/todo/SPEC-opencode-health-check.md (FR-1 through FR-10, FR-12)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+
+@inject ICliService CliService
+@inject ISnackbar Snackbar
+
+@implements IDisposable
+
+<MudCard Outlined="true">
+    @* ── Card Header ──────────────────────────────────────────────────────────
+       Consistent header style matching other Settings page cards:
+       avatar icon + title + subtitle. *@
+    <MudCardHeader>
+        <CardHeaderAvatar>
+            <MudAvatar Color="Color.Primary" Variant="Variant.Filled" Rounded="true">
+                <MudIcon Icon="@Icons.Material.Filled.MonitorHeart" />
+            </MudAvatar>
+        </CardHeaderAvatar>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h6">OpenCode Health Check</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Monitor the status and connectivity of the OpenCode integration.
+            </MudText>
+        </CardHeaderContent>
+    </MudCardHeader>
+
+    @* ── Card Content — state-dependent rendering ─────────────────────────── *@
+    <MudCardContent>
+        @switch (_state)
+        {
+            @* ── Checking: initial load spinner while running opencode --version ── *@
+            case HealthCheckState.Checking:
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                    <MudText Typo="Typo.body2">Checking OpenCode status...</MudText>
+                </MudStack>
+                break;
+
+            @* ── Installed: green chip showing the detected version ── *@
+            case HealthCheckState.Installed:
+                <MudChip T="string"
+                         Color="Color.Success"
+                         Icon="@Icons.Material.Filled.CheckCircle"
+                         Size="Size.Medium">
+                    Installed &mdash; v@(_version)
+                </MudChip>
+                break;
+
+            @* ── NotInstalled: red chip + install button ── *@
+            case HealthCheckState.NotInstalled:
+                <MudStack Spacing="3">
+                    <MudChip T="string"
+                             Color="Color.Error"
+                             Icon="@Icons.Material.Filled.Cancel"
+                             Size="Size.Medium">
+                        Not installed
+                    </MudChip>
+                    <div>
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Download"
+                                   OnClick="@InstallAsync">
+                            Install via NPM
+                        </MudButton>
+                    </div>
+                </MudStack>
+                break;
+
+            @* ── Installing: spinner + disabled button while npm install runs ── *@
+            case HealthCheckState.Installing:
+                <MudStack Spacing="3">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                        <MudText Typo="Typo.body2">Installing OpenCode via NPM...</MudText>
+                    </MudStack>
+                    <div>
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Download"
+                                   Disabled="true">
+                            Install via NPM
+                        </MudButton>
+                    </div>
+                </MudStack>
+                break;
+
+            @* ── NpmNotFound: error alert with link to nodejs.org + retry button ── *@
+            case HealthCheckState.NpmNotFound:
+                <MudStack Spacing="3">
+                    <MudChip T="string"
+                             Color="Color.Error"
+                             Icon="@Icons.Material.Filled.Cancel"
+                             Size="Size.Medium">
+                        Not installed
+                    </MudChip>
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                        NPM not found. Install Node.js from
+                        <MudLink Href="https://nodejs.org/" Target="_blank" Typo="Typo.body2" Color="Color.Inherit">
+                            <b>nodejs.org</b>
+                        </MudLink>
+                        and try again.
+                    </MudAlert>
+                    @* Retry button — allows the user to re-attempt after installing Node.js *@
+                    <div>
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Refresh"
+                                   OnClick="@InstallAsync">
+                            Try Again
+                        </MudButton>
+                    </div>
+                </MudStack>
+                break;
+
+            @* ── InstallError: error alert with output + manual instructions + retry button ── *@
+            case HealthCheckState.InstallError:
+                <MudStack Spacing="3">
+                    <MudChip T="string"
+                             Color="Color.Error"
+                             Icon="@Icons.Material.Filled.Cancel"
+                             Size="Size.Medium">
+                        Not installed
+                    </MudChip>
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                        @_errorOutput
+                    </MudAlert>
+                    <MudText Typo="Typo.body2">
+                        Open a terminal and run: <code>npm i -g opencode-ai</code>
+                    </MudText>
+                    @* Retry button — allows the user to re-attempt installation *@
+                    <div>
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Refresh"
+                                   OnClick="@InstallAsync">
+                            Retry Installation
+                        </MudButton>
+                    </div>
+                </MudStack>
+                break;
+        }
+    </MudCardContent>
+</MudCard>
+
+@code {
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  State — enum-driven UI rendering
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// All possible states for the health check panel. Each state maps to a
+    /// distinct visual representation in the card content area.
+    /// </summary>
+    private enum HealthCheckState
+    {
+        /// <summary>Initial load — running <c>opencode --version</c>.</summary>
+        Checking,
+
+        /// <summary>OpenCode is installed; version is available.</summary>
+        Installed,
+
+        /// <summary>OpenCode is not installed; install button is shown.</summary>
+        NotInstalled,
+
+        /// <summary>NPM install is in progress.</summary>
+        Installing,
+
+        /// <summary>NPM was not found on the host machine.</summary>
+        NpmNotFound,
+
+        /// <summary>NPM install failed; error output is available.</summary>
+        InstallError
+    }
+
+    /// <summary>Current state of the health check panel.</summary>
+    private HealthCheckState _state = HealthCheckState.Checking;
+
+    /// <summary>
+    /// The detected OpenCode version string (e.g. "0.1.53").
+    /// Populated when <c>opencode --version</c> succeeds.
+    /// </summary>
+    private string _version = string.Empty;
+
+    /// <summary>
+    /// Error output from a failed NPM install command.
+    /// Displayed in the error alert when state is <see cref="HealthCheckState.InstallError"/>.
+    /// </summary>
+    private string _errorOutput = string.Empty;
+
+    /// <summary>
+    /// Cancellation token source scoped to this component's lifetime.
+    /// Cancelled in <see cref="Dispose"/> to abort any in-flight CLI calls
+    /// if the user navigates away.
+    /// </summary>
+    private readonly CancellationTokenSource _cts = new();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Lifecycle — check OpenCode on initialization
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// On first load, automatically checks whether OpenCode is installed
+    /// by running <c>opencode --version</c> with a 10-second timeout.
+    /// </summary>
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckOpenCodeVersionAsync();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Version Check — determines if OpenCode is installed
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Executes <c>opencode --version</c> on the host machine.
+    /// On success, transitions to <see cref="HealthCheckState.Installed"/> and
+    /// stores the version string. On failure, transitions to
+    /// <see cref="HealthCheckState.NotInstalled"/>.
+    /// </summary>
+    private async Task CheckOpenCodeVersionAsync()
+    {
+        _state = HealthCheckState.Checking;
+        StateHasChanged();
+
+        var result = await CliService.RunCommandAsync(
+            "opencode",
+            "--version",
+            timeoutMs: 10_000,
+            cancellationToken: _cts.Token);
+
+        if (result.IsSuccess)
+        {
+            // Store the raw output as the version — CliResult.Output is already trimmed
+            _version = result.Output;
+            _state = HealthCheckState.Installed;
+        }
+        else
+        {
+            _state = HealthCheckState.NotInstalled;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Install Flow — NPM check → install → re-verify
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Handles the "Install via NPM" button click. The flow is:
+    /// 1. Check that NPM is available (<c>npm --version</c>, 10s timeout).
+    /// 2. If NPM is missing → show <see cref="HealthCheckState.NpmNotFound"/>.
+    /// 3. Run <c>npm i -g opencode-ai</c> (120s timeout).
+    /// 4. On success → re-check version, show snackbar, transition to Installed.
+    /// 5. On failure → show error output and manual instructions.
+    /// </summary>
+    private async Task InstallAsync()
+    {
+        // Step 1: Verify NPM is available on the host
+        var npmCheck = await CliService.RunCommandAsync(
+            "npm",
+            "--version",
+            timeoutMs: 10_000,
+            cancellationToken: _cts.Token);
+
+        if (!npmCheck.IsSuccess)
+        {
+            _state = HealthCheckState.NpmNotFound;
+            return;
+        }
+
+        // Step 2: Run the global install command
+        _state = HealthCheckState.Installing;
+        StateHasChanged();
+
+        var installResult = await CliService.RunCommandAsync(
+            "npm",
+            "i -g opencode-ai",
+            timeoutMs: 120_000,
+            cancellationToken: _cts.Token);
+
+        if (installResult.IsSuccess)
+        {
+            // Step 3: Re-verify installation by checking the version
+            await CheckOpenCodeVersionAsync();
+
+            // Only show success snackbar if the version check also succeeded
+            if (_state == HealthCheckState.Installed)
+            {
+                Snackbar.Add("OpenCode installed successfully!", Severity.Success);
+            }
+        }
+        else
+        {
+            // Step 4: Show the error output so the user can diagnose the issue
+            _errorOutput = !string.IsNullOrWhiteSpace(installResult.Error)
+                ? installResult.Error
+                : !string.IsNullOrWhiteSpace(installResult.Output)
+                    ? installResult.Output
+                    : "Installation failed with no output. Try running the command manually.";
+            _state = HealthCheckState.InstallError;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Cleanup — cancel in-flight CLI operations on dispose
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Cancels any in-flight CLI commands when the component is disposed
+    /// (e.g., user navigates away from the Settings page).
+    /// </summary>
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

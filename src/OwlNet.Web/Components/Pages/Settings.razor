@@ -1,6 +1,7 @@
 @page "/settings"
 @using OwlNet.Application.Common.Interfaces
 @using OwlNet.Application.Common.Models
+@using OwlNet.Web.Components.Settings
 
 @* ═══════════════════════════════════════════════════════════════════════════════
    Settings Page — Application Configuration Shell
@@ -92,28 +93,9 @@ else
     <MudStack Spacing="4">
 
         @* ── Card: OpenCode Health Check ─────────────────────────────────
-           Future home of the OpenCode integration health-check panel.
-           Will display connection status, version info, and diagnostics. *@
-        <MudCard Outlined="true">
-            <MudCardHeader>
-                <CardHeaderAvatar>
-                    <MudAvatar Color="Color.Primary" Variant="Variant.Filled" Rounded="true">
-                        <MudIcon Icon="@Icons.Material.Filled.MonitorHeart" />
-                    </MudAvatar>
-                </CardHeaderAvatar>
-                <CardHeaderContent>
-                    <MudText Typo="Typo.h6">OpenCode Health Check</MudText>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">
-                        Monitor the status and connectivity of the OpenCode integration.
-                    </MudText>
-                </CardHeaderContent>
-            </MudCardHeader>
-            <MudCardContent>
-                <MudText Typo="Typo.body2" Color="Color.Tertiary">
-                    Configuration coming soon...
-                </MudText>
-            </MudCardContent>
-        </MudCard>
+           Panel component handling OpenCode integration health-check,
+           version display, and installation via NPM. *@
+        <OpenCodeHealthCheckPanel />
 
         @* ── Card: LLM Provider Configuration ────────────────────────────
            Future home of the LLM provider configuration panel.
