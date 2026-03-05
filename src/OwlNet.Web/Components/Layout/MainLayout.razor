@@ -10,9 +10,10 @@
 <MudSnackbarProvider />
 
 <MudLayout>
-    @* Top application bar — flat (Elevation 0) with dense layout for a minimal header.
-       Left side: drawer toggle + decorative search button.
-       Right side: dark mode toggle, notification bell, and user avatar placeholder. *@
+    @* ── Top application bar ─────────────────────────────────────────────
+       Flat (Elevation 0) with dense layout for a minimal header.
+       Left side: hamburger toggle for drawer expand/collapse + search button.
+       Right side: dark mode toggle, notification bell, and user avatar. *@
     <MudAppBar Elevation="0" Dense="true">
         <MudIconButton Icon="@Icons.Material.Filled.Menu"
                        Color="Color.Inherit"
@@ -38,23 +39,42 @@
         </MudAvatar>
     </MudAppBar>
 
-    @* Collapsible left-side drawer — flat (Elevation 0) with a right border for separation.
-       The border is applied via global CSS (app.css) targeting .mud-drawer because Blazor
-       CSS isolation scoping attributes are not present on MudBlazor-rendered elements. *@
+    @* ── Collapsible mini drawer (deep violet sidebar) ───────────────────
+       Uses DrawerVariant.Mini so the drawer toggles between:
+         - Expanded (260px): shows icons + text labels
+         - Mini/collapsed (72px): shows icons only, centered
+       The deep violet background color comes from the theme palette
+       (DrawerBackground) — no hardcoded colors here.
+       ClipMode.Always keeps the drawer below the AppBar.
+       Elevation 0 with a right border (applied in app.css) for a flat look. *@
     <MudDrawer @bind-Open="_drawerOpen"
                ClipMode="DrawerClipMode.Always"
-               Elevation="0">
-        @* Brand header — owl icon + app name styled as a compact brand mark *@
-        <MudDrawerHeader Class="brand-header">
+               Elevation="0"
+               Variant="@DrawerVariant.Mini"
+               MiniWidth="72px"
+               Width="260px"
+               OpenMiniOnHover="false">
+
+        @* ── Brand header ────────────────────────────────────────────────
+           Expanded: owl icon + "OwlNet" text side by side.
+           Mini: owl icon only, centered in the narrower drawer. *@
+        <div class="brand-header @(_drawerOpen ? "brand-header--expanded" : "brand-header--mini")">
             <MudIcon Icon="@Icons.Material.Filled.NightsStay"
-                     Color="Color.Primary"
-                     Size="Size.Large" />
-            <MudText Typo="Typo.h6" Color="Color.Primary" Class="ml-2">OwlNet</MudText>
-        </MudDrawerHeader>
-        <NavMenu />
+                     Size="Size.Large"
+                     Class="brand-icon" />
+            @if (_drawerOpen)
+            {
+                <MudText Typo="Typo.h6" Class="brand-text ml-2">OwlNet</MudText>
+            }
+        </div>
+
+        @* Navigation menu — receives the drawer state so it can hide
+           section labels and adjust layout in mini (collapsed) mode. *@
+        <NavMenu IsExpanded="_drawerOpen" />
     </MudDrawer>
 
-    @* Main content area — full width with comfortable padding for modern dashboard feel.
+    @* ── Main content area ───────────────────────────────────────────────
+       Full width with comfortable padding for a modern dashboard feel.
        ErrorBoundary wraps the routed page content for graceful failure handling. *@
     <MudMainContent>
         <MudContainer MaxWidth="MaxWidth.False" Class="pa-6">
@@ -63,6 +83,7 @@
                     @Body
                 </ChildContent>
                 <ErrorContent>
+                    @* User-friendly error fallback — never shows raw exception details *@
                     <MudCard Class="error-card">
                         <MudCardContent>
                             <MudText Typo="Typo.h5">
@@ -89,8 +110,10 @@
     private ErrorBoundary? _errorBoundary;
 
     /// <summary>
-    /// Controls whether the navigation drawer is open or collapsed.
-    /// Defaults to open so the user sees navigation on first load.
+    /// Controls whether the navigation drawer is expanded (true) or in mini/collapsed mode (false).
+    /// When expanded, the drawer shows icons + text labels at 260px width.
+    /// When collapsed, the drawer shows icons only at 72px width (mini mode).
+    /// Defaults to expanded so the user sees full navigation on first load.
     /// </summary>
     private bool _drawerOpen = true;
 
@@ -101,7 +124,7 @@
     private bool _isDarkMode;
 
     /// <summary>
-    /// Toggles the navigation drawer between open and collapsed states.
+    /// Toggles the navigation drawer between expanded and mini (collapsed) states.
     /// </summary>
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
 

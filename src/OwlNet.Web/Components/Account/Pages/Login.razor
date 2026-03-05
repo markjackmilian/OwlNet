@@ -1,4 +1,4 @@
-﻿@page "/Account/Login"
+@page "/Account/Login"
 
 @using System.ComponentModel.DataAnnotations
 @using Microsoft.AspNetCore.Authentication
@@ -13,57 +13,82 @@
 
 <PageTitle>Log in</PageTitle>
 
-<MudText Typo="Typo.h4">Log in</MudText>
-<MudGrid>
-    <MudItem xs="12" lg="6">
-        <section>
-            <StatusMessage Message="@errorMessage" />
-            <EditForm EditContext="editContext" method="post" OnSubmit="LoginUser" FormName="login">
-                <DataAnnotationsValidator />
-                <MudText Typo="Typo.h5">Use a local account to log in.</MudText>
-                <MudDivider Class="my-4" />
-                <ValidationSummary class="text-danger" role="alert" />
-                <div class="form-floating mb-3">
-                    <InputText @bind-Value="Input.Email" id="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="name@example.com" />
-                    <label for="Input.Email" class="form-label">Email</label>
-                    <ValidationMessage For="() => Input.Email" class="text-danger" />
-                </div>
-                <div class="form-floating mb-3">
-                    <InputText type="password" @bind-Value="Input.Password" id="Input.Password" class="form-control" autocomplete="current-password" aria-required="true" placeholder="password" />
-                    <label for="Input.Password" class="form-label">Password</label>
-                    <ValidationMessage For="() => Input.Password" class="text-danger" />
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">
-                        <InputCheckbox @bind-Value="Input.RememberMe" class="form-check-input" />
-                        Remember me
-                    </label>
-                </div>
-                <div>
-                    <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Size="Size.Large">Log in</MudButton>
-                </div>
-                <div class="mt-3">
-                    <MudText>
-                        <MudLink Href="Account/ForgotPassword">Forgot your password?</MudLink>
-                    </MudText>
-                    <MudText>
-                        <MudLink Href="@(NavigationManager.GetUriWithQueryParameters("Account/Register", new Dictionary<string, object?> { ["ReturnUrl"] = ReturnUrl }))">Register as a new user</MudLink>
-                    </MudText>
-                    <MudText>
-                        <MudLink Href="Account/ResendEmailConfirmation">Resend email confirmation</MudLink>
-                    </MudText>
-                </div>
-            </EditForm>
-        </section>
-    </MudItem>
-    <MudItem xs="12" lg="4">
-        <section>
-            <MudText Typo="Typo.h6">Use another service to log in.</MudText>
-            <MudDivider Class="my-4" />
-            <ExternalLoginPicker />
-        </section>
-    </MudItem>
-</MudGrid>
+@* ── Login form content ───────────────────────────────────────────────────
+   Renders inside AuthLayout's right panel. The AuthLayout already provides
+   the two-column structure (decorative brand panel + centered form area),
+   so this page only needs to supply the form content itself. *@
+
+<MudText Typo="Typo.h4">Welcome back</MudText>
+<MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+    Sign in to your account
+</MudText>
+<MudDivider Class="mb-4" />
+
+<StatusMessage Message="@errorMessage" />
+
+@* EditForm with SSR-compatible form submission (method="post").
+   Uses standard Blazor InputText/InputCheckbox — NOT MudTextField —
+   because this page is statically rendered (ExcludeFromInteractiveRouting). *@
+<EditForm EditContext="editContext" method="post" OnSubmit="LoginUser" FormName="login">
+    <DataAnnotationsValidator />
+    <ValidationSummary class="text-danger" role="alert" />
+
+    @* Email input — form-floating provides the floating label effect via CSS *@
+    <div class="form-floating mb-3">
+        <InputText @bind-Value="Input.Email"
+                   id="Input.Email"
+                   class="form-control"
+                   autocomplete="username"
+                   aria-required="true"
+                   placeholder="name@example.com" />
+        <label for="Input.Email" class="form-label">Email</label>
+        <ValidationMessage For="() => Input.Email" class="text-danger" />
+    </div>
+
+    @* Password input — form-floating with type="password" for masked entry *@
+    <div class="form-floating mb-3">
+        <InputText type="password"
+                   @bind-Value="Input.Password"
+                   id="Input.Password"
+                   class="form-control"
+                   autocomplete="current-password"
+                   aria-required="true"
+                   placeholder="password" />
+        <label for="Input.Password" class="form-label">Password</label>
+        <ValidationMessage For="() => Input.Password" class="text-danger" />
+    </div>
+
+    @* Remember me checkbox *@
+    <div class="mb-4">
+        <label class="form-label">
+            <InputCheckbox @bind-Value="Input.RememberMe" class="form-check-input" />
+            Remember me
+        </label>
+    </div>
+
+    @* Submit button — full-width primary action *@
+    <div class="mb-4">
+        <MudButton ButtonType="ButtonType.Submit"
+                   Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   FullWidth="true"
+                   Size="Size.Large">
+            Log in
+        </MudButton>
+    </div>
+
+    @* Navigation links — password recovery and registration *@
+    <div>
+        <MudText>
+            <MudLink Href="Account/ForgotPassword">Forgot your password?</MudLink>
+        </MudText>
+        <MudText>
+            <MudLink Href="@(NavigationManager.GetUriWithQueryParameters("Account/Register", new Dictionary<string, object?> { ["ReturnUrl"] = ReturnUrl }))">
+                Register as a new user
+            </MudLink>
+        </MudText>
+    </div>
+</EditForm>
 
 @code {
     private string? errorMessage;

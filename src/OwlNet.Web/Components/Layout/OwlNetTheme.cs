@@ -3,8 +3,9 @@ using MudBlazor;
 namespace OwlNet.Web.Components.Layout;
 
 /// <summary>
-/// Defines the OwlNet application theme — a minimalist violet/indigo Material Design theme
-/// inspired by modern dashboard aesthetics ("Mud Mini" style).
+/// Defines the OwlNet application theme — a modern violet/indigo Material Design theme
+/// inspired by project management dashboard aesthetics with a deep violet sidebar,
+/// rounded cards, and the Poppins typeface.
 /// <para>
 /// Provides fully specified <see cref="PaletteLight"/> and <see cref="PaletteDark"/> palettes
 /// so that every visible color is intentional and no MudBlazor defaults leak through.
@@ -22,14 +23,14 @@ public static class OwlNetTheme
     //  Brand colors — single source of truth for the violet/indigo identity
     // -----------------------------------------------------------------------
 
-    /// <summary>Deep violet primary used in light mode — provides strong brand presence.</summary>
-    private const string PrimaryViolet = "#5E35B1";
+    /// <summary>Vibrant violet primary used in light mode — strong brand presence on light surfaces.</summary>
+    private const string PrimaryViolet = "#6C3FC5";
 
     /// <summary>Darker violet for hover/active states in light mode.</summary>
-    private const string PrimaryVioletDarken = "#4527A0";
+    private const string PrimaryVioletDarken = "#5A2DB5";
 
     /// <summary>Lighter violet for subtle highlights in light mode.</summary>
-    private const string PrimaryVioletLighten = "#7E57C2";
+    private const string PrimaryVioletLighten = "#8B6AD0";
 
     /// <summary>Brighter, desaturated violet for dark mode — maintains contrast on dark surfaces.</summary>
     private const string PrimaryVioletDark = "#B39DDB";
@@ -45,6 +46,16 @@ public static class OwlNetTheme
 
     /// <summary>Brighter teal for dark mode to maintain readability.</summary>
     private const string SecondaryTealDark = "#4DB6AC";
+
+    // -----------------------------------------------------------------------
+    //  Drawer / sidebar colors — deep violet sidebar for the dashboard look
+    // -----------------------------------------------------------------------
+
+    /// <summary>Deep violet background for the navigation drawer in light mode.</summary>
+    private const string DrawerBgLight = "#2D1B69";
+
+    /// <summary>Slightly lighter deep violet for the drawer in dark mode.</summary>
+    private const string DrawerBgDark = "#1E1245";
 
     // -----------------------------------------------------------------------
     //  Semantic status colors — Material Design standard, tuned for violet harmony
@@ -63,15 +74,15 @@ public static class OwlNetTheme
     private const string InfoDark = "#42A5F5";
 
     // -----------------------------------------------------------------------
-    //  Shared font stack — Roboto loaded via Google Fonts in App.razor
+    //  Shared font stack — Poppins loaded via Google Fonts in App.razor
     // -----------------------------------------------------------------------
 
-    private static readonly string[] FontStack = ["Roboto", "Helvetica", "Arial", "sans-serif"];
+    private static readonly string[] FontStack = ["Poppins", "Helvetica", "Arial", "sans-serif"];
 
     /// <summary>
     /// The OwlNet custom <see cref="MudTheme"/> instance.
-    /// Configured with light and dark palettes, typography, and layout properties
-    /// for a clean, modern dashboard appearance.
+    /// Configured with light and dark palettes, Poppins typography, and rounded layout
+    /// properties for a clean, modern project management dashboard appearance.
     /// </summary>
     public static MudTheme Theme { get; } = new()
     {
@@ -82,7 +93,7 @@ public static class OwlNetTheme
             Black = "#212121",
             White = "#FFFFFF",
 
-            // Brand
+            // Brand — vibrant violet shifted to match the dashboard reference
             Primary = PrimaryViolet,
             PrimaryDarken = PrimaryVioletDarken,
             PrimaryLighten = PrimaryVioletLighten,
@@ -135,19 +146,21 @@ public static class OwlNetTheme
             ActionDisabled = "#BDBDBD",
             ActionDisabledBackground = "#E0E0E0",
 
-            // Backgrounds — light gray base keeps the UI soft, not stark white
-            Background = "#FAFAFA",
-            BackgroundGray = "#F5F5F5",
+            // Backgrounds — blue-tinted light gray base gives a modern, airy feel
+            // while white surface cards feel elevated against it
+            Background = "#F4F6FA",
+            BackgroundGray = "#EEF0F5",
             Surface = "#FFFFFF",
 
             // App bar — clean white bar with dark text for a minimal header
             AppbarBackground = "#FFFFFF",
             AppbarText = "#424242",
 
-            // Navigation drawer — white background blends with the surface
-            DrawerBackground = "#FFFFFF",
-            DrawerText = "#616161",
-            DrawerIcon = "#757575",
+            // Navigation drawer — deep violet sidebar for the dashboard look;
+            // light text and icons ensure readability on the dark background
+            DrawerBackground = DrawerBgLight,
+            DrawerText = "#E0E0E0",
+            DrawerIcon = "#B0B0B0",
 
             // Lines and dividers
             LinesDefault = "#E0E0E0",
@@ -250,10 +263,11 @@ public static class OwlNetTheme
             AppbarBackground = "#1E1E1E",
             AppbarText = "#E0E0E0",
 
-            // Navigation drawer
-            DrawerBackground = "#1E1E1E",
-            DrawerText = "#B0B0B0",
-            DrawerIcon = "#9E9E9E",
+            // Navigation drawer — slightly lighter deep violet to maintain the
+            // branded sidebar feel while fitting the dark mode context
+            DrawerBackground = DrawerBgDark,
+            DrawerText = "#E0E0E0",
+            DrawerIcon = "#B0B0B0",
 
             // Lines and dividers — subtle so they don't overpower the dark UI
             LinesDefault = "#333333",
@@ -288,9 +302,9 @@ public static class OwlNetTheme
         },
 
         // -- Typography --------------------------------------------------------
-        // Uses the default Roboto family (loaded via Google Fonts in App.razor).
-        // We customize specific heading levels for a cleaner, lighter feel.
-        // All sub-properties use BaseTypography; FontWeight and LineHeight are strings.
+        // Uses the Poppins family (loaded via Google Fonts in App.razor).
+        // Headings use semibold/medium weights for a clean dashboard hierarchy.
+        // Buttons use sentence-case (TextTransform "none") per the design reference.
         Typography = new Typography
         {
             Default = new DefaultTypography
@@ -317,27 +331,30 @@ public static class OwlNetTheme
                 LineHeight = "1.2",
                 LetterSpacing = "-.00833em",
             },
+            // H3 — semibold for page titles like "Projects", "Dashboard"
             H3 = new H3Typography
             {
                 FontFamily = FontStack,
                 FontSize = "1.5rem",
-                FontWeight = "400",
+                FontWeight = "600",
                 LineHeight = "1.267",
                 LetterSpacing = "0",
             },
+            // H4 — semibold for section headings and card titles
             H4 = new H4Typography
             {
                 FontFamily = FontStack,
                 FontSize = "1.25rem",
-                FontWeight = "400",
+                FontWeight = "600",
                 LineHeight = "1.35",
                 LetterSpacing = ".00735em",
             },
+            // H5 — medium weight for sub-section headings
             H5 = new H5Typography
             {
                 FontFamily = FontStack,
                 FontSize = "1.1rem",
-                FontWeight = "400",
+                FontWeight = "500",
                 LineHeight = "1.4",
                 LetterSpacing = "0",
             },
@@ -382,14 +399,15 @@ public static class OwlNetTheme
                 LineHeight = "1.43",
                 LetterSpacing = ".01071em",
             },
+            // Button — semibold, sentence-case (no uppercase) per the design reference
             Button = new ButtonTypography
             {
                 FontFamily = FontStack,
                 FontSize = ".875rem",
-                FontWeight = "500",
+                FontWeight = "600",
                 LineHeight = "1.75",
                 LetterSpacing = ".02857em",
-                TextTransform = "uppercase",
+                TextTransform = "none",
             },
             Caption = new CaptionTypography
             {
@@ -411,11 +429,11 @@ public static class OwlNetTheme
         },
 
         // -- Layout properties -------------------------------------------------
-        // Slightly more rounded corners than the MudBlazor default (4px -> 8px)
-        // for a softer, more modern card/button appearance.
+        // Increased border radius (8px -> 14px) for a softer, more modern
+        // card/button appearance matching the rounded dashboard design reference.
         LayoutProperties = new LayoutProperties
         {
-            DefaultBorderRadius = "8px",
+            DefaultBorderRadius = "14px",
         },
     };
 }

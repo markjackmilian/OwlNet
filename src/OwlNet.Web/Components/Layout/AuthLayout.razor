@@ -1,0 +1,124 @@
+@*
+    AuthLayout.razor — Dedicated layout for authentication pages (Login, Register, ForgotPassword, etc.)
+
+    This layout is completely independent from MainLayout. It provides a clean, centered
+    two-column design with NO sidebar, navigation menu, or app bar. Only the login/register
+    form content is shown alongside a decorative brand panel.
+
+    Design:
+    ┌─────────────────────────────────────────────────────────┐
+    │  ┌──────────────────┐  ┌────────────────────────────┐   │
+    │  │  Violet gradient  │  │  🦉 OwlNet               │   │
+    │  │  brand panel      │  │                            │   │
+    │  │  (hidden on       │  │  @Body (login/register)    │   │
+    │  │   mobile)         │  │                            │   │
+    │  └──────────────────┘  └────────────────────────────┘   │
+    └─────────────────────────────────────────────────────────┘
+
+    Usage: Add @layout AuthLayout to any Account page, or set it in the Account
+    pages' _Imports.razor with @layout OwlNet.Web.Components.Layout.AuthLayout.
+
+    Render mode: This layout is designed for static SSR — no interactive features
+    are used in the layout itself. Account pages use [ExcludeFromInteractiveRouting].
+*@
+
+@inherits LayoutComponentBase
+
+@* MudBlazor providers — required for MudBlazor components (MudText, MudIcon, etc.)
+   to render correctly even in static SSR mode. Uses the shared OwlNet theme so
+   typography, colors, and border-radius are consistent with the main app. *@
+<MudThemeProvider Theme="@OwlNetTheme.Theme" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+@* ── Full-viewport auth container ─────────────────────────────────────────
+   CSS grid with two columns on desktop, single column on mobile.
+   No MudLayout/MudDrawer/MudAppBar — this is a standalone layout. *@
+<div class="auth-container">
+
+    @* ── Left panel: decorative violet gradient brand panel ────────────────
+       Purely decorative — no interactive elements. Hidden on mobile (< 960px)
+       via CSS media query. Provides visual brand identity alongside the form. *@
+    <div class="auth-brand-panel" aria-hidden="true">
+        <div class="auth-brand-panel-content">
+            @* Owl icon — matches the NightsStay icon used in MainLayout's brand header *@
+            <MudIcon Icon="@Icons.Material.Filled.NightsStay"
+                     Size="Size.Large"
+                     Class="auth-brand-icon" />
+            <MudText Typo="Typo.h3" Class="auth-brand-title">
+                OwlNet
+            </MudText>
+            <MudText Typo="Typo.subtitle1" Class="auth-brand-tagline">
+                Manage your projects with clarity
+            </MudText>
+
+            @* Decorative bottom illustration — a subtle owl-themed accent.
+               Uses a large faded icon to add visual interest without distraction. *@
+            <div class="auth-brand-illustration" aria-hidden="true">
+                <MudIcon Icon="@Icons.Material.Filled.Visibility"
+                         Class="auth-brand-illustration-icon" />
+            </div>
+        </div>
+    </div>
+
+    @* ── Right panel: form content area ───────────────────────────────────
+       White background, vertically centered. Contains the brand mark (for mobile
+       where the left panel is hidden), the routed page content, and a footer. *@
+    <div class="auth-form-panel">
+        <div class="auth-form-wrapper">
+
+            @* ── Brand mark (visible on all viewports) ────────────────────
+               On desktop this is a small reminder of the brand above the form.
+               On mobile (where the left panel is hidden) this is the primary brand element. *@
+            <div class="auth-logo">
+                <MudIcon Icon="@Icons.Material.Filled.NightsStay"
+                         Size="Size.Large"
+                         Class="auth-logo-icon" />
+                <MudText Typo="Typo.h5" Class="auth-logo-text">
+                    OwlNet
+                </MudText>
+            </div>
+
+            @* ── Page content (Login, Register, ForgotPassword, etc.) ─────
+               ErrorBoundary wraps the routed content for graceful error handling.
+               If a rendering exception occurs, a user-friendly message is shown
+               instead of a broken page. *@
+            <div class="auth-form-content">
+                <ErrorBoundary @ref="_errorBoundary">
+                    <ChildContent>
+                        @Body
+                    </ChildContent>
+                    <ErrorContent>
+                        @* User-friendly error fallback — never exposes raw exception details *@
+                        <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Class="mb-4">
+                            Something went wrong. Please try again.
+                        </MudAlert>
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   Href=""
+                                   StartIcon="@Icons.Material.Filled.Refresh">
+                            Reload Page
+                        </MudButton>
+                    </ErrorContent>
+                </ErrorBoundary>
+            </div>
+
+            @* ── Footer ───────────────────────────────────────────────────
+               Subtle copyright notice anchored at the bottom of the form panel. *@
+            <div class="auth-footer">
+                <MudText Typo="Typo.caption" Class="auth-footer-text">
+                    &copy; 2026 OwlNet
+                </MudText>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    /// <summary>
+    /// Reference to the error boundary wrapping the page content.
+    /// Used to recover from rendering exceptions if a retry mechanism is added.
+    /// </summary>
+    private ErrorBoundary? _errorBoundary;
+}

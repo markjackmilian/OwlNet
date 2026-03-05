@@ -4,6 +4,8 @@ html, body {
     margin: 0;
     padding: 0;
     height: 100%;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 /* Focus outline reset — MudBlazor components provide their own focus indicators */
@@ -37,12 +39,98 @@ h1:focus {
     color: var(--mud-palette-error);
 }
 
-/* Navigation drawer — right border provides subtle separation from main content
-   in place of elevation shadow, adapting to light/dark mode via theme variable.
-   Placed in global CSS because Blazor CSS isolation scoping attributes are not
-   present on MudBlazor-rendered elements, so ::deep in scoped CSS does not work. */
+/* ============================================================
+   Navigation drawer styles
+   ============================================================
+   These styles live in global CSS (not NavMenu.razor.css) because
+   Blazor CSS isolation adds a scoping attribute only to elements
+   rendered directly by the Razor component.  MudBlazor components
+   like MudNavLink, MudNavGroup, and MudText render their own DOM
+   elements that do NOT carry the parent component's scoping
+   attribute — so ::deep in scoped CSS cannot reliably reach them.
+
+   All rules are prefixed with `.mud-drawer` to limit their effect
+   to the navigation drawer and avoid leaking into other MudBlazor
+   nav links elsewhere in the app.
+
+   Colors reference MudBlazor CSS variables (--mud-palette-drawer-text,
+   --mud-palette-drawer-icon) so they adapt automatically when the
+   theme palette changes.  No hardcoded hex values are used.
+   The drawer background itself is set via the MudTheme palette
+   (DrawerBackground) in MainLayout.
+   ============================================================ */
+
+/* Smooth width transition for mini/expanded sidebar toggle.
+   No border needed: the deep violet drawer background provides natural
+   separation from the main content area via color contrast alone. */
 .mud-drawer {
-    border-right: 1px solid var(--mud-palette-divider);
+    transition: width 0.2s ease-in-out;
+}
+
+/* ── Section group labels ────────────────────────────────────────────────
+   Small, uppercase, muted headings that visually separate navigation
+   groups (e.g., "General", "Account").
+   Uses DrawerText at reduced opacity so the labels feel secondary
+   relative to the nav link text on the dark violet background. */
+.mud-drawer .nav-section-label {
+    color: var(--mud-palette-drawer-text);
+    opacity: 0.6;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    padding-bottom: 4px;
+    /* Prevent the label from being selectable — it's decorative, not interactive */
+    user-select: none;
+}
+
+/* ── Nav link base styles ────────────────────────────────────────────────
+   Override default MudNavLink colors to work on the dark violet drawer.
+   Text inherits DrawerText; icons use DrawerIcon for a slightly muted look. */
+.mud-drawer .mud-nav-link {
+    margin-bottom: 2px;
+    color: var(--mud-palette-drawer-text) !important;
+    border-radius: 8px;
+    /* Smooth transition for hover / active background changes */
+    transition: background-color 150ms ease-in-out;
+}
+
+/* Nav link icons — use the dedicated drawer icon color which is slightly
+   dimmer than the text, providing visual hierarchy between icon and label. */
+.mud-drawer .mud-nav-link .mud-nav-link-icon {
+    color: var(--mud-palette-drawer-icon) !important;
+}
+
+/* ── Hover state ─────────────────────────────────────────────────────────
+   Subtle semi-transparent white overlay on hover.  This works universally
+   on any dark background without needing to know the exact base color. */
+.mud-drawer .mud-nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* ── Active / selected state ─────────────────────────────────────────────
+   Stronger white overlay for the currently active route.  Text goes to
+   full opacity so the active link clearly stands out from siblings. */
+.mud-drawer .mud-nav-link.active,
+.mud-drawer .mud-navlink-active {
+    background-color: rgba(255, 255, 255, 0.15) !important;
+    color: var(--mud-palette-drawer-text) !important;
+    opacity: 1;
+}
+
+/* Active link icon — bump to full DrawerText brightness so the icon
+   matches the elevated prominence of the active label text. */
+.mud-drawer .mud-nav-link.active .mud-nav-link-icon,
+.mud-drawer .mud-navlink-active .mud-nav-link-icon {
+    color: var(--mud-palette-drawer-text) !important;
+}
+
+/* ── Mini / collapsed drawer ─────────────────────────────────────────────
+   When the drawer is in mini mode MudBlazor hides the link text and
+   centers the icon automatically.  We just need to ensure the padding
+   and border-radius still look good at the narrower width. */
+.mud-drawer.mud-drawer--mini .mud-nav-link {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
 }
 
 /* ============================================================

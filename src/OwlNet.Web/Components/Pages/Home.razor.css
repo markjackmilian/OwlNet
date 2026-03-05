@@ -1,0 +1,111 @@
+/* ═══════════════════════════════════════════════════════════════════════════════
+   Home.razor scoped styles — Dashboard page
+   ═══════════════════════════════════════════════════════════════════════════════
+   Minimal custom CSS to enhance the dashboard layout beyond what MudBlazor
+   utility classes provide. Uses CSS custom properties from the MudBlazor theme
+   (--mud-palette-*) so colors adapt automatically to light/dark mode.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Stat cards ──────────────────────────────────────────────────────────────
+   Subtle border instead of elevation for a flat, modern card aesthetic.
+   The border uses the theme's divider color so it adapts to dark mode. */
+.stat-card {
+    border: 1px solid var(--mud-palette-divider);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+/* ── Stat avatar ─────────────────────────────────────────────────────────────
+   Slightly larger than default to serve as a visual anchor in the stat card. */
+::deep .stat-avatar {
+    width: 52px;
+    height: 52px;
+    flex-shrink: 0;
+}
+
+/* ── Project cards ───────────────────────────────────────────────────────────
+   Same flat border treatment as stat cards, with hover lift effect. */
+.project-card {
+    border: 1px solid var(--mud-palette-divider);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    height: 100%;
+}
+
+.project-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+/* ── Team avatars inside project cards ───────────────────────────────────────
+   Smaller font size for initials in the compact avatar group. */
+::deep .team-avatar {
+    font-size: 0.65rem;
+    font-weight: 600;
+}
+
+/* ── Sidebar cards ───────────────────────────────────────────────────────────
+   Consistent border treatment for all sidebar panel cards. */
+.sidebar-card {
+    border: 1px solid var(--mud-palette-divider);
+}
+
+/* ── Quick stat items ────────────────────────────────────────────────────────
+   Subtle background tint for the 2×2 quick stats grid items.
+   Uses the theme's background-gray for a gentle contrast against the card surface. */
+.quick-stat-item {
+    background-color: var(--mud-palette-background-gray);
+    border-radius: var(--mud-default-borderradius);
+    text-align: center;
+}
+
+/* ── Circular progress wrapper ───────────────────────────────────────────────
+   Scales up the MudProgressCircular to be a prominent visual element.
+   The transform is applied to the wrapper so it doesn't affect layout flow. */
+.circular-progress-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 16px 0;
+}
+
+::deep .circular-progress-wrapper .mud-progress-circular {
+    width: 120px !important;
+    height: 120px !important;
+}
+
+/* ── Chart cards ─────────────────────────────────────────────────────────────
+   Consistent border treatment for chart containers. */
+.chart-card {
+    border: 1px solid var(--mud-palette-divider);
+    height: 100%;
+}
+
+/* ── Message items ───────────────────────────────────────────────────────────
+   Hover effect on individual message rows for interactivity feedback. */
+.message-item {
+    transition: background-color 0.15s ease;
+    cursor: pointer;
+}
+
+.message-item:hover {
+    background-color: var(--mud-palette-background-gray);
+}
+
+/* ── Message content ─────────────────────────────────────────────────────────
+   Ensures the message text area fills available width next to the avatar. */
+.message-content {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+/* ── Create Project button ───────────────────────────────────────────────────
+   Slight padding boost for the prominent CTA button in the header. */
+.create-project-btn {
+    padding-left: 24px;
+    padding-right: 24px;
+}

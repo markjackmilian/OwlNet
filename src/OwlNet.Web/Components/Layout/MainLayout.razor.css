@@ -1,19 +1,57 @@
-/* MainLayout scoped styles — minimal since MudBlazor handles most styling via its theme system */
+/* MainLayout scoped styles — minimal since MudBlazor handles most styling via its theme system.
+   The brand header has two visual states: expanded (icon + text) and mini (icon only, centered). */
 
-/* Brand header — aligns the owl icon and "OwlNet" text horizontally within the
-   drawer header for a compact brand mark appearance. */
+/* ── Brand header base ────────────────────────────────────────────────────
+   Shared layout for the brand area at the top of the drawer.
+   Uses flexbox for horizontal alignment and consistent vertical padding. */
 .brand-header {
     display: flex;
     align-items: center;
+    padding: 16px;
+    min-height: 48px;
+    transition: padding 0.2s ease;
 }
 
-/* Error boundary card — provides spacing around the error fallback content */
+/* ── Brand header: expanded state ─────────────────────────────────────────
+   Icon + "OwlNet" text side by side, left-aligned within the full-width drawer. */
+.brand-header--expanded {
+    justify-content: flex-start;
+}
+
+/* ── Brand header: mini/collapsed state ───────────────────────────────────
+   Icon only, centered horizontally in the narrow 72px mini drawer.
+   Reduced horizontal padding so the icon sits visually centered. */
+.brand-header--mini {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+/* ── Brand icon ───────────────────────────────────────────────────────────
+   The owl icon uses the drawer's text color (light on dark violet) so it
+   inherits from the theme's DrawerText palette without hardcoding. */
+.brand-icon {
+    color: var(--mud-palette-drawer-text);
+    flex-shrink: 0;
+}
+
+/* ── Brand text ───────────────────────────────────────────────────────────
+   "OwlNet" label — uses drawer text color for consistency with the sidebar.
+   Only rendered when the drawer is expanded (controlled in Razor markup). */
+.brand-text {
+    color: var(--mud-palette-drawer-text);
+    white-space: nowrap;
+}
+
+/* ── Error boundary card ──────────────────────────────────────────────────
+   Provides spacing around the error fallback content. */
 .error-card {
     margin: 2rem;
     padding: 2rem;
 }
 
-/* Retry button inside the error boundary — adds top spacing to separate from the message */
+/* ── Retry button inside the error boundary ───────────────────────────────
+   Adds top spacing to separate from the error message text. */
 .error-retry-button {
     margin-top: 1rem;
 }

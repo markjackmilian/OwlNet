@@ -1,13 +1,618 @@
 @page "/"
-@using Microsoft.AspNetCore.Authorization
 
-@attribute [AllowAnonymous]
+@* ═══════════════════════════════════════════════════════════════════════════════
+   OwlNet Dashboard — Home Page
+   ═══════════════════════════════════════════════════════════════════════════════
+   A rich, visually impressive mock dashboard that showcases the OwlNet violet
+   theme (Poppins font, rounded corners, deep violet palette) with entirely
+   hardcoded data. No backend calls, no services — just beautiful UI.
 
-<PageTitle>OwlNet</PageTitle>
+   Layout structure:
+   ┌──────────────────────────────────────────────────────────────────────┐
+   │ Header: "Dashboard" title + "Create Project" button                 │
+   ├──────────────────────────────────────────┬───────────────────────────┤
+   │ Stats cards (4 across)                   │                           │
+   ├──────────────────────────────────────────┤  Right sidebar panel      │
+   │ Project cards (6 in 2×3 grid)            │  - Design Team            │
+   ├──────────────────────────────────────────┤  - 72% circular progress  │
+   │ Recent activity table                    │  - Quick stats            │
+   ├──────────────────────────────────────────┤  - Upcoming event         │
+   │ Charts (donut + bar)                     │  - Messages               │
+   └──────────────────────────────────────────┴───────────────────────────┘
 
-<MudText Typo="Typo.h3">
-    OwlNet
-</MudText>
-<MudText Typo="Typo.body1">
-    Welcome to OwlNet.
-</MudText>
+   Render mode: InteractiveServer (inherited from App.razor routing logic —
+   this page is NOT an Account page, so it gets interactive rendering).
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+
+<PageTitle>Dashboard — OwlNet</PageTitle>
+
+@* ── Section 1: Page Header ──────────────────────────────────────────────────
+   Title + subtitle on the left, "Create Project" action button on the right.
+   Uses MudStack with Row + SpaceBetween for a clean header layout. *@
+<MudStack Row="true"
+          Justify="Justify.SpaceBetween"
+          AlignItems="AlignItems.Center"
+          Class="mb-6">
+    <div>
+        <MudText Typo="Typo.h3">Dashboard</MudText>
+        <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mt-1">
+            Welcome back, Sullivan
+        </MudText>
+    </div>
+    <MudButton Variant="Variant.Filled"
+               Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Add"
+               Size="Size.Large"
+               Class="create-project-btn">
+        Create Project
+    </MudButton>
+</MudStack>
+
+@* ── Main layout: Left content (8 cols) + Right sidebar (4 cols) ─────────────
+   The outer MudGrid splits the page into a main content area and a sidebar.
+   On small screens (xs/sm), both collapse to full width for mobile. *@
+<MudGrid Spacing="4">
+
+    @* ═══════════════════════════════════════════════════════════════════════════
+       LEFT COLUMN — Main content area (8/12 columns on md+)
+       ═══════════════════════════════════════════════════════════════════════════ *@
+    <MudItem xs="12" md="8">
+
+        @* ── Section 2: Stats Cards Row ──────────────────────────────────────
+           Four KPI cards showing key project metrics. Each card has:
+           - A colored avatar with an icon (visual anchor)
+           - A large bold number (the metric)
+           - A descriptive label (secondary text)
+           Responsive: 2 per row on sm, 4 per row on md+. *@
+        <MudGrid Spacing="3" Class="mb-4">
+            @foreach (var stat in _statsCards)
+            {
+                <MudItem xs="6" sm="6" md="3">
+                    <MudCard Elevation="0" Class="stat-card pa-4">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                            @* Colored avatar acts as a visual icon badge *@
+                            <MudAvatar Color="@stat.Color"
+                                       Variant="Variant.Filled"
+                                       Size="Size.Large"
+                                       Class="stat-avatar">
+                                <MudIcon Icon="@stat.Icon" />
+                            </MudAvatar>
+                            <div>
+                                <MudText Typo="Typo.h4">@stat.Value</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    @stat.Label
+                                </MudText>
+                            </div>
+                        </MudStack>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+
+        @* ── Section 3: Project Cards ────────────────────────────────────────
+           Six project cards arranged in a 3-column grid (2 rows of 3 on desktop).
+           Each card showcases:
+           - A colored chip with the project name
+           - A description line
+           - A progress bar showing completion percentage
+           - An avatar group (team members) + metadata icons (comments, attachments)
+           This section demonstrates MudChip, MudProgressLinear, and MudAvatarGroup. *@
+        <MudText Typo="Typo.h5" Class="mb-3">Projects</MudText>
+        <MudGrid Spacing="3" Class="mb-4">
+            @foreach (var project in _projects)
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <MudCard Elevation="0" Class="project-card">
+                        <MudCardContent>
+                            @* Project name chip — color-coded per project for visual variety *@
+                            <MudChip T="string"
+                                     Color="@project.ChipColor"
+                                     Size="Size.Small"
+                                     Class="mb-3">
+                                @project.Name
+                            </MudChip>
+
+                            @* Brief description of the project's current phase *@
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                                @project.Description
+                            </MudText>
+
+                            @* Progress bar — shows completion percentage with a label *@
+                            <MudStack Row="true"
+                                      Justify="Justify.SpaceBetween"
+                                      AlignItems="AlignItems.Center"
+                                      Class="mb-2">
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    Progress
+                                </MudText>
+                                <MudText Typo="Typo.caption" Style="font-weight: 600;">
+                                    @(project.Progress)%
+                                </MudText>
+                            </MudStack>
+                            <MudProgressLinear Color="@project.ChipColor"
+                                               Value="@project.Progress"
+                                               Rounded="true"
+                                               Size="Size.Small"
+                                               Class="mb-3" />
+
+                            @* Bottom row: team member avatars + comment/attachment counts *@
+                            <MudStack Row="true"
+                                      Justify="Justify.SpaceBetween"
+                                      AlignItems="AlignItems.Center">
+                                @* Team member avatar group — shows overlapping initials *@
+                                <MudAvatarGroup Max="3" Spacing="2" MaxSize="Size.Small">
+                                    @foreach (var member in project.TeamMembers)
+                                    {
+                                        <MudAvatar Color="Color.Primary"
+                                                   Variant="Variant.Filled"
+                                                   Size="Size.Small"
+                                                   Class="team-avatar">
+                                            @member
+                                        </MudAvatar>
+                                    }
+                                </MudAvatarGroup>
+
+                                @* Metadata: comments and attachments count *@
+                                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                    <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center">
+                                        <MudIcon Icon="@Icons.Material.Outlined.ChatBubbleOutline"
+                                                 Size="Size.Small"
+                                                 Class="mud-text-secondary" />
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary ml-1">
+                                            @project.Comments
+                                        </MudText>
+                                    </MudStack>
+                                    <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Center">
+                                        <MudIcon Icon="@Icons.Material.Outlined.AttachFile"
+                                                 Size="Size.Small"
+                                                 Class="mud-text-secondary" />
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary ml-1">
+                                            @project.Attachments
+                                        </MudText>
+                                    </MudStack>
+                                </MudStack>
+                            </MudStack>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+
+        @* ── Section 5: Recent Activity Table ────────────────────────────────
+           A MudTable showing recent project activity with status chips,
+           progress percentages, team size, and due dates.
+           Demonstrates MudTable with ToolBarContent, HeaderContent, RowTemplate,
+           and colored MudChip for status badges. *@
+        <MudCard Elevation="0" Class="mb-4">
+            <MudTable Items="@_recentActivity"
+                      Hover="true"
+                      Dense="true"
+                      Breakpoint="Breakpoint.Sm"
+                      Elevation="0"
+                      T="ActivityItem">
+                <ToolBarContent>
+                    <MudText Typo="Typo.h5">Recent Activity</MudText>
+                    <MudSpacer />
+                    <MudButton Variant="Variant.Text"
+                               Color="Color.Primary"
+                               EndIcon="@Icons.Material.Filled.ArrowForward"
+                               Size="Size.Small">
+                        View All
+                    </MudButton>
+                </ToolBarContent>
+                <HeaderContent>
+                    <MudTh>Project</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Progress</MudTh>
+                    <MudTh>Team</MudTh>
+                    <MudTh>Due Date</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Project">
+                        <MudText Typo="Typo.body2" Style="font-weight: 500;">
+                            @context.Project
+                        </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Status">
+                        @* Status chip — color-coded to indicate project health at a glance *@
+                        <MudChip T="string"
+                                 Color="@context.StatusColor"
+                                 Size="Size.Small"
+                                 Variant="Variant.Filled">
+                            @context.Status
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Progress">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudProgressLinear Color="@context.StatusColor"
+                                               Value="@context.Progress"
+                                               Rounded="true"
+                                               Size="Size.Small"
+                                               Style="width: 80px;" />
+                            <MudText Typo="Typo.caption">@(context.Progress)%</MudText>
+                        </MudStack>
+                    </MudTd>
+                    <MudTd DataLabel="Team">
+                        <MudText Typo="Typo.body2">@context.Team members</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Due Date">
+                        <MudText Typo="Typo.body2">@context.DueDate</MudText>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudCard>
+
+        @* ── Section 6: Charts ───────────────────────────────────────────────
+           Two charts side by side:
+           - Donut chart: project status distribution (visual breakdown)
+           - Bar chart: tasks completed over the last 6 months (trend)
+           Demonstrates MudChart with ChartType.Donut and ChartType.Bar. *@
+        <MudGrid Spacing="3">
+            @* Donut chart — shows the distribution of project statuses *@
+            <MudItem xs="12" sm="6">
+                <MudCard Elevation="0" Class="chart-card">
+                    <MudCardContent>
+                        <MudText Typo="Typo.h6" Class="mb-4">Project Overview</MudText>
+                        <MudChart T="double"
+                                  ChartType="ChartType.Donut"
+                                  ChartSeries="@_donutSeries"
+                                  ChartLabels="@_donutLabels"
+                                  Width="100%"
+                                  Height="250px"
+                                  LegendPosition="Position.Bottom" />
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+
+            @* Bar chart — shows tasks completed per month over the last 6 months *@
+            <MudItem xs="12" sm="6">
+                <MudCard Elevation="0" Class="chart-card">
+                    <MudCardContent>
+                        <MudText Typo="Typo.h6" Class="mb-4">Tasks Completed</MudText>
+                        <MudChart T="double"
+                                  ChartType="ChartType.Bar"
+                                  ChartSeries="@_barSeries"
+                                  ChartLabels="@_barLabels"
+                                  Width="100%"
+                                  Height="250px"
+                                  ChartOptions="@_chartOptions" />
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+    </MudItem>
+
+    @* ═══════════════════════════════════════════════════════════════════════════
+       RIGHT COLUMN — Sidebar panel (4/12 columns on md+)
+       Contains team info, overall progress, quick stats, upcoming event, messages.
+       ═══════════════════════════════════════════════════════════════════════════ *@
+    <MudItem xs="12" md="4">
+        <MudStack Spacing="3">
+
+            @* ── Sidebar: Design Team Card ───────────────────────────────────
+               Shows the team identity with an avatar, name, and member count.
+               The violet-tinted background reinforces the brand palette. *@
+            <MudCard Elevation="0" Class="sidebar-card">
+                <MudCardContent>
+                    <MudStack AlignItems="AlignItems.Center" Spacing="3">
+                        <MudAvatar Color="Color.Primary"
+                                   Variant="Variant.Filled"
+                                   Size="Size.Large">
+                            <MudIcon Icon="@Icons.Material.Filled.Groups" Size="Size.Large" />
+                        </MudAvatar>
+                        <MudText Typo="Typo.h6">Design Team</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                            12 Members
+                        </MudText>
+                        @* Overlapping avatars showing team members *@
+                        <MudAvatarGroup Max="5" Spacing="3" MaxSize="Size.Medium">
+                            <MudAvatar Color="Color.Primary" Variant="Variant.Filled">SU</MudAvatar>
+                            <MudAvatar Color="Color.Secondary" Variant="Variant.Filled">AK</MudAvatar>
+                            <MudAvatar Color="Color.Info" Variant="Variant.Filled">JD</MudAvatar>
+                            <MudAvatar Color="Color.Warning" Variant="Variant.Filled">MR</MudAvatar>
+                            <MudAvatar Color="Color.Success" Variant="Variant.Filled">LP</MudAvatar>
+                            <MudAvatar Color="Color.Error" Variant="Variant.Filled">TN</MudAvatar>
+                        </MudAvatarGroup>
+                    </MudStack>
+                </MudCardContent>
+            </MudCard>
+
+            @* ── Sidebar: Overall Progress ───────────────────────────────────
+               A large circular progress indicator showing 72% overall completion.
+               The circular chart is the visual centerpiece of the sidebar. *@
+            <MudCard Elevation="0" Class="sidebar-card">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6" Class="mb-4" Align="Align.Center">
+                        Overall Progress
+                    </MudText>
+                    <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                        @* Large circular progress — 72% completion with primary color *@
+                        <div class="circular-progress-wrapper">
+                            <MudProgressCircular Color="Color.Primary"
+                                                 Size="Size.Large"
+                                                 Value="72">
+                                <ChildContent>
+                                    <MudText Typo="Typo.h5">72%</MudText>
+                                </ChildContent>
+                            </MudProgressCircular>
+                        </div>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary mt-2">
+                            72 of 100 tasks completed
+                        </MudText>
+                    </MudStack>
+                </MudCardContent>
+            </MudCard>
+
+            @* ── Sidebar: Quick Stats Grid ───────────────────────────────────
+               A compact 2×2 grid of key numbers for at-a-glance status.
+               Uses MudSimpleTable for a clean, minimal layout. *@
+            <MudCard Elevation="0" Class="sidebar-card">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6" Class="mb-3">Quick Stats</MudText>
+                    <MudGrid Spacing="2">
+                        @foreach (var qs in _quickStats)
+                        {
+                            <MudItem xs="6">
+                                <MudPaper Elevation="0" Class="quick-stat-item pa-3">
+                                    <MudText Typo="Typo.h5" Color="@qs.Color">
+                                        @qs.Value
+                                    </MudText>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                        @qs.Label
+                                    </MudText>
+                                </MudPaper>
+                            </MudItem>
+                        }
+                    </MudGrid>
+                </MudCardContent>
+            </MudCard>
+
+            @* ── Sidebar: Upcoming Event ─────────────────────────────────────
+               A card highlighting the next scheduled event with date, time,
+               and a calendar icon. Gives the dashboard a "live" feel. *@
+            <MudCard Elevation="0" Class="sidebar-card">
+                <MudCardContent>
+                    <MudText Typo="Typo.h6" Class="mb-3">Upcoming Event</MudText>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                        <MudAvatar Color="Color.Warning"
+                                   Variant="Variant.Filled"
+                                   Size="Size.Large">
+                            <MudIcon Icon="@Icons.Material.Filled.Event" />
+                        </MudAvatar>
+                        <div>
+                            <MudText Typo="Typo.subtitle2">Sprint Review</MudText>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                Sunday, 20 December
+                            </MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                08:00 – 11:00 AM
+                            </MudText>
+                        </div>
+                    </MudStack>
+                    <MudDivider Class="my-3" />
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                        <MudAvatar Color="Color.Info"
+                                   Variant="Variant.Filled"
+                                   Size="Size.Large">
+                            <MudIcon Icon="@Icons.Material.Filled.VideoCall" />
+                        </MudAvatar>
+                        <div>
+                            <MudText Typo="Typo.subtitle2">Design Sync</MudText>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                                Monday, 21 December
+                            </MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                02:00 – 03:00 PM
+                            </MudText>
+                        </div>
+                    </MudStack>
+                </MudCardContent>
+            </MudCard>
+
+            @* ── Sidebar: Internal Messages ──────────────────────────────────
+               A compact message list showing recent team communications.
+               Uses MudBadge on the header for unread count. *@
+            <MudCard Elevation="0" Class="sidebar-card">
+                <MudCardContent>
+                    <MudStack Row="true"
+                              Justify="Justify.SpaceBetween"
+                              AlignItems="AlignItems.Center"
+                              Class="mb-3">
+                        <MudText Typo="Typo.h6">Messages</MudText>
+                        <MudBadge Content="3"
+                                  Color="Color.Error"
+                                  Overlap="true">
+                            <MudIcon Icon="@Icons.Material.Filled.Mail"
+                                     Color="Color.Default" />
+                        </MudBadge>
+                    </MudStack>
+
+                    @* Message list — each item shows sender avatar, name, preview, and time *@
+                    @foreach (var msg in _messages)
+                    {
+                        <MudStack Row="true"
+                                  AlignItems="AlignItems.Start"
+                                  Spacing="2"
+                                  Class="message-item pa-2 rounded-lg">
+                            <MudAvatar Color="@msg.AvatarColor"
+                                       Variant="Variant.Filled"
+                                       Size="Size.Small">
+                                @msg.Initials
+                            </MudAvatar>
+                            <div class="message-content">
+                                <MudStack Row="true"
+                                          Justify="Justify.SpaceBetween"
+                                          AlignItems="AlignItems.Center">
+                                    <MudText Typo="Typo.subtitle2">@msg.Sender</MudText>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                        @msg.Time
+                                    </MudText>
+                                </MudStack>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    @msg.Preview
+                                </MudText>
+                            </div>
+                        </MudStack>
+                    }
+                </MudCardContent>
+            </MudCard>
+
+        </MudStack>
+    </MudItem>
+</MudGrid>
+
+@code {
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Static mock data — all hardcoded for theme showcase purposes.
+    //  In a real app, this data would come from MediatR queries via DI.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    // ── Section 2: Stats card data ──────────────────────────────────────────
+
+    /// <summary>
+    /// KPI stat cards displayed at the top of the dashboard.
+    /// Each card shows a metric with an icon and color for quick visual scanning.
+    /// </summary>
+    private static readonly StatCard[] _statsCards =
+    [
+        new("Total Projects", "144", Icons.Material.Filled.Folder, Color.Primary),
+        new("In Progress", "72", Icons.Material.Filled.TrendingUp, Color.Info),
+        new("Completed", "56", Icons.Material.Filled.CheckCircle, Color.Success),
+        new("Waiting", "24", Icons.Material.Filled.HourglassEmpty, Color.Warning),
+    ];
+
+    // ── Section 3: Project card data ────────────────────────────────────────
+
+    /// <summary>
+    /// Mock project cards with progress, team members, and metadata.
+    /// Team members are represented by initials for the avatar group.
+    /// </summary>
+    private static readonly ProjectCard[] _projects =
+    [
+        new("Web Design", "Wireframing, mockups, client collaboration",
+            50, Color.Primary, ["SU", "AK", "JD"], 4, 3),
+        new("Mobile App", "iOS and Android native development",
+            30, Color.Info, ["MR", "LP", "TN", "SU"], 7, 5),
+        new("Dashboard", "Analytics dashboard with real-time data",
+            90, Color.Success, ["AK", "JD"], 2, 8),
+        new("App Development", "Backend API and microservices",
+            60, Color.Warning, ["LP", "TN", "MR"], 5, 4),
+        new("Landing Page", "Marketing site redesign and A/B testing",
+            70, Color.Error, ["SU", "AK", "JD", "MR", "LP"], 9, 6),
+        new("Web Development", "Full-stack web application build",
+            80, Color.Secondary, ["TN", "SU", "AK"], 3, 7),
+    ];
+
+    // ── Section 5: Recent activity table data ───────────────────────────────
+
+    /// <summary>
+    /// Recent activity items for the table section.
+    /// Status colors match the semantic meaning (In Progress = Info, Completed = Success, etc.).
+    /// </summary>
+    private static readonly ActivityItem[] _recentActivity =
+    [
+        new("Web Design", "In Progress", 50, Color.Info, "3", "Dec 25"),
+        new("Mobile App", "On Going", 30, Color.Warning, "4", "Jan 15"),
+        new("Dashboard", "Completed", 90, Color.Success, "2", "Dec 10"),
+        new("Landing Page", "In Progress", 70, Color.Info, "5", "Jan 20"),
+    ];
+
+    // ── Section 6: Chart data ───────────────────────────────────────────────
+
+    /// <summary>
+    /// Donut chart series — a single series containing the distribution of project statuses.
+    /// MudBlazor v9 uses ChartSeries&lt;T&gt; for all chart types including donut/pie.
+    /// Data is wrapped in ChartData&lt;double&gt; which takes an IReadOnlyList&lt;double&gt;.
+    /// </summary>
+    private static readonly List<ChartSeries<double>> _donutSeries =
+    [
+        new() { Name = "Status", Data = new ChartData<double>(new double[] { 50, 30, 15, 5 }) },
+    ];
+
+    /// <summary>Donut chart labels — matches the data array order.</summary>
+    private static readonly string[] _donutLabels = ["In Progress", "Completed", "Waiting", "Overdue"];
+
+    /// <summary>Bar chart series — tasks completed per month over the last 6 months.</summary>
+    private static readonly List<ChartSeries<double>> _barSeries =
+    [
+        new() { Name = "Tasks", Data = new ChartData<double>(new double[] { 18, 25, 32, 28, 42, 38 }) },
+    ];
+
+    /// <summary>Bar chart X-axis labels — month abbreviations.</summary>
+    private static readonly string[] _barLabels = ["Aug", "Sep", "Oct", "Nov", "Dec", "Jan"];
+
+    /// <summary>
+    /// Bar chart rendering options — uses BarChartOptions (v9 API) for axis chart configuration.
+    /// Minimal Y-axis ticks for a clean, uncluttered look.
+    /// </summary>
+    private static readonly BarChartOptions _chartOptions = new()
+    {
+        YAxisTicks = 10,
+        MaxNumYAxisTicks = 5,
+    };
+
+    // ── Sidebar: Quick stats data ───────────────────────────────────────────
+
+    /// <summary>
+    /// Quick stats for the sidebar 2×2 grid.
+    /// Provides an at-a-glance summary of project health.
+    /// </summary>
+    private static readonly QuickStat[] _quickStats =
+    [
+        new("Total", "144", Color.Default),
+        new("Completed", "56", Color.Success),
+        new("In Progress", "72", Color.Info),
+        new("Waiting", "24", Color.Warning),
+    ];
+
+    // ── Sidebar: Messages data ──────────────────────────────────────────────
+
+    /// <summary>
+    /// Mock internal messages for the sidebar message card.
+    /// Shows sender, preview text, time, and avatar color.
+    /// </summary>
+    private static readonly MessageItem[] _messages =
+    [
+        new("Alice Kim", "AK", "Updated the wireframes for review...", "2m ago", Color.Primary),
+        new("James Dean", "JD", "Can we sync on the API contracts?", "15m ago", Color.Info),
+        new("Maria Ruiz", "MR", "Sprint retro notes are ready.", "1h ago", Color.Warning),
+    ];
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Record types — lightweight immutable data carriers for the mock data.
+    //  Using records keeps the @code block clean and the data self-documenting.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>Data for a single KPI stat card (Section 2).</summary>
+    private sealed record StatCard(string Label, string Value, string Icon, Color Color);
+
+    /// <summary>Data for a single project card (Section 3).</summary>
+    private sealed record ProjectCard(
+        string Name,
+        string Description,
+        double Progress,
+        Color ChipColor,
+        string[] TeamMembers,
+        int Comments,
+        int Attachments);
+
+    /// <summary>Data for a single row in the recent activity table (Section 5).</summary>
+    private sealed record ActivityItem(
+        string Project,
+        string Status,
+        double Progress,
+        Color StatusColor,
+        string Team,
+        string DueDate);
+
+    /// <summary>Data for a single quick stat in the sidebar grid.</summary>
+    private sealed record QuickStat(string Label, string Value, Color Color);
+
+    /// <summary>Data for a single message in the sidebar message card.</summary>
+    private sealed record MessageItem(
+        string Sender,
+        string Initials,
+        string Preview,
+        string Time,
+        Color AvatarColor);
+}

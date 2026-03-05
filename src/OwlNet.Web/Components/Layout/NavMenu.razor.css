@@ -1,26 +1,18 @@
 /*
- * NavMenu scoped styles — supplements MudBlazor's NavMenu theming
- * with spacing and section-label styling for the grouped navigation layout.
+ * NavMenu scoped styles — intentionally empty.
  *
- * Section labels use the theme's TextSecondary color so they adapt
- * automatically to light/dark mode without hardcoded color values.
+ * All navigation drawer styles (nav links, icons, section labels, hover/active
+ * states, mini-drawer overrides) live in wwwroot/app.css under the
+ * `.mud-drawer` scope.
+ *
+ * WHY: Blazor CSS isolation adds a scoping attribute only to elements rendered
+ * directly by this component.  MudBlazor components (MudNavLink, MudNavGroup,
+ * MudText, etc.) render their own DOM elements that do NOT carry NavMenu's
+ * scoping attribute.  The ::deep combinator cannot reliably penetrate into
+ * MudBlazor-rendered markup, so the styles would silently fail to apply.
+ *
+ * Moving them to global CSS with a `.mud-drawer` prefix keeps them scoped to
+ * the drawer context while ensuring they actually reach the target elements.
+ *
+ * See: wwwroot/app.css → "Navigation drawer styles" section.
  */
-
-/* Section group labels — small, uppercase, muted headings that visually
-   separate navigation groups (e.g., "General", "Account").
-   Color uses the MudBlazor theme variable for TextSecondary to stay
-   consistent across light and dark modes. */
-::deep .nav-section-label {
-    color: var(--mud-palette-text-secondary);
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    padding-bottom: 4px;
-    /* Prevent the label from being selectable — it's decorative, not interactive */
-    user-select: none;
-}
-
-/* Add a bit of vertical breathing room between nav link items
-   for a more spacious, modern sidebar feel. */
-::deep .mud-nav-link {
-    margin-bottom: 2px;
-}
