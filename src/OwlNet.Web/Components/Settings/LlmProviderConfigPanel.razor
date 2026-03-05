@@ -1,0 +1,442 @@
+@using OwlNet.Application.Common.Interfaces
+@using OwlNet.Application.Common.Models
+
+@* ═══════════════════════════════════════════════════════════════════════════════
+   LLM Provider Configuration Panel — Smart Component
+   ═══════════════════════════════════════════════════════════════════════════════
+   Self-contained panel that manages the LLM provider configuration for
+   OpenRouter. Allows the user to enter an API key (encrypted at rest),
+   a model identifier, verify the connection, and save the configuration.
+
+   UI states:
+   ┌──────────┐  success   ┌─────────────────────────────────────────────┐
+   │ Loading   │──────────▶│ Form (API Key + Model ID + action buttons)  │
+   │ (spinner) │           │  ┌─ Status chip: Configured / Not configured│
+   └──────────┘           │  ├─ DecryptionFailed warning (if applicable)│
+                           │  ├─ Verify Connection → success/failure chip│
+                           │  └─ Save → snackbar success/error           │
+                           └─────────────────────────────────────────────┘
+
+   Services injected:
+   - ILlmProviderService — retrieves, saves, and verifies LLM provider config
+   - ISnackbar           — shows toast notifications on save success/failure
+
+   Spec reference: specs/todo/SPEC-llm-provider-config.md (FR-1 through FR-15)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+
+@inject ILlmProviderService LlmProviderService
+@inject ISnackbar Snackbar
+
+@implements IDisposable
+
+<MudCard Outlined="true">
+    @* ── Card Header ──────────────────────────────────────────────────────────
+       Avatar icon + title + subtitle + status badge chip.
+       The status chip reflects the current configuration state:
+       - "Configured" (green) when API key and model are saved
+       - "Not configured" (warning) when no config exists yet
+       - "API key unreadable" (error) when decryption failed *@
+    <MudCardHeader>
+        <CardHeaderAvatar>
+            <MudAvatar Color="Color.Secondary" Variant="Variant.Filled" Rounded="true">
+                <MudIcon Icon="@Icons.Material.Filled.SmartToy" />
+            </MudAvatar>
+        </CardHeaderAvatar>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h6">LLM Provider Configuration</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Configure the OpenRouter API key and model for AI-powered features.
+            </MudText>
+        </CardHeaderContent>
+        <CardHeaderActions>
+            @if (!_isLoading)
+            {
+                @if (_decryptionFailed)
+                {
+                    @* Decryption failed — the saved key can no longer be read *@
+                    <MudChip T="string"
+                             Color="Color.Error"
+                             Icon="@Icons.Material.Filled.ErrorOutline"
+                             Size="Size.Small">
+                        API key unreadable
+                    </MudChip>
+                }
+                else if (_isConfigured)
+                {
+                    @* Both API key and model ID are saved and valid *@
+                    <MudChip T="string"
+                             Color="Color.Success"
+                             Icon="@Icons.Material.Filled.CheckCircle"
+                             Size="Size.Small">
+                        Configured
+                    </MudChip>
+                }
+                else
+                {
+                    @* No configuration saved yet *@
+                    <MudChip T="string"
+                             Color="Color.Warning"
+                             Icon="@Icons.Material.Filled.Warning"
+                             Size="Size.Small">
+                        Not configured
+                    </MudChip>
+                }
+            }
+        </CardHeaderActions>
+    </MudCardHeader>
+
+    @* ── Card Content — loading spinner or configuration form ─────────────── *@
+    <MudCardContent>
+        @if (_isLoading)
+        {
+            @* Loading state — show spinner while fetching saved configuration *@
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                <MudText Typo="Typo.body2">Loading configuration...</MudText>
+            </MudStack>
+        }
+        else
+        {
+            <MudStack Spacing="3">
+                @* ── Decryption Failed Warning ────────────────────────────────
+                   Shown when the saved API key could not be decrypted (e.g.,
+                   DPAPI key rotation or machine change). User must re-enter. *@
+                @if (_decryptionFailed)
+                {
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                        The saved API key is no longer readable. Please enter a new one.
+                    </MudAlert>
+                }
+
+                @* ── API Key Field ────────────────────────────────────────────
+                   Password input with visibility toggle. The adornment icon
+                   switches between eye/eye-off to show/hide the key. *@
+                <MudTextField T="string"
+                              Value="@_apiKey"
+                              ValueChanged="@OnApiKeyChanged"
+                              Label="OpenRouter API Key"
+                              InputType="@PasswordInputType"
+                              Required="true"
+                              RequiredError="API key is required"
+                              Variant="Variant.Outlined"
+                              Adornment="Adornment.End"
+                              AdornmentIcon="@PasswordToggleIcon"
+                              OnAdornmentClick="TogglePasswordVisibility"
+                              AdornmentAriaLabel="Toggle API key visibility"
+                              Disabled="@(_isSaving || _isVerifying)" />
+
+                @* ── Model ID Field ───────────────────────────────────────────
+                   Text input with helper text showing the expected format.
+                   Example: "anthropic/claude-sonnet-4" *@
+                <MudTextField T="string"
+                              Value="@_modelId"
+                              ValueChanged="@OnModelIdChanged"
+                              Label="Model ID"
+                              HelperText="Enter the model identifier, e.g. anthropic/claude-sonnet-4"
+                              Required="true"
+                              RequiredError="Model ID is required"
+                              Variant="Variant.Outlined"
+                              Disabled="@(_isSaving || _isVerifying)" />
+
+                @* ── Connection Verification Result ───────────────────────────
+                   Displayed after the user clicks "Verify Connection".
+                   Shows a success chip or an error chip with the message. *@
+                @if (_verificationResult is not null)
+                {
+                    @if (_verificationResult.IsSuccess)
+                    {
+                        <MudChip T="string"
+                                 Color="Color.Success"
+                                 Icon="@Icons.Material.Filled.CheckCircle"
+                                 Size="Size.Medium">
+                            Connection verified
+                        </MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string"
+                                 Color="Color.Error"
+                                 Icon="@Icons.Material.Filled.ErrorOutline"
+                                 Size="Size.Medium">
+                            @(_verificationResult.ErrorMessage ?? "Connection verification failed")
+                        </MudChip>
+                    }
+                }
+            </MudStack>
+        }
+    </MudCardContent>
+
+    @* ── Card Actions — Verify Connection + Save buttons ─────────────────── *@
+    @if (!_isLoading)
+    {
+        <MudCardActions>
+            @* ── Verify Connection Button ─────────────────────────────────
+               Sends the current API key to OpenRouter to check connectivity.
+               Disabled when the API key is empty or another operation is running. *@
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Default"
+                       StartIcon="@Icons.Material.Filled.NetworkCheck"
+                       Disabled="@IsVerifyDisabled"
+                       OnClick="@VerifyConnectionAsync">
+                @if (_isVerifying)
+                {
+                    <MudProgressCircular Size="Size.Small"
+                                         Indeterminate="true"
+                                         Class="mr-2" />
+                    @:Verifying...
+                }
+                else
+                {
+                    @:Verify Connection
+                }
+            </MudButton>
+
+            <MudSpacer />
+
+            @* ── Save Button ──────────────────────────────────────────────
+               Persists the API key (encrypted) and model ID to the database.
+               Disabled when either field is empty or another operation is running. *@
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Save"
+                       Disabled="@IsSaveDisabled"
+                       OnClick="@SaveConfigurationAsync">
+                @if (_isSaving)
+                {
+                    <MudProgressCircular Size="Size.Small"
+                                         Indeterminate="true"
+                                         Class="mr-2" />
+                    @:Saving...
+                }
+                else
+                {
+                    @:Save
+                }
+            </MudButton>
+        </MudCardActions>
+    }
+</MudCard>
+
+@code {
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  State — form fields, loading flags, and verification result
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>The plain-text API key entered by the user (or loaded from config).</summary>
+    private string _apiKey = string.Empty;
+
+    /// <summary>The model identifier entered by the user (e.g., "anthropic/claude-sonnet-4").</summary>
+    private string _modelId = string.Empty;
+
+    /// <summary>Controls whether the API key field shows plain text or masked dots.</summary>
+    private bool _isPasswordVisible;
+
+    /// <summary>True while the saved configuration is being loaded on initialization.</summary>
+    private bool _isLoading = true;
+
+    /// <summary>True while the save operation is in progress.</summary>
+    private bool _isSaving;
+
+    /// <summary>True while the connection verification request is in progress.</summary>
+    private bool _isVerifying;
+
+    /// <summary>
+    /// Whether the configuration is fully saved and valid (both API key and model ID present).
+    /// Drives the status chip in the card header.
+    /// </summary>
+    private bool _isConfigured;
+
+    /// <summary>
+    /// Whether the saved API key could not be decrypted (e.g., DPAPI key rotation).
+    /// When true, a warning alert is shown prompting the user to re-enter the key.
+    /// </summary>
+    private bool _decryptionFailed;
+
+    /// <summary>
+    /// The result of the last connection verification attempt.
+    /// Null until the user clicks "Verify Connection" for the first time.
+    /// Cleared on save to avoid showing stale verification state.
+    /// </summary>
+    private LlmConnectionVerificationResult? _verificationResult;
+
+    /// <summary>
+    /// Cancellation token source scoped to this component's lifetime.
+    /// Cancelled in <see cref="Dispose"/> to abort any in-flight service calls
+    /// if the user navigates away.
+    /// </summary>
+    private readonly CancellationTokenSource _cts = new();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Computed Properties — derived UI state for input types and button states
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>Toggles the API key field between password (masked) and text (visible).</summary>
+    private InputType PasswordInputType => _isPasswordVisible ? InputType.Text : InputType.Password;
+
+    /// <summary>Icon for the password visibility toggle adornment.</summary>
+    private string PasswordToggleIcon => _isPasswordVisible
+        ? Icons.Material.Filled.VisibilityOff
+        : Icons.Material.Filled.Visibility;
+
+    /// <summary>
+    /// Verify button is disabled when the API key is empty or any async operation is running.
+    /// Prevents sending an empty key to the provider and avoids concurrent operations.
+    /// </summary>
+    private bool IsVerifyDisabled =>
+        string.IsNullOrWhiteSpace(_apiKey) || _isVerifying || _isSaving;
+
+    /// <summary>
+    /// Save button is disabled when either field is empty or any async operation is running.
+    /// Both fields are required for a valid configuration.
+    /// </summary>
+    private bool IsSaveDisabled =>
+        string.IsNullOrWhiteSpace(_apiKey) || string.IsNullOrWhiteSpace(_modelId) || _isSaving || _isVerifying;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Lifecycle — load saved configuration on initialization
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// On first load, fetches the saved LLM provider configuration from the database.
+    /// Populates the form fields if a configuration exists, or shows empty fields for
+    /// first-time setup.
+    /// </summary>
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadConfigurationAsync();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Load Configuration — fetches saved API key and model ID
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Loads the saved LLM provider configuration via <see cref="ILlmProviderService"/>.
+    /// On success, populates the form fields and sets the configured/decryption flags.
+    /// On failure, the form remains empty for the user to enter new values.
+    /// </summary>
+    private async Task LoadConfigurationAsync()
+    {
+        _isLoading = true;
+
+        var result = await LlmProviderService.GetConfigurationAsync(_cts.Token);
+
+        if (result.IsSuccess)
+        {
+            var config = result.Value;
+            _apiKey = config.ApiKey ?? string.Empty;
+            _modelId = config.ModelId ?? string.Empty;
+            _isConfigured = config.IsConfigured;
+            _decryptionFailed = config.DecryptionFailed;
+        }
+
+        _isLoading = false;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Password Visibility Toggle
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Toggles the API key field between masked (password) and plain text display.
+    /// Triggered by clicking the eye icon adornment on the API key field.
+    /// </summary>
+    private void TogglePasswordVisibility()
+    {
+        _isPasswordVisible = !_isPasswordVisible;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Field Change Handlers — clear stale verification on input changes
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Called when the API key field value changes. Updates the field value
+    /// and clears any stale verification result from a previous key.
+    /// </summary>
+    private void OnApiKeyChanged(string value)
+    {
+        _apiKey = value;
+        _verificationResult = null;
+    }
+
+    /// <summary>
+    /// Called when the Model ID field value changes. Updates the field value
+    /// and clears any stale verification result.
+    /// </summary>
+    private void OnModelIdChanged(string value)
+    {
+        _modelId = value;
+        _verificationResult = null;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Verify Connection — tests API key against OpenRouter
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Sends the current API key to OpenRouter to verify connectivity.
+    /// Updates <see cref="_verificationResult"/> with the outcome, which is
+    /// displayed as a success or error chip below the form fields.
+    /// </summary>
+    private async Task VerifyConnectionAsync()
+    {
+        _isVerifying = true;
+        _verificationResult = null;
+        StateHasChanged();
+
+        _verificationResult = await LlmProviderService.VerifyConnectionAsync(_apiKey, _cts.Token);
+
+        _isVerifying = false;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Save Configuration — encrypts API key and persists to database
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Saves the API key (encrypted) and model ID to the database via
+    /// <see cref="ILlmProviderService"/>. On success, updates the status chip
+    /// to "Configured" and clears any stale verification result. On failure,
+    /// shows an error snackbar with the failure reason.
+    /// </summary>
+    private async Task SaveConfigurationAsync()
+    {
+        _isSaving = true;
+        StateHasChanged();
+
+        var result = await LlmProviderService.SaveConfigurationAsync(_apiKey, _modelId, _cts.Token);
+
+        if (result.IsSuccess)
+        {
+            // Update status flags immediately so the header chip reflects the new state
+            _isConfigured = true;
+            _decryptionFailed = false;
+
+            // Clear stale verification result — it was for the previous config state
+            _verificationResult = null;
+
+            Snackbar.Add("LLM Provider configuration saved successfully.", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add(result.Error ?? "Failed to save configuration.", Severity.Error);
+        }
+
+        _isSaving = false;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Cleanup — cancel in-flight operations on dispose
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Cancels any in-flight service calls when the component is disposed
+    /// (e.g., user navigates away from the Settings page).
+    /// </summary>
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}
