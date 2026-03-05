@@ -77,6 +77,14 @@ try
         options.DefaultSignInScheme = IdentityConstants.ExternalScheme;
     });
 
+    // Fallback authorization policy — require authenticated users globally.
+    // Every page and endpoint must have an authenticated user unless explicitly
+    // opted out with [AllowAnonymous] (e.g., Account login/register pages).
+    builder.Services.AddAuthorizationBuilder()
+        .SetFallbackPolicy(new Microsoft.AspNetCore.Authorization.AuthorizationPolicyBuilder()
+            .RequireAuthenticatedUser()
+            .Build());
+
     builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
     builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
@@ -123,7 +131,14 @@ try
     // request with timing, status code, and path information.
     app.UseSerilogRequestLogging();
 
-    app.MapStaticAssets();
+    // -----------------------------------------------------------------------
+    // Authentication & Authorization — enforce the auth gate globally.
+    // Account pages opt out via [AllowAnonymous] in their _Imports.razor.
+    // -----------------------------------------------------------------------
+    app.UseAuthentication();
+    app.UseAuthorization();
+
+    app.MapStaticAssets().AllowAnonymous();
     app.MapRazorComponents<App>()
         .AddInteractiveServerRenderMode();
 
