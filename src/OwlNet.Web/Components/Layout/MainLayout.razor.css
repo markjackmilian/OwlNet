@@ -1,10 +1,22 @@
-/* MainLayout scoped styles — minimal since MudBlazor handles most styling via its theme system.
-   The brand header, search bar, drawer footer, and user profile have two visual states:
-   expanded (full content) and mini (icon only, centered). */
+/* MainLayout scoped styles — minimalist light sidebar design.
+   The sidebar uses the theme's DrawerBackground (warm off-white in light mode,
+   dark surface in dark mode). All colors reference CSS custom properties
+   from the MudBlazor theme so they adapt automatically. */
 
-/* ── Drawer content flex container ────────────────────────────────────────
-   Makes the drawer a vertical flex column so the footer can be pushed
-   to the bottom with margin-top:auto, regardless of how many nav items exist. */
+/* ── AppBar ──────────────────────────────────────────────────────────────────
+   Subtle bottom border instead of shadow for a clean, flat look. */
+::deep .main-appbar {
+    border-bottom: 1px solid var(--mud-palette-divider);
+}
+
+/* ── Drawer ──────────────────────────────────────────────────────────────────
+   Right border for separation instead of shadow. */
+::deep .main-drawer {
+    border-right: 1px solid var(--mud-palette-divider) !important;
+}
+
+/* ── Drawer content flex container ───────────────────────────────────────────
+   Vertical flex column so the footer is pushed to the bottom. */
 .drawer-content {
     display: flex;
     flex-direction: column;
@@ -12,110 +24,84 @@
     overflow: hidden;
 }
 
-/* ── Brand header base ────────────────────────────────────────────────────
-   Shared layout for the brand area at the top of the drawer.
-   Uses flexbox for horizontal alignment and consistent vertical padding. */
+/* ── Brand header base ───────────────────────────────────────────────────────
+   Horizontal flex for icon + text alignment. */
 .brand-header {
     display: flex;
     align-items: center;
-    padding: 16px;
+    padding: 16px 16px 12px;
     min-height: 48px;
     flex-shrink: 0;
     transition: padding 0.2s ease;
 }
 
-/* ── Brand header: expanded state ─────────────────────────────────────────
-   Icon + "OwlNet" text side by side, left-aligned within the full-width drawer. */
 .brand-header--expanded {
     justify-content: flex-start;
 }
 
-/* ── Brand header: mini/collapsed state ───────────────────────────────────
-   Icon only, centered horizontally in the narrow 72px mini drawer.
-   Reduced horizontal padding so the icon sits visually centered. */
 .brand-header--mini {
     justify-content: center;
     padding-left: 0;
     padding-right: 0;
 }
 
-/* ── Brand icon ───────────────────────────────────────────────────────────
-   The owl icon uses the drawer's text color (light on dark violet) so it
-   inherits from the theme's DrawerText palette without hardcoding. */
-.brand-icon {
-    color: var(--mud-palette-drawer-text);
+/* Brand icon — uses primary color for brand identity */
+::deep .brand-icon {
+    color: var(--mud-palette-primary) !important;
     flex-shrink: 0;
 }
 
-/* ── Brand text ───────────────────────────────────────────────────────────
-   "OwlNet" label — uses drawer text color for consistency with the sidebar.
-   Only rendered when the drawer is expanded (controlled in Razor markup). */
-.brand-text {
-    color: var(--mud-palette-drawer-text);
+/* Brand text — dark, bold for readability on light sidebar */
+::deep .brand-text {
+    color: var(--mud-palette-text-primary) !important;
     white-space: nowrap;
+    font-weight: 600 !important;
+    letter-spacing: -.02em;
 }
 
-/* ── Drawer search bar ────────────────────────────────────────────────────
-   Search input area below the brand header. Horizontal padding matches
-   the nav link padding for visual alignment. Flex-shrink 0 prevents
-   the search bar from collapsing when the nav list is long. */
-.drawer-search {
-    padding: 0 12px 8px;
-    flex-shrink: 0;
-}
-
-/* ── Scrollable navigation area ───────────────────────────────────────────
-   Fills the remaining vertical space between the search bar and footer.
-   Overflow-y auto enables scrolling when there are many nav items. */
+/* ── Scrollable navigation area ──────────────────────────────────────────────
+   Fills the remaining vertical space. */
 .drawer-nav-scroll {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
 }
 
-/* ── Drawer footer ────────────────────────────────────────────────────────
-   Pinned to the bottom of the drawer via the flex layout.
-   Contains the "Go Pro" upsell and user profile sections.
-   flex-shrink 0 prevents it from being compressed by the nav scroll area. */
+/* ── Drawer footer ───────────────────────────────────────────────────────────
+   Pinned to the bottom via flexbox. */
 .drawer-footer {
     flex-shrink: 0;
     padding: 8px 0;
+    border-top: 1px solid var(--mud-palette-divider);
 }
 
-/* ── "Go Pro" upsell section ──────────────────────────────────────────────
-   Horizontal flex row with star icon + text, centered in the drawer.
-   Uses drawer text color at reduced opacity for a subtle, non-intrusive look. */
-.drawer-go-pro {
+/* ── Theme toggle row ────────────────────────────────────────────────────────
+   Dark/Light toggle at the bottom of the drawer, matching the reference design. */
+.drawer-theme-toggle {
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 10px 16px;
-    cursor: pointer;
-    border-radius: 8px;
-    margin: 4px 12px;
-    transition: background-color 150ms ease-in-out;
+    gap: 2px;
+    padding: 6px 12px;
+    margin: 0 8px 4px;
+    border-radius: 10px;
+    background-color: var(--mud-palette-background);
 }
 
-.drawer-go-pro:hover {
-    background-color: rgba(255, 255, 255, 0.08);
+::deep .theme-toggle-active {
+    color: var(--mud-palette-primary) !important;
 }
 
-/* "Go Pro" icon — uses a warm amber/gold tone to stand out as a premium CTA
-   against the violet sidebar. Uses the MudBlazor warning palette for theme consistency. */
-::deep .go-pro-icon {
-    color: var(--mud-palette-warning) !important;
+::deep .theme-toggle-inactive {
+    color: var(--mud-palette-text-disabled) !important;
 }
 
-/* "Go Pro" text — drawer text color for readability on the dark sidebar */
-::deep .go-pro-text {
-    color: var(--mud-palette-drawer-text);
-    font-weight: 600;
+::deep .theme-toggle-label {
+    color: var(--mud-palette-text-secondary) !important;
+    font-size: 0.7rem !important;
 }
 
-/* ── User profile section ─────────────────────────────────────────────────
-   Horizontal flex row: avatar + user info + logout button.
-   Padding matches the nav link padding for visual alignment. */
+/* ── User profile section ────────────────────────────────────────────────────
+   Horizontal flex row: avatar + user info + logout button. */
 .drawer-user-profile {
     display: flex;
     align-items: center;
@@ -123,58 +109,47 @@
     padding: 10px 16px;
 }
 
-/* ── User profile: mini/collapsed state ───────────────────────────────────
-   Only the avatar is shown, centered in the narrow 72px drawer. */
 .drawer-user-profile--mini {
     justify-content: center;
     padding-left: 0;
     padding-right: 0;
 }
 
-/* ── User info text block ─────────────────────────────────────────────────
-   Name + role stacked vertically. flex:1 pushes the logout button to the right. */
+/* User info text block — name + role stacked vertically. */
 .drawer-user-info {
     flex: 1;
     min-width: 0;
     overflow: hidden;
 }
 
-/* User name — drawer text color, truncated if too long */
 ::deep .drawer-user-name {
-    color: var(--mud-palette-drawer-text);
+    color: var(--mud-palette-text-primary) !important;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    font-weight: 500 !important;
 }
 
-/* User role — muted secondary text below the name */
 ::deep .drawer-user-role {
-    color: var(--mud-palette-drawer-icon);
+    color: var(--mud-palette-text-secondary) !important;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-/* ── Logout button ────────────────────────────────────────────────────────
-   Uses drawer icon color for a subtle, non-intrusive appearance. */
+/* Logout button — subtle, non-intrusive */
 ::deep .drawer-logout-btn {
-    color: var(--mud-palette-drawer-icon) !important;
+    color: var(--mud-palette-text-secondary) !important;
     flex-shrink: 0;
 }
 
 ::deep .drawer-logout-btn:hover {
-    color: var(--mud-palette-drawer-text) !important;
+    color: var(--mud-palette-text-primary) !important;
 }
 
-/* ── Error boundary card ──────────────────────────────────────────────────
-   Provides spacing around the error fallback content. */
+/* ── Error boundary card ─────────────────────────────────────────────────────
+   Spacing around the error fallback content. */
 .error-card {
     margin: 2rem;
     padding: 2rem;
-}
-
-/* ── Retry button inside the error boundary ───────────────────────────────
-   Adds top spacing to separate from the error message text. */
-.error-retry-button {
-    margin-top: 1rem;
 }

@@ -3,9 +3,9 @@ using MudBlazor;
 namespace OwlNet.Web.Components.Layout;
 
 /// <summary>
-/// Defines the OwlNet application theme — a modern violet/indigo Material Design theme
-/// inspired by project management dashboard aesthetics with a deep violet sidebar,
-/// rounded cards, and the Poppins typeface.
+/// Defines the OwlNet application theme — a clean, minimalist design inspired by
+/// modern analytics dashboards with a light sidebar, warm neutral tones, and
+/// green/orange/violet accent colors paired with the Inter typeface.
 /// <para>
 /// Provides fully specified <see cref="PaletteLight"/> and <see cref="PaletteDark"/> palettes
 /// so that every visible color is intentional and no MudBlazor defaults leak through.
@@ -20,291 +20,288 @@ namespace OwlNet.Web.Components.Layout;
 public static class OwlNetTheme
 {
     // -----------------------------------------------------------------------
-    //  Brand colors — single source of truth for the violet/indigo identity
+    //  Brand colors — warm minimalist palette
+    //  Inspired by the analytics dashboard reference with green active states,
+    //  orange chart accents, and violet badge/icon accents.
     // -----------------------------------------------------------------------
 
-    /// <summary>Vibrant violet primary used in light mode — strong brand presence on light surfaces.</summary>
-    private const string PrimaryViolet = "#6C3FC5";
+    // Primary — deep forest green (used for active nav items, primary actions)
+    private const string PrimaryGreen = "#2D6A4F";
+    private const string PrimaryGreenDarken = "#1B4332";
+    private const string PrimaryGreenLighten = "#52B788";
 
-    /// <summary>Darker violet for hover/active states in light mode.</summary>
-    private const string PrimaryVioletDarken = "#5A2DB5";
+    // Dark-mode primary — brighter green for contrast on dark surfaces
+    private const string PrimaryGreenDark = "#74C69D";
+    private const string PrimaryGreenDarkDarken = "#52B788";
+    private const string PrimaryGreenDarkLighten = "#B7E4C7";
 
-    /// <summary>Lighter violet for subtle highlights in light mode.</summary>
-    private const string PrimaryVioletLighten = "#8B6AD0";
+    // Secondary — warm orange (used for chart highlights, CTAs, badges)
+    private const string SecondaryOrange = "#E76F51";
+    private const string SecondaryOrangeDark = "#F4A261";
 
-    /// <summary>Brighter, desaturated violet for dark mode — maintains contrast on dark surfaces.</summary>
-    private const string PrimaryVioletDark = "#B39DDB";
-
-    /// <summary>Darker variant for hover states in dark mode.</summary>
-    private const string PrimaryVioletDarkDarken = "#9575CD";
-
-    /// <summary>Lighter variant for highlights in dark mode.</summary>
-    private const string PrimaryVioletDarkLighten = "#D1C4E9";
-
-    /// <summary>Teal accent — complements violet as a secondary color across both modes.</summary>
-    private const string SecondaryTeal = "#00897B";
-
-    /// <summary>Brighter teal for dark mode to maintain readability.</summary>
-    private const string SecondaryTealDark = "#4DB6AC";
+    // Tertiary — muted violet (used for icon accents, decorative badges)
+    private const string TertiaryViolet = "#7C3AED";
+    private const string TertiaryVioletDark = "#A78BFA";
 
     // -----------------------------------------------------------------------
-    //  Drawer / sidebar colors — deep violet sidebar for the dashboard look
+    //  Drawer / sidebar colors — light, clean sidebar
     // -----------------------------------------------------------------------
 
-    /// <summary>Deep violet background for the navigation drawer in light mode.</summary>
-    private const string DrawerBgLight = "#2D1B69";
+    /// <summary>Light warm off-white for the sidebar in light mode.</summary>
+    private const string DrawerBgLight = "#FAFAF8";
 
-    /// <summary>Slightly lighter deep violet for the drawer in dark mode.</summary>
-    private const string DrawerBgDark = "#1E1245";
-
-    // -----------------------------------------------------------------------
-    //  Semantic status colors — Material Design standard, tuned for violet harmony
-    // -----------------------------------------------------------------------
-
-    private const string SuccessLight = "#43A047";
-    private const string SuccessDark = "#66BB6A";
-
-    private const string WarningLight = "#FB8C00";
-    private const string WarningDark = "#FFA726";
-
-    private const string ErrorLight = "#E53935";
-    private const string ErrorDark = "#EF5350";
-
-    private const string InfoLight = "#1E88E5";
-    private const string InfoDark = "#42A5F5";
+    /// <summary>Dark surface for the sidebar in dark mode.</summary>
+    private const string DrawerBgDark = "#1A1A1A";
 
     // -----------------------------------------------------------------------
-    //  Shared font stack — Poppins loaded via Google Fonts in App.razor
+    //  Semantic status colors — softer tones for a minimalist feel
     // -----------------------------------------------------------------------
 
-    private static readonly string[] FontStack = ["Poppins", "Helvetica", "Arial", "sans-serif"];
+    private const string SuccessLight = "#2D6A4F";
+    private const string SuccessDark = "#74C69D";
+
+    private const string WarningLight = "#D97706";
+    private const string WarningDark = "#FBBF24";
+
+    private const string ErrorLight = "#D62828";
+    private const string ErrorDark = "#EF6351";
+
+    private const string InfoLight = "#457B9D";
+    private const string InfoDark = "#81B4D8";
+
+    // -----------------------------------------------------------------------
+    //  Shared font stack — Inter loaded via Google Fonts in App.razor
+    // -----------------------------------------------------------------------
+
+    private static readonly string[] FontStack = ["Inter", "system-ui", "-apple-system", "Segoe UI", "Helvetica", "Arial", "sans-serif"];
 
     /// <summary>
     /// The OwlNet custom <see cref="MudTheme"/> instance.
-    /// Configured with light and dark palettes, Poppins typography, and rounded layout
-    /// properties for a clean, modern project management dashboard appearance.
+    /// Configured with light and dark palettes, Inter typography, and rounded layout
+    /// properties for a clean, minimalist dashboard appearance.
     /// </summary>
     public static MudTheme Theme { get; } = new()
     {
         // -- Light mode palette ------------------------------------------------
         PaletteLight = new PaletteLight
         {
-            // Absolute black/white anchors
-            Black = "#212121",
+            // Absolute anchors
+            Black = "#1A1A1A",
             White = "#FFFFFF",
 
-            // Brand — vibrant violet shifted to match the dashboard reference
-            Primary = PrimaryViolet,
-            PrimaryDarken = PrimaryVioletDarken,
-            PrimaryLighten = PrimaryVioletLighten,
+            // Brand — deep forest green as primary
+            Primary = PrimaryGreen,
+            PrimaryDarken = PrimaryGreenDarken,
+            PrimaryLighten = PrimaryGreenLighten,
             PrimaryContrastText = "#FFFFFF",
 
-            Secondary = SecondaryTeal,
-            SecondaryDarken = "#00695C",
-            SecondaryLighten = "#26A69A",
+            // Secondary — warm orange accent
+            Secondary = SecondaryOrange,
+            SecondaryDarken = "#C85A3E",
+            SecondaryLighten = "#F4A261",
             SecondaryContrastText = "#FFFFFF",
 
-            Tertiary = "#7C4DFF",
-            TertiaryDarken = "#651FFF",
-            TertiaryLighten = "#B388FF",
+            // Tertiary — muted violet
+            Tertiary = TertiaryViolet,
+            TertiaryDarken = "#6D28D9",
+            TertiaryLighten = "#A78BFA",
             TertiaryContrastText = "#FFFFFF",
 
             // Semantic status
             Info = InfoLight,
-            InfoDarken = "#1565C0",
-            InfoLighten = "#42A5F5",
+            InfoDarken = "#2C5F7C",
+            InfoLighten = "#81B4D8",
             InfoContrastText = "#FFFFFF",
 
             Success = SuccessLight,
-            SuccessDarken = "#2E7D32",
-            SuccessLighten = "#66BB6A",
+            SuccessDarken = "#1B4332",
+            SuccessLighten = "#52B788",
             SuccessContrastText = "#FFFFFF",
 
             Warning = WarningLight,
-            WarningDarken = "#EF6C00",
-            WarningLighten = "#FFA726",
+            WarningDarken = "#B45309",
+            WarningLighten = "#FCD34D",
             WarningContrastText = "#FFFFFF",
 
             Error = ErrorLight,
-            ErrorDarken = "#C62828",
-            ErrorLighten = "#EF5350",
+            ErrorDarken = "#A61F1F",
+            ErrorLighten = "#EF6351",
             ErrorContrastText = "#FFFFFF",
 
-            // Dark color (used for MudChip Dark variant, etc.)
-            Dark = "#424242",
-            DarkDarken = "#303030",
-            DarkLighten = "#616161",
+            // Dark variant
+            Dark = "#3D3D3D",
+            DarkDarken = "#2A2A2A",
+            DarkLighten = "#5C5C5C",
             DarkContrastText = "#FFFFFF",
 
-            // Text hierarchy
-            TextPrimary = "#212121",
-            TextSecondary = "#757575",
-            TextDisabled = "#BDBDBD",
+            // Text hierarchy — warm dark tones, not pure black
+            TextPrimary = "#1A1A1A",
+            TextSecondary = "#6B7280",
+            TextDisabled = "#B0B0B0",
 
             // Interactive element colors
-            ActionDefault = "#616161",
-            ActionDisabled = "#BDBDBD",
-            ActionDisabledBackground = "#E0E0E0",
+            ActionDefault = "#6B7280",
+            ActionDisabled = "#B0B0B0",
+            ActionDisabledBackground = "#E5E5E5",
 
-            // Backgrounds — blue-tinted light gray base gives a modern, airy feel
-            // while white surface cards feel elevated against it
-            Background = "#F4F6FA",
-            BackgroundGray = "#EEF0F5",
+            // Backgrounds — warm off-white base with white surface cards
+            Background = "#F5F3F0",
+            BackgroundGray = "#EDEAE6",
             Surface = "#FFFFFF",
 
-            // App bar — clean white bar with dark text for a minimal header
+            // App bar — clean white bar with dark text
             AppbarBackground = "#FFFFFF",
-            AppbarText = "#424242",
+            AppbarText = "#1A1A1A",
 
-            // Navigation drawer — deep violet sidebar for the dashboard look;
-            // light text and icons ensure readability on the dark background
+            // Navigation drawer — light warm sidebar with dark text
             DrawerBackground = DrawerBgLight,
-            DrawerText = "#E0E0E0",
-            DrawerIcon = "#B0B0B0",
+            DrawerText = "#1A1A1A",
+            DrawerIcon = "#6B7280",
 
-            // Lines and dividers
-            LinesDefault = "#E0E0E0",
-            LinesInputs = "#BDBDBD",
-            Divider = "#E0E0E0",
-            DividerLight = "#EEEEEE",
+            // Lines and dividers — subtle warm gray
+            LinesDefault = "#E5E2DE",
+            LinesInputs = "#D1CEC9",
+            Divider = "#E5E2DE",
+            DividerLight = "#F0EDE9",
 
             // Table
-            TableLines = "#E0E0E0",
-            TableStriped = "#F5F5F5",
-            TableHover = "#EEEEEE",
+            TableLines = "#E5E2DE",
+            TableStriped = "#FAF9F7",
+            TableHover = "#F0EDE9",
 
             // Skeleton loading placeholder
-            Skeleton = "#E0E0E0",
+            Skeleton = "#E5E2DE",
 
-            // Overlay — semi-transparent backdrop for dialogs
-            OverlayDark = "rgba(33,33,33,0.4)",
+            // Overlay
+            OverlayDark = "rgba(26,26,26,0.35)",
             OverlayLight = "rgba(255,255,255,0.4)",
 
-            // Gray scale (used internally by MudBlazor for contrast calculations)
-            GrayDefault = "#9E9E9E",
-            GrayLight = "#BDBDBD",
-            GrayLighter = "#E0E0E0",
-            GrayDark = "#616161",
-            GrayDarker = "#424242",
+            // Gray scale
+            GrayDefault = "#9CA3AF",
+            GrayLight = "#B0B0B0",
+            GrayLighter = "#E5E5E5",
+            GrayDark = "#6B7280",
+            GrayDarker = "#3D3D3D",
 
-            // Interaction opacity — slightly reduced for a subtler hover/ripple effect
-            HoverOpacity = 0.06,
-            RippleOpacity = 0.1,
-            RippleOpacitySecondary = 0.08,
-            BorderOpacity = 0.12,
+            // Interaction opacity — very subtle for a clean, minimal look
+            HoverOpacity = 0.04,
+            RippleOpacity = 0.08,
+            RippleOpacitySecondary = 0.06,
+            BorderOpacity = 0.10,
         },
 
         // -- Dark mode palette -------------------------------------------------
         PaletteDark = new PaletteDark
         {
-            // Absolute black/white anchors
+            // Absolute anchors
             Black = "#000000",
             White = "#FFFFFF",
 
-            // Brand — brighter violet to pop against dark surfaces
-            Primary = PrimaryVioletDark,
-            PrimaryDarken = PrimaryVioletDarkDarken,
-            PrimaryLighten = PrimaryVioletDarkLighten,
-            PrimaryContrastText = "#1E1E1E",
+            // Brand — brighter green for dark surfaces
+            Primary = PrimaryGreenDark,
+            PrimaryDarken = PrimaryGreenDarkDarken,
+            PrimaryLighten = PrimaryGreenDarkLighten,
+            PrimaryContrastText = "#1A1A1A",
 
-            Secondary = SecondaryTealDark,
-            SecondaryDarken = "#00897B",
-            SecondaryLighten = "#80CBC4",
-            SecondaryContrastText = "#1E1E1E",
+            // Secondary — warm orange (brighter variant)
+            Secondary = SecondaryOrangeDark,
+            SecondaryDarken = "#E76F51",
+            SecondaryLighten = "#F7C59F",
+            SecondaryContrastText = "#1A1A1A",
 
-            Tertiary = "#B388FF",
-            TertiaryDarken = "#7C4DFF",
-            TertiaryLighten = "#D1C4E9",
-            TertiaryContrastText = "#1E1E1E",
+            // Tertiary — lighter violet for dark backgrounds
+            Tertiary = TertiaryVioletDark,
+            TertiaryDarken = "#7C3AED",
+            TertiaryLighten = "#C4B5FD",
+            TertiaryContrastText = "#1A1A1A",
 
-            // Semantic status — slightly brighter for dark background readability
+            // Semantic status
             Info = InfoDark,
-            InfoDarken = "#1E88E5",
-            InfoLighten = "#64B5F6",
-            InfoContrastText = "#1E1E1E",
+            InfoDarken = "#457B9D",
+            InfoLighten = "#A8D0E6",
+            InfoContrastText = "#1A1A1A",
 
             Success = SuccessDark,
-            SuccessDarken = "#43A047",
-            SuccessLighten = "#81C784",
-            SuccessContrastText = "#1E1E1E",
+            SuccessDarken = "#2D6A4F",
+            SuccessLighten = "#B7E4C7",
+            SuccessContrastText = "#1A1A1A",
 
             Warning = WarningDark,
-            WarningDarken = "#FB8C00",
-            WarningLighten = "#FFB74D",
-            WarningContrastText = "#1E1E1E",
+            WarningDarken = "#D97706",
+            WarningLighten = "#FDE68A",
+            WarningContrastText = "#1A1A1A",
 
             Error = ErrorDark,
-            ErrorDarken = "#E53935",
-            ErrorLighten = "#E57373",
-            ErrorContrastText = "#1E1E1E",
+            ErrorDarken = "#D62828",
+            ErrorLighten = "#F49B8F",
+            ErrorContrastText = "#1A1A1A",
 
-            // Dark color
+            // Dark variant
             Dark = "#E0E0E0",
-            DarkDarken = "#BDBDBD",
-            DarkLighten = "#EEEEEE",
-            DarkContrastText = "#1E1E1E",
+            DarkDarken = "#B0B0B0",
+            DarkLighten = "#F0F0F0",
+            DarkContrastText = "#1A1A1A",
 
-            // Text hierarchy — high-contrast white text on dark surfaces
-            TextPrimary = "#E0E0E0",
-            TextSecondary = "#9E9E9E",
-            TextDisabled = "#616161",
+            // Text hierarchy — high-contrast for dark surfaces
+            TextPrimary = "#E8E6E3",
+            TextSecondary = "#9CA3AF",
+            TextDisabled = "#555555",
 
             // Interactive element colors
-            ActionDefault = "#B0B0B0",
-            ActionDisabled = "#616161",
-            ActionDisabledBackground = "#333333",
+            ActionDefault = "#9CA3AF",
+            ActionDisabled = "#555555",
+            ActionDisabledBackground = "#2A2A2A",
 
-            // Backgrounds — true dark (#121212) per Material Design dark theme spec
-            Background = "#121212",
-            BackgroundGray = "#181818",
-            Surface = "#1E1E1E",
+            // Backgrounds — warm dark tones
+            Background = "#111110",
+            BackgroundGray = "#181817",
+            Surface = "#1E1E1D",
 
-            // App bar — blends with the dark surface for a seamless look
-            AppbarBackground = "#1E1E1E",
-            AppbarText = "#E0E0E0",
+            // App bar — blends with dark surface
+            AppbarBackground = "#1E1E1D",
+            AppbarText = "#E8E6E3",
 
-            // Navigation drawer — slightly lighter deep violet to maintain the
-            // branded sidebar feel while fitting the dark mode context
+            // Navigation drawer — dark sidebar matching the dark theme
             DrawerBackground = DrawerBgDark,
-            DrawerText = "#E0E0E0",
-            DrawerIcon = "#B0B0B0",
+            DrawerText = "#E8E6E3",
+            DrawerIcon = "#9CA3AF",
 
-            // Lines and dividers — subtle so they don't overpower the dark UI
-            LinesDefault = "#333333",
-            LinesInputs = "#424242",
-            Divider = "#333333",
-            DividerLight = "#2A2A2A",
+            // Lines and dividers
+            LinesDefault = "#2E2E2D",
+            LinesInputs = "#3D3D3C",
+            Divider = "#2E2E2D",
+            DividerLight = "#252524",
 
             // Table
-            TableLines = "#333333",
-            TableStriped = "#242424",
-            TableHover = "#2A2A2A",
+            TableLines = "#2E2E2D",
+            TableStriped = "#222221",
+            TableHover = "#282827",
 
             // Skeleton loading placeholder
-            Skeleton = "#333333",
+            Skeleton = "#2E2E2D",
 
             // Overlay
             OverlayDark = "rgba(0,0,0,0.5)",
             OverlayLight = "rgba(255,255,255,0.06)",
 
-            // Gray scale (inverted relative to light mode for dark backgrounds)
-            GrayDefault = "#757575",
-            GrayLight = "#616161",
-            GrayLighter = "#424242",
-            GrayDark = "#9E9E9E",
+            // Gray scale
+            GrayDefault = "#6B7280",
+            GrayLight = "#555555",
+            GrayLighter = "#3D3D3D",
+            GrayDark = "#9CA3AF",
             GrayDarker = "#B0B0B0",
 
-            // Interaction opacity — slightly higher on dark backgrounds for visibility
-            HoverOpacity = 0.08,
-            RippleOpacity = 0.12,
-            RippleOpacitySecondary = 0.10,
-            BorderOpacity = 0.15,
+            // Interaction opacity
+            HoverOpacity = 0.06,
+            RippleOpacity = 0.10,
+            RippleOpacitySecondary = 0.08,
+            BorderOpacity = 0.12,
         },
 
         // -- Typography --------------------------------------------------------
-        // Uses the Poppins family (loaded via Google Fonts in App.razor).
-        // Headings use semibold/medium weights for a clean dashboard hierarchy.
-        // Buttons use sentence-case (TextTransform "none") per the design reference.
+        // Uses Inter family (loaded via Google Fonts in App.razor).
+        // Clean, geometric sans-serif with excellent readability at small sizes.
+        // Slightly tighter letter-spacing for a modern, compact feel.
         Typography = new Typography
         {
             Default = new DefaultTypography
@@ -313,67 +310,63 @@ public static class OwlNetTheme
                 FontSize = ".875rem",
                 FontWeight = "400",
                 LineHeight = "1.5",
-                LetterSpacing = ".00938em",
+                LetterSpacing = "-.011em",
             },
             H1 = new H1Typography
             {
                 FontFamily = FontStack,
-                FontSize = "3rem",
-                FontWeight = "300",
-                LineHeight = "1.167",
-                LetterSpacing = "-.01562em",
+                FontSize = "2.5rem",
+                FontWeight = "600",
+                LineHeight = "1.2",
+                LetterSpacing = "-.025em",
             },
             H2 = new H2Typography
             {
                 FontFamily = FontStack,
-                FontSize = "2.125rem",
-                FontWeight = "300",
-                LineHeight = "1.2",
-                LetterSpacing = "-.00833em",
+                FontSize = "2rem",
+                FontWeight = "600",
+                LineHeight = "1.25",
+                LetterSpacing = "-.025em",
             },
-            // H3 — semibold for page titles like "Projects", "Dashboard"
             H3 = new H3Typography
             {
                 FontFamily = FontStack,
                 FontSize = "1.5rem",
                 FontWeight = "600",
-                LineHeight = "1.267",
-                LetterSpacing = "0",
+                LineHeight = "1.3",
+                LetterSpacing = "-.02em",
             },
-            // H4 — semibold for section headings and card titles
             H4 = new H4Typography
             {
                 FontFamily = FontStack,
                 FontSize = "1.25rem",
                 FontWeight = "600",
                 LineHeight = "1.35",
-                LetterSpacing = ".00735em",
+                LetterSpacing = "-.015em",
             },
-            // H5 — medium weight for sub-section headings
             H5 = new H5Typography
             {
                 FontFamily = FontStack,
-                FontSize = "1.1rem",
+                FontSize = "1.05rem",
                 FontWeight = "500",
                 LineHeight = "1.4",
-                LetterSpacing = "0",
+                LetterSpacing = "-.01em",
             },
-            // H6 is used in the AppBar title — weight 500 for a clean, medium-emphasis look
             H6 = new H6Typography
             {
                 FontFamily = FontStack,
-                FontSize = "1rem",
+                FontSize = ".95rem",
                 FontWeight = "500",
                 LineHeight = "1.5",
-                LetterSpacing = ".0125em",
+                LetterSpacing = "-.005em",
             },
             Subtitle1 = new Subtitle1Typography
             {
                 FontFamily = FontStack,
                 FontSize = "1rem",
                 FontWeight = "400",
-                LineHeight = "1.75",
-                LetterSpacing = ".00938em",
+                LineHeight = "1.65",
+                LetterSpacing = "-.011em",
             },
             Subtitle2 = new Subtitle2Typography
             {
@@ -381,32 +374,31 @@ public static class OwlNetTheme
                 FontSize = ".875rem",
                 FontWeight = "500",
                 LineHeight = "1.57",
-                LetterSpacing = ".00714em",
+                LetterSpacing = "-.006em",
             },
             Body1 = new Body1Typography
             {
                 FontFamily = FontStack,
-                FontSize = "1rem",
+                FontSize = ".9375rem",
                 FontWeight = "400",
-                LineHeight = "1.5",
-                LetterSpacing = ".00938em",
+                LineHeight = "1.6",
+                LetterSpacing = "-.011em",
             },
             Body2 = new Body2Typography
             {
                 FontFamily = FontStack,
-                FontSize = ".875rem",
+                FontSize = ".8125rem",
                 FontWeight = "400",
-                LineHeight = "1.43",
-                LetterSpacing = ".01071em",
+                LineHeight = "1.5",
+                LetterSpacing = "-.006em",
             },
-            // Button — semibold, sentence-case (no uppercase) per the design reference
             Button = new ButtonTypography
             {
                 FontFamily = FontStack,
-                FontSize = ".875rem",
-                FontWeight = "600",
+                FontSize = ".8125rem",
+                FontWeight = "500",
                 LineHeight = "1.75",
-                LetterSpacing = ".02857em",
+                LetterSpacing = "-.011em",
                 TextTransform = "none",
             },
             Caption = new CaptionTypography
@@ -414,26 +406,25 @@ public static class OwlNetTheme
                 FontFamily = FontStack,
                 FontSize = ".75rem",
                 FontWeight = "400",
-                LineHeight = "1.66",
-                LetterSpacing = ".03333em",
+                LineHeight = "1.5",
+                LetterSpacing = "0",
             },
             Overline = new OverlineTypography
             {
                 FontFamily = FontStack,
-                FontSize = ".75rem",
-                FontWeight = "400",
-                LineHeight = "2.66",
-                LetterSpacing = ".08333em",
+                FontSize = ".6875rem",
+                FontWeight = "500",
+                LineHeight = "2.4",
+                LetterSpacing = ".06em",
                 TextTransform = "uppercase",
             },
         },
 
         // -- Layout properties -------------------------------------------------
-        // Increased border radius (8px -> 14px) for a softer, more modern
-        // card/button appearance matching the rounded dashboard design reference.
+        // Moderate border radius (12px) for a clean but friendly appearance.
         LayoutProperties = new LayoutProperties
         {
-            DefaultBorderRadius = "14px",
+            DefaultBorderRadius = "12px",
         },
     };
 }

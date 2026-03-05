@@ -1,100 +1,81 @@
 /* ============================================================================
    AuthLayout.razor.css — Scoped styles for the authentication layout
    ============================================================================
-   This layout uses a two-column design:
-     - Left:  Decorative violet gradient brand panel (hidden on mobile)
-     - Right: White form panel with centered content
+   Two-column design:
+     - Left:  Warm gradient brand panel (hidden on mobile)
+     - Right: Clean form panel with centered content
 
-   Brand colors used in the gradient:
-     #2D1B69 — DrawerBgLight (deep violet, from OwlNetTheme.cs)
-     #6C3FC5 — PrimaryViolet (vibrant violet, from OwlNetTheme.cs)
-     #8B6AD0 — PrimaryVioletLighten (lighter violet accent)
-
-   These are hardcoded in CSS because CSS cannot reference C# constants.
-   If the brand colors change in OwlNetTheme.cs, update them here too.
+   Brand colors: forest green primary + warm earthy tones matching OwlNetTheme.
    ============================================================================ */
 
 
-/* ── Auth container ──────────────────────────────────────────────────────────
-   Full viewport height, CSS grid with two columns on desktop.
-   On mobile (< 960px), the grid collapses to a single column. */
+/* ── Auth container ────────────────────────────────────────────────────────── */
 .auth-container {
     display: grid;
     grid-template-columns: 1fr 1fr;
     min-height: 100vh;
-    min-height: 100dvh; /* Dynamic viewport height — accounts for mobile browser chrome */
+    min-height: 100dvh;
     width: 100%;
     overflow: hidden;
 }
 
 
-/* ── Left panel: decorative violet gradient ──────────────────────────────────
-   Purely decorative brand panel with a diagonal gradient from deep violet
-   to vibrant violet. Hidden on mobile to give the form full width. */
+/* ── Left panel: decorative gradient ─────────────────────────────────────── */
 .auth-brand-panel {
     display: flex;
     align-items: center;
     justify-content: center;
-    /* Gradient from deep violet (bottom-left) to vibrant violet (top-right)
-       matching the OwlNet brand identity — same colors as the sidebar drawer */
-    background: linear-gradient(135deg, #2D1B69 0%, #6C3FC5 60%, #8B6AD0 100%);
+    /* Forest green gradient — warm and professional */
+    background: linear-gradient(135deg, #1B4332 0%, #2D6A4F 50%, #52B788 100%);
     padding: 48px;
     position: relative;
     overflow: hidden;
 }
 
-/* Inner content wrapper — centers the brand text vertically and horizontally */
 .auth-brand-panel-content {
     display: flex;
     flex-direction: column;
     align-items: center;
     text-align: center;
-    z-index: 1; /* Above the decorative illustration */
+    z-index: 1;
     gap: 8px;
 }
 
-/* Owl icon in the brand panel — large, white, prominent */
 .auth-brand-icon {
     color: rgba(255, 255, 255, 0.95);
-    font-size: 3.5rem !important;
+    font-size: 3rem !important;
     margin-bottom: 8px;
 }
 
-/* "OwlNet" title in the brand panel — bold white text */
 .auth-brand-title {
     color: #FFFFFF;
-    font-weight: 700;
-    letter-spacing: 0.02em;
+    font-weight: 600;
+    letter-spacing: -.02em;
 }
 
-/* Tagline below the brand title — semi-transparent white for subtlety */
 .auth-brand-tagline {
-    color: rgba(255, 255, 255, 0.75);
+    color: rgba(255, 255, 255, 0.7);
     max-width: 280px;
     line-height: 1.6;
 }
 
-/* ── Decorative illustration ─────────────────────────────────────────────────
-   A large, faded icon positioned at the bottom-right of the brand panel.
-   Adds visual depth without distracting from the brand text above. */
+
+/* ── Decorative illustration ─────────────────────────────────────────────── */
 .auth-brand-illustration {
     position: absolute;
     bottom: -40px;
     right: -40px;
-    opacity: 0.08;
+    opacity: 0.06;
     pointer-events: none;
 }
 
-/* The illustration icon itself — very large, purely decorative */
 .auth-brand-illustration-icon {
     font-size: 20rem !important;
     color: #FFFFFF;
 }
 
 
-/* ── Right panel: form content area ──────────────────────────────────────────
-   White background with the form centered both vertically and horizontally.
-   Uses the theme's surface color via CSS variable for dark mode compatibility. */
+/* ── Right panel: form area ──────────────────────────────────────────────── */
 .auth-form-panel {
     display: flex;
     align-items: center;
@@ -104,104 +85,84 @@
     overflow-y: auto;
 }
 
-/* Inner wrapper — constrains the form width and provides vertical structure.
-   Uses flexbox column layout with the logo at top, form in middle, footer at bottom. */
 .auth-form-wrapper {
     display: flex;
     flex-direction: column;
     align-items: center;
     width: 100%;
-    max-width: 440px;
+    max-width: 420px;
     min-height: 0;
-    gap: 32px;
+    gap: 28px;
 }
 
 
-/* ── Brand mark (logo + text) ────────────────────────────────────────────────
-   Small brand identifier at the top of the form panel.
-   On mobile (where the left panel is hidden), this is the primary brand element.
-   On desktop, it's a subtle reminder above the form. */
+/* ── Brand mark (logo + text) ────────────────────────────────────────────── */
 .auth-logo {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 8px;
+    gap: 8px;
+    margin-bottom: 4px;
 }
 
-/* Owl icon in the form panel logo — uses the brand primary violet */
 .auth-logo-icon {
-    color: #6C3FC5; /* PrimaryViolet — matches OwlNetTheme.PrimaryViolet */
-    font-size: 2.2rem !important;
+    color: #2D6A4F; /* PrimaryGreen — matches OwlNetTheme */
+    font-size: 2rem !important;
 }
 
-/* "OwlNet" text in the form panel logo — uses primary text color for readability */
 .auth-logo-text {
-    color: var(--mud-palette-text-primary, #212121);
+    color: var(--mud-palette-text-primary, #1A1A1A);
     font-weight: 600;
-    letter-spacing: 0.01em;
+    letter-spacing: -.02em;
 }
 
 
-/* ── Form content area ───────────────────────────────────────────────────────
-   The actual page content (@Body) — login form, register form, etc.
-   Full width within the wrapper so forms can use the available space. */
+/* ── Form content area ───────────────────────────────────────────────────── */
 .auth-form-content {
     width: 100%;
 }
 
 
-/* ── Footer ──────────────────────────────────────────────────────────────────
-   Subtle copyright text at the bottom of the form panel.
-   Uses secondary text color for minimal visual weight. */
+/* ── Footer ──────────────────────────────────────────────────────────────── */
 .auth-footer {
     margin-top: auto;
     padding-top: 24px;
 }
 
 .auth-footer-text {
-    color: var(--mud-palette-text-secondary, #757575);
+    color: var(--mud-palette-text-secondary, #6B7280);
 }
 
 
 /* ============================================================================
    Responsive breakpoints
-   ============================================================================
-   MudBlazor's "md" breakpoint is 960px. Below that, the left brand panel
-   is hidden and the form takes full width for a mobile-friendly experience.
    ============================================================================ */
 
 @media (max-width: 959.98px) {
-    /* Collapse to single column — form only */
     .auth-container {
         grid-template-columns: 1fr;
     }
 
-    /* Hide the decorative brand panel entirely on mobile */
     .auth-brand-panel {
         display: none;
     }
 
-    /* Form panel takes full viewport on mobile */
     .auth-form-panel {
         padding: 24px 16px;
         min-height: 100vh;
         min-height: 100dvh;
     }
 
-    /* Slightly reduce max-width on small screens for better edge spacing */
     .auth-form-wrapper {
         max-width: 400px;
     }
 }
 
-/* ── Extra small screens (< 600px) ───────────────────────────────────────────
-   Tighter padding and reduced spacing for very small devices. */
 @media (max-width: 599.98px) {
     .auth-form-panel {
         padding: 16px 12px;
     }
 
     .auth-form-wrapper {
-        gap: 24px;
+        gap: 20px;
     }
 }
