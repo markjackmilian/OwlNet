@@ -282,7 +282,7 @@ Includi:
 - <any remaining work or follow-up items>
 ```
 
-4. **If the spec is fully implemented**, move it from `specs/todo/` to `specs/done/`.
+4. **If a spec file was referenced**, ask the user: "Vuoi che sposti il file di spec da `specs/todo/` a `specs/done/`?" Proceed with the move only upon explicit confirmation.
 5. **If the spec is partially implemented** (some acceptance criteria still pending), update the user on what remains and leave the spec in `specs/todo/`.
 
 ---
@@ -328,7 +328,7 @@ When the user gives a direct command without a formal spec:
 5. **One spec at a time.** Complete the full cycle before moving to the next spec.
 6. **Maximum 3 rework cycles** before escalating to the user.
 7. **Always read existing code** before delegating changes to existing files. Provide the subagent with the current state of the file.
-8. **Spec lifecycle management**: move completed specs from `specs/todo/` to `specs/done/`. This is your responsibility, not the subagent's.
+8. **Spec lifecycle management**: when a feature is fully complete and a spec file was referenced, ask the user whether to move it from `specs/todo/` to `specs/done/`. Never move it automatically — always wait for explicit user confirmation.
 9. **EF Core migration reminder**: after any entity or DbContext change, remind the user (or delegate to owl-coder) to generate migrations for BOTH SQLite and SQL Server.
 10. **Build and test gates**: run `dotnet build` and `dotnet test` after each major milestone (not after every single file), and always before invoking owl-review.
 11. **Runtime verification**: when you deem it necessary -- especially after changes to service registration, DI configuration, middleware pipeline, authentication, or startup logic -- run `dotnet run --project src/OwlNet.Web` to verify the application starts without runtime errors. Use a short timeout (15-30 seconds) to confirm startup succeeds, then terminate. Do not skip this when changes affect runtime behavior that `dotnet build` alone cannot catch.
