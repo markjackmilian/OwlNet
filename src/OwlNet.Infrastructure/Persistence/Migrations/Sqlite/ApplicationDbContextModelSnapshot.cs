@@ -196,6 +196,11 @@ namespace OwlNet.Infrastructure.Persistence.Migrations.Sqlite
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(false);
 
+                    b.Property<bool>("IsFavorited")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)

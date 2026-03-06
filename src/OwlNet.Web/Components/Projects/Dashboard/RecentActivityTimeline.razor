@@ -1,0 +1,114 @@
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Recent Activity Timeline — Presentational Component
+   ═══════════════════════════════════════════════════════════════════════════════
+   Displays a timeline of the 5 most recent project activity entries using
+   MudTimeline. Each entry shows an action description, the actor who performed
+   it, and a relative timestamp.
+
+   Uses MudTimeline with MudTimelineItem for a clean vertical timeline layout
+   inside a MudPaper card.
+
+   This component uses MOCK DATA — all activity entries are hardcoded.
+   Replace with real data when the activity feed feature is implemented.
+
+   Spec reference: SPEC-002-project-dashboard (FR-12)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+
+<MudPaper Elevation="2" Class="pa-4">
+    <MudStack Spacing="3">
+        @* ── Section title ──────────────────────────────────────────────── *@
+        <MudText Typo="Typo.h6">Recent Activity</MudText>
+
+        @* ── Activity timeline ──────────────────────────────────────────── *@
+        <MudTimeline TimelinePosition="TimelinePosition.Start">
+            @foreach (var entry in _mockActivities)
+            {
+                <MudTimelineItem @key="entry.Description" Color="@entry.DotColor" Size="Size.Small">
+                    <MudStack Spacing="0">
+                        @* ── Action description ─────────────────────────── *@
+                        <MudText Typo="Typo.body2">
+                            @entry.Description
+                        </MudText>
+
+                        @* ── Actor and timestamp on a single line ───────── *@
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Filled.Person"
+                                     Size="Size.Small"
+                                     Color="Color.Default" />
+                            <MudText Typo="Typo.caption" Color="Color.Default">
+                                @entry.Actor
+                            </MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Default">
+                                &bull;
+                            </MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Default">
+                                @entry.TimeAgo
+                            </MudText>
+                        </MudStack>
+                    </MudStack>
+                </MudTimelineItem>
+            }
+        </MudTimeline>
+    </MudStack>
+</MudPaper>
+
+@code {
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Mock Data — replace with real activity feed data when available
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Static mock activity entries representing the 5 most recent project events.
+    /// Each entry has a description, actor name, relative timestamp, and a
+    /// color for the timeline dot based on the action type.
+    /// </summary>
+    private static readonly ActivityEntry[] _mockActivities =
+    [
+        new(
+            Description: "Card 'Setup CI' moved to Done",
+            Actor: "Marco R.",
+            TimeAgo: "1 hour ago",
+            DotColor: Color.Success),    // Done = green dot
+
+        new(
+            Description: "Issue 'Login bug' opened",
+            Actor: "Sara L.",
+            TimeAgo: "3 hours ago",
+            DotColor: Color.Error),      // Issue opened = red dot
+
+        new(
+            Description: "Card 'API Design' moved to In Progress",
+            Actor: "Luca B.",
+            TimeAgo: "5 hours ago",
+            DotColor: Color.Warning),    // In Progress = orange dot
+
+        new(
+            Description: "Sprint 'v1.0' started",
+            Actor: "Marco R.",
+            TimeAgo: "1 day ago",
+            DotColor: Color.Info),       // Sprint event = blue dot
+
+        new(
+            Description: "Card 'DB Schema' created",
+            Actor: "Anna M.",
+            TimeAgo: "2 days ago",
+            DotColor: Color.Primary),    // Card created = primary dot
+    ];
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Supporting Types
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Immutable record representing a single activity timeline entry.
+    /// </summary>
+    /// <param name="Description">What happened (e.g., "Card 'Setup CI' moved to Done").</param>
+    /// <param name="Actor">Name of the person who performed the action.</param>
+    /// <param name="TimeAgo">Human-readable relative timestamp (e.g., "1 hour ago").</param>
+    /// <param name="DotColor">MudBlazor color for the timeline dot, based on action type.</param>
+    private sealed record ActivityEntry(
+        string Description,
+        string Actor,
+        string TimeAgo,
+        Color DotColor);
+}

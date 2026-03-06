@@ -1,0 +1,120 @@
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Recent Issues List — Presentational Component
+   ═══════════════════════════════════════════════════════════════════════════════
+   Displays a list of the 5 most recent project issues. Each item shows the
+   issue title, a status chip (Open/Closed), a color-coded priority indicator,
+   and a relative timestamp.
+
+   Uses MudSimpleTable for a clean, compact layout inside a MudPaper card.
+
+   This component uses MOCK DATA — all issues are hardcoded.
+   Replace with real data when the issue tracking feature is implemented.
+
+   Spec reference: SPEC-002-project-dashboard (FR-11)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+
+<MudPaper Elevation="2" Class="pa-4">
+    <MudStack Spacing="3">
+        @* ── Section title ──────────────────────────────────────────────── *@
+        <MudText Typo="Typo.h6">Recent Issues</MudText>
+
+        @* ── Issues table ───────────────────────────────────────────────── *@
+        <MudSimpleTable Dense="true" Hover="true" Elevation="0">
+            <thead>
+                <tr>
+                    <th>Issue</th>
+                    <th>Status</th>
+                    <th>Priority</th>
+                    <th>When</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var issue in _mockIssues)
+                {
+                    <tr @key="issue.Title">
+                        @* ── Issue title ────────────────────────────────── *@
+                        <td>
+                            <MudText Typo="Typo.body2">@issue.Title</MudText>
+                        </td>
+
+                        @* ── Status chip: Open = success, Closed = default *@
+                        <td>
+                            <MudChip T="string"
+                                     Size="Size.Small"
+                                     Color="@(issue.IsOpen ? Color.Success : Color.Default)"
+                                     Variant="Variant.Filled">
+                                @(issue.IsOpen ? "Open" : "Closed")
+                            </MudChip>
+                        </td>
+
+                        @* ── Priority indicator with color-coded icon ──── *@
+                        <td>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudIcon Icon="@Icons.Material.Filled.Circle"
+                                         Color="@GetPriorityColor(issue.Priority)"
+                                         Size="Size.Small" />
+                                <MudText Typo="Typo.caption">@issue.Priority</MudText>
+                            </MudStack>
+                        </td>
+
+                        @* ── Relative timestamp ────────────────────────── *@
+                        <td>
+                            <MudText Typo="Typo.caption" Color="Color.Default">
+                                @issue.TimeAgo
+                            </MudText>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    </MudStack>
+</MudPaper>
+
+@code {
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Mock Data — replace with real issue data when available
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Static mock issues representing the 5 most recent project issues.
+    /// Each issue has a title, open/closed status, priority level, and
+    /// a human-readable relative timestamp.
+    /// </summary>
+    private static readonly MockIssue[] _mockIssues =
+    [
+        new("Login page not responsive", IsOpen: true, Priority: "High", TimeAgo: "2 hours ago"),
+        new("API rate limiting missing", IsOpen: true, Priority: "Medium", TimeAgo: "5 hours ago"),
+        new("Dashboard charts not loading", IsOpen: false, Priority: "High", TimeAgo: "1 day ago"),
+        new("User avatar upload fails", IsOpen: true, Priority: "Low", TimeAgo: "2 days ago"),
+        new("Search indexing slow", IsOpen: false, Priority: "Medium", TimeAgo: "3 days ago"),
+    ];
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Priority Helpers
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Maps a priority level string to a MudBlazor theme color.
+    /// High = red (error), Medium = orange (warning), Low = green (success).
+    /// </summary>
+    private static Color GetPriorityColor(string priority) => priority switch
+    {
+        "High" => Color.Error,
+        "Medium" => Color.Warning,
+        "Low" => Color.Success,
+        _ => Color.Default,
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Supporting Types
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Immutable record representing a single mock issue entry.
+    /// </summary>
+    /// <param name="Title">Short description of the issue.</param>
+    /// <param name="IsOpen">True if the issue is open, false if closed.</param>
+    /// <param name="Priority">Priority level: "High", "Medium", or "Low".</param>
+    /// <param name="TimeAgo">Human-readable relative timestamp (e.g., "2 hours ago").</param>
+    private sealed record MockIssue(string Title, bool IsOpen, string Priority, string TimeAgo);
+}

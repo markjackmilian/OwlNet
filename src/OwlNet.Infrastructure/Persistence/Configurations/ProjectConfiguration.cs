@@ -33,6 +33,10 @@ public sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
             .IsRequired()
             .HasDefaultValue(false);
 
+        builder.Property(p => p.IsFavorited)
+            .IsRequired()
+            .HasDefaultValue(false);
+
         builder.Property(p => p.CreatedAt)
             .IsRequired();
 

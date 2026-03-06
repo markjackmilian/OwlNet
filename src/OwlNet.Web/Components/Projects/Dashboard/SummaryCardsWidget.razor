@@ -1,0 +1,128 @@
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Summary Cards Widget — Presentational Component
+   ═══════════════════════════════════════════════════════════════════════════════
+   Displays a responsive row of 4 summary statistic cards showing at-a-glance
+   project metrics. Each card includes an icon, label, numeric value, and a
+   color-coded trend indicator (up/down/neutral).
+
+   Layout: 4 columns on md+, 2 on sm, 1 on xs.
+
+   This component uses MOCK DATA — all values are hardcoded for layout
+   validation. Replace with real data when backend metrics are available.
+
+   Spec reference: SPEC-002-project-dashboard (FR-7, FR-8)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+
+<MudGrid Spacing="3">
+    @foreach (var card in _summaryCards)
+    {
+        <MudItem @key="card.Label" xs="12" sm="6" md="3">
+            <MudPaper Elevation="2" Class="pa-4">
+                <MudStack Spacing="2">
+                    @* ── Icon and label row ─────────────────────────────── *@
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@card.Icon"
+                                 Color="Color.Primary"
+                                 Size="Size.Large" />
+                        <MudText Typo="Typo.subtitle2" Color="Color.Default">
+                            @card.Label
+                        </MudText>
+                    </MudStack>
+
+                    @* ── Numeric value ──────────────────────────────────── *@
+                    <MudText Typo="Typo.h4" Style="font-weight: 600;">
+                        @card.Value
+                    </MudText>
+
+                    @* ── Trend indicator with directional icon and text ── *@
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudIcon Icon="@GetTrendIcon(card.Trend)"
+                                 Color="@GetTrendColor(card.Trend)"
+                                 Size="Size.Small" />
+                        <MudText Typo="Typo.caption" Color="@GetTrendColor(card.Trend)">
+                            @card.TrendText
+                        </MudText>
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+    }
+</MudGrid>
+
+@code {
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Mock Data — replace with real project metrics when available
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Static mock summary cards representing key project metrics.
+    /// Each card has an icon, label, display value, trend direction, and trend text.
+    /// </summary>
+    private static readonly SummaryCard[] _summaryCards =
+    [
+        new(Icons.Material.Filled.BugReport, "Open Issues", "12", TrendDirection.UpBad, "+3 this week"),
+        new(Icons.Material.Filled.Assignment, "Cards To Do", "24", TrendDirection.Neutral, "No change"),
+        new(Icons.Material.Filled.TaskAlt, "Cards Done", "87", TrendDirection.UpGood, "+5 this week"),
+        new(Icons.Material.Filled.PieChart, "Completion Rate", "78%", TrendDirection.UpGood, "+2% this week"),
+    ];
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Trend Helpers — map trend direction to icons and colors
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Returns the appropriate Material Design icon for the given trend direction.
+    /// Up trends show an upward arrow, neutral shows a horizontal rule.
+    /// </summary>
+    private static string GetTrendIcon(TrendDirection trend) => trend switch
+    {
+        TrendDirection.UpGood => Icons.Material.Filled.TrendingUp,
+        TrendDirection.UpBad => Icons.Material.Filled.TrendingUp,
+        TrendDirection.Neutral => Icons.Material.Filled.TrendingFlat,
+        _ => Icons.Material.Filled.TrendingFlat,
+    };
+
+    /// <summary>
+    /// Returns the MudBlazor color for the given trend direction.
+    /// UpGood = green (positive), UpBad = red (negative), Neutral = grey.
+    /// </summary>
+    private static Color GetTrendColor(TrendDirection trend) => trend switch
+    {
+        TrendDirection.UpGood => Color.Success,
+        TrendDirection.UpBad => Color.Error,
+        TrendDirection.Neutral => Color.Default,
+        _ => Color.Default,
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Supporting Types
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>Represents the direction and sentiment of a metric trend.</summary>
+    private enum TrendDirection
+    {
+        /// <summary>Value is increasing and that's positive (e.g., cards done).</summary>
+        UpGood,
+
+        /// <summary>Value is increasing and that's negative (e.g., open issues).</summary>
+        UpBad,
+
+        /// <summary>Value is stable / no significant change.</summary>
+        Neutral,
+    }
+
+    /// <summary>
+    /// Immutable record representing a single summary statistic card.
+    /// </summary>
+    /// <param name="Icon">Material Design icon string from Icons.Material.Filled.*.</param>
+    /// <param name="Label">Short label describing the metric (e.g., "Open Issues").</param>
+    /// <param name="Value">Formatted display value (e.g., "12", "78%").</param>
+    /// <param name="Trend">Direction and sentiment of the trend.</param>
+    /// <param name="TrendText">Human-readable trend description (e.g., "+3 this week").</param>
+    private sealed record SummaryCard(
+        string Icon,
+        string Label,
+        string Value,
+        TrendDirection Trend,
+        string TrendText);
+}

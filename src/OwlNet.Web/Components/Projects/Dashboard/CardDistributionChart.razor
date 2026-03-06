@@ -1,0 +1,101 @@
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Card Distribution Chart — Presentational Component
+   ═══════════════════════════════════════════════════════════════════════════════
+   Displays a donut chart showing the distribution of cards across workflow
+   statuses (To Do, In Progress, Done, Blocked). Wrapped in a MudPaper card
+   with a title header.
+
+   Uses MudChart (ChartType.Donut) with InputData/InputLabels for segments.
+
+   This component uses MOCK DATA — all status counts are hardcoded.
+   Replace with real data when the card/board feature is implemented.
+
+   Spec reference: SPEC-002-project-dashboard (FR-10)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+
+<MudPaper Elevation="2" Class="pa-4">
+    <MudStack Spacing="3">
+        @* ── Section title ──────────────────────────────────────────────── *@
+        <MudText Typo="Typo.h6">Card Distribution</MudText>
+
+        @* ── Donut chart with legend at the bottom ──────────────────────── *@
+        @* MudBlazor 9.x: MudChart is generic (T=double for numeric data).
+           InputData/InputLabels were replaced by ChartSeries + ChartLabels. *@
+        <MudChart T="double"
+                  ChartType="ChartType.Donut"
+                  ChartSeries="@_chartSeries"
+                  ChartLabels="@_statusLabels"
+                  Width="100%"
+                  Height="300px"
+                  LegendPosition="Position.Bottom" />
+
+        @* ── Detailed breakdown below the chart ─────────────────────────── *@
+        <MudStack Spacing="1">
+            @foreach (var segment in _segments)
+            {
+                <MudStack @key="segment.Label"
+                          Row="true"
+                          AlignItems="AlignItems.Center"
+                          Justify="Justify.SpaceBetween">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        @* Color dot matching the segment's status color *@
+                        <MudIcon Icon="@Icons.Material.Filled.Circle"
+                                 Color="@segment.Color"
+                                 Size="Size.Small" />
+                        <MudText Typo="Typo.body2">@segment.Label</MudText>
+                    </MudStack>
+                    <MudText Typo="Typo.body2" Style="font-weight: 500;">
+                        @segment.Count
+                    </MudText>
+                </MudStack>
+            }
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@code {
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Mock Data — replace with real card status counts when available
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Mock card status segments with label, count, and display color.
+    /// Colors follow a semantic convention: blue=to-do, orange=in-progress,
+    /// green=done, red=blocked.
+    /// </summary>
+    private static readonly StatusSegment[] _segments =
+    [
+        new("To Do", 24, Color.Info),
+        new("In Progress", 15, Color.Warning),
+        new("Done", 87, Color.Success),
+        new("Blocked", 4, Color.Error),
+    ];
+
+    /// <summary>
+    /// Chart series for the donut chart — single series containing all status counts.
+    /// MudBlazor 9.x requires ChartSeries&lt;T&gt; with ChartData&lt;T&gt; instead of raw double[].
+    /// </summary>
+    private static readonly List<ChartSeries<double>> _chartSeries =
+    [
+        new ChartSeries<double>(_segments.Select(s => (double)s.Count).ToArray())
+        {
+            Name = "Status",
+        },
+    ];
+
+    /// <summary>Labels for the donut chart segments.</summary>
+    private static readonly string[] _statusLabels =
+        _segments.Select(s => s.Label).ToArray();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Supporting Types
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Immutable record representing a card status segment in the distribution chart.
+    /// </summary>
+    /// <param name="Label">Display name of the status (e.g., "To Do").</param>
+    /// <param name="Count">Number of cards in this status.</param>
+    /// <param name="Color">MudBlazor theme color for the segment indicator.</param>
+    private sealed record StatusSegment(string Label, int Count, Color Color);
+}
