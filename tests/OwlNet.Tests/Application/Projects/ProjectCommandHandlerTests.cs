@@ -5,6 +5,7 @@ using OwlNet.Application.Common.Models;
 using OwlNet.Application.Projects.Commands.ArchiveProject;
 using OwlNet.Application.Projects.Commands.CreateProject;
 using OwlNet.Application.Projects.Commands.RestoreProject;
+using OwlNet.Application.Projects.Commands.ToggleProjectFavorite;
 using OwlNet.Application.Projects.Commands.UpdateProject;
 using OwlNet.Application.Projects.Queries.GetAllProjects;
 using OwlNet.Application.Projects.Queries.GetProjectById;
@@ -766,9 +767,9 @@ public sealed class ProjectCommandHandlerTests
         var now = DateTimeOffset.UtcNow;
         var projects = new List<ProjectDto>
         {
-            new(Guid.NewGuid(), "Alpha Project", "First project", false, now, now),
-            new(Guid.NewGuid(), "Beta Project", "Second project", false, now, now),
-            new(Guid.NewGuid(), "Gamma Project", "Third project", false, now, now)
+            new(Guid.NewGuid(), "Alpha Project", "First project", false, false, now, now),
+            new(Guid.NewGuid(), "Beta Project", "Second project", false, false, now, now),
+            new(Guid.NewGuid(), "Gamma Project", "Third project", false, false, now, now)
         };
 
         _repository.GetAllActiveAsync(Arg.Any<CancellationToken>())
@@ -826,7 +827,7 @@ public sealed class ProjectCommandHandlerTests
         // Arrange
         var projectId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
-        var projectDto = new ProjectDto(projectId, "Test Project", "A description", false, now, now);
+        var projectDto = new ProjectDto(projectId, "Test Project", "A description", false, false, now, now);
 
         _repository.GetByIdAsync(projectId, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ProjectDto?>(projectDto));
@@ -858,7 +859,7 @@ public sealed class ProjectCommandHandlerTests
         // Arrange
         var projectId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
-        var projectDto = new ProjectDto(projectId, "Archived Project", "Archived", true, now, now);
+        var projectDto = new ProjectDto(projectId, "Archived Project", "Archived", true, false, now, now);
 
         _repository.GetByIdAsync(projectId, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ProjectDto?>(projectDto));
@@ -907,5 +908,127 @@ public sealed class ProjectCommandHandlerTests
             () => result.IsFailure.ShouldBeTrue(),
             () => result.Error.ShouldBe("Project not found.")
         );
+    }
+
+    // ──────────────────────────────────────────────
+    // ToggleProjectFavoriteCommand — Happy Path
+    // ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task ToggleProjectFavorite_ValidId_ReturnsSuccess()
+    {
+        // Arrange
+        var project = Project.Create("Favorite Project", "Toggle test");
+        var command = new ToggleProjectFavoriteCommand { Id = project.Id };
+
+        _repository.GetEntityByIdAsync(project.Id, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<Project?>(project));
+        _repository.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var sut = new ToggleProjectFavoriteCommandHandler(
+            _repository,
+            NullLogger<ToggleProjectFavoriteCommandHandler>.Instance);
+
+        // Act
+        var result = await sut.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task ToggleProjectFavorite_ValidId_CallsSaveChanges()
+    {
+        // Arrange
+        var project = Project.Create("Favorite Project", "Save test");
+        var command = new ToggleProjectFavoriteCommand { Id = project.Id };
+
+        _repository.GetEntityByIdAsync(project.Id, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<Project?>(project));
+        _repository.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var sut = new ToggleProjectFavoriteCommandHandler(
+            _repository,
+            NullLogger<ToggleProjectFavoriteCommandHandler>.Instance);
+
+        // Act
+        await sut.Handle(command, CancellationToken.None);
+
+        // Assert
+        await _repository.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ToggleProjectFavorite_ValidId_TogglesIsFavorited()
+    {
+        // Arrange
+        var project = Project.Create("Favorite Project", "Toggle state test");
+        project.IsFavorited.ShouldBeFalse();
+
+        var command = new ToggleProjectFavoriteCommand { Id = project.Id };
+
+        _repository.GetEntityByIdAsync(project.Id, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<Project?>(project));
+        _repository.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var sut = new ToggleProjectFavoriteCommandHandler(
+            _repository,
+            NullLogger<ToggleProjectFavoriteCommandHandler>.Instance);
+
+        // Act
+        await sut.Handle(command, CancellationToken.None);
+
+        // Assert
+        project.IsFavorited.ShouldBeTrue();
+    }
+
+    // ──────────────────────────────────────────────
+    // ToggleProjectFavoriteCommand — Not Found
+    // ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task ToggleProjectFavorite_ProjectNotFound_ReturnsFailure()
+    {
+        // Arrange
+        var command = new ToggleProjectFavoriteCommand { Id = Guid.NewGuid() };
+
+        _repository.GetEntityByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<Project?>(null));
+
+        var sut = new ToggleProjectFavoriteCommandHandler(
+            _repository,
+            NullLogger<ToggleProjectFavoriteCommandHandler>.Instance);
+
+        // Act
+        var result = await sut.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.ShouldSatisfyAllConditions(
+            () => result.IsFailure.ShouldBeTrue(),
+            () => result.Error.ShouldBe("Project not found.")
+        );
+    }
+
+    [Fact]
+    public async Task ToggleProjectFavorite_ProjectNotFound_DoesNotSave()
+    {
+        // Arrange
+        var command = new ToggleProjectFavoriteCommand { Id = Guid.NewGuid() };
+
+        _repository.GetEntityByIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<Project?>(null));
+
+        var sut = new ToggleProjectFavoriteCommandHandler(
+            _repository,
+            NullLogger<ToggleProjectFavoriteCommandHandler>.Instance);
+
+        // Act
+        await sut.Handle(command, CancellationToken.None);
+
+        // Assert
+        await _repository.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }

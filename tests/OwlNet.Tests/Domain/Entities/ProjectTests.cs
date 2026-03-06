@@ -376,4 +376,78 @@ public sealed class ProjectTests
 
         exception.Message.ShouldContain("not archived");
     }
+
+    // ──────────────────────────────────────────────
+    // ToggleFavorite
+    // ──────────────────────────────────────────────
+
+    [Fact]
+    public void ToggleFavorite_WhenNotFavorited_SetsIsFavoritedToTrue()
+    {
+        // Arrange
+        var project = Project.Create("Favorite Test", "Toggle favorite");
+        var beforeToggle = project.UpdatedAt;
+        project.IsFavorited.ShouldBeFalse();
+
+        // Act
+        project.ToggleFavorite();
+
+        // Assert
+        project.ShouldSatisfyAllConditions(
+            () => project.IsFavorited.ShouldBeTrue(),
+            () => project.UpdatedAt.ShouldBeGreaterThanOrEqualTo(beforeToggle)
+        );
+    }
+
+    [Fact]
+    public void ToggleFavorite_WhenFavorited_SetsIsFavoritedToFalse()
+    {
+        // Arrange
+        var project = Project.Create("Favorite Test", "Toggle favorite twice");
+        project.ToggleFavorite(); // now true
+        var afterFirstToggle = project.UpdatedAt;
+
+        // Act
+        project.ToggleFavorite(); // now false
+
+        // Assert
+        project.ShouldSatisfyAllConditions(
+            () => project.IsFavorited.ShouldBeFalse(),
+            () => project.UpdatedAt.ShouldBeGreaterThanOrEqualTo(afterFirstToggle)
+        );
+    }
+
+    [Fact]
+    public void ToggleFavorite_WhenArchived_StillToggles()
+    {
+        // Arrange
+        var project = Project.Create("Archived Favorite", "Can still toggle");
+        project.Archive();
+
+        // Act
+        project.ToggleFavorite();
+
+        // Assert
+        project.ShouldSatisfyAllConditions(
+            () => project.IsFavorited.ShouldBeTrue(),
+            () => project.IsArchived.ShouldBeTrue()
+        );
+    }
+
+    [Fact]
+    public void ToggleFavorite_UpdatesUpdatedAtTimestamp()
+    {
+        // Arrange
+        var project = Project.Create("Timestamp Test", "Verify timestamp updates");
+        var createdAt = project.CreatedAt;
+
+        // Act
+        project.ToggleFavorite();
+
+        // Assert
+        project.ShouldSatisfyAllConditions(
+            () => project.UpdatedAt.ShouldBeGreaterThanOrEqualTo(createdAt),
+            () => project.CreatedAt.ShouldBe(createdAt)
+        );
+    }
 }

@@ -1,0 +1,101 @@
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Development Trend Chart — Presentational Component
+   ═══════════════════════════════════════════════════════════════════════════════
+   Displays a line chart showing project development activity over the last
+   30 days. Wrapped in a MudPaper card with a title header.
+
+   Uses MudChart (ChartType.Line) with ChartOptions for axis styling.
+
+   This component uses MOCK DATA — the 30-day activity values are hardcoded
+   with a general upward trend. Replace with real data when activity tracking
+   is implemented.
+
+   Spec reference: SPEC-002-project-dashboard (FR-9)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+
+<MudPaper Elevation="2" Class="pa-4">
+    <MudStack Spacing="3">
+        @* ── Section title ──────────────────────────────────────────────── *@
+        <MudText Typo="Typo.h6">Development Trend</MudText>
+
+        @* ── Line chart showing 30-day activity ─────────────────────────── *@
+        @* MudBlazor 9.x: MudChart is generic (T=double for numeric data).
+           XAxisLabels was renamed to ChartLabels. *@
+        <MudChart T="double"
+                  ChartType="ChartType.Line"
+                  ChartSeries="@_chartSeries"
+                  ChartLabels="@_xAxisLabels"
+                  Width="100%"
+                  Height="300px"
+                  ChartOptions="@_chartOptions" />
+    </MudStack>
+</MudPaper>
+
+@code {
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Chart Configuration
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Chart display options for the line chart.
+    /// MudBlazor 9.x: The old ChartOptions axis properties (YAxisTicks, YAxisLines,
+    /// XAxisLines, MaxNumYAxisTicks) were removed. LineChartOptions is the
+    /// type-specific options class for line charts; axis styling is now handled
+    /// internally by the chart component.
+    /// </summary>
+    private static readonly LineChartOptions _chartOptions = new();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Mock Data — replace with real activity metrics when available
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Mock daily activity counts for the last 30 days.
+    /// Values range from 2–15 with a general upward trend to simulate
+    /// increasing project activity over time.
+    /// </summary>
+    private static readonly double[] _dailyActivity =
+    [
+        3, 5, 2, 4, 6, 4, 3,       // Week 1: low baseline
+        5, 7, 6, 8, 5, 7, 6,       // Week 2: slight increase
+        8, 9, 7, 10, 8, 6, 9,      // Week 3: moderate activity
+        10, 12, 9, 11, 13, 10, 14, // Week 4: strong upward trend
+        12, 15,                      // Days 29–30: peak activity
+    ];
+
+    /// <summary>
+    /// X-axis labels for the chart. Shows every 5th day to avoid label crowding.
+    /// Empty strings for intermediate days keep the axis clean.
+    /// </summary>
+    private static readonly string[] _xAxisLabels = GenerateDayLabels();
+
+    /// <summary>
+    /// Chart series data — single series representing daily activity.
+    /// MudBlazor 9.x: ChartSeries is now generic; Data accepts ChartData&lt;T&gt;
+    /// constructed from the raw double array via the IReadOnlyList&lt;T&gt; constructor.
+    /// </summary>
+    private static readonly List<ChartSeries<double>> _chartSeries =
+    [
+        new ChartSeries<double>(_dailyActivity) { Name = "Activity" },
+    ];
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Helpers
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Generates X-axis labels for 30 days, showing a label every 5th day
+    /// (e.g., "Day 1", "Day 5", "Day 10", ...) and empty strings for the rest
+    /// to prevent visual clutter on the axis.
+    /// </summary>
+    private static string[] GenerateDayLabels()
+    {
+        var labels = new string[30];
+        for (var i = 0; i < 30; i++)
+        {
+            // Show label on day 1 and every 5th day thereafter
+            labels[i] = (i + 1) % 5 == 1 ? $"Day {i + 1}" : string.Empty;
+        }
+        return labels;
+    }
+}

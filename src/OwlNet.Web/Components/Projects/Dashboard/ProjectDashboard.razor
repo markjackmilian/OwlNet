@@ -1,0 +1,383 @@
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Project Dashboard — Smart Page Component
+   ═══════════════════════════════════════════════════════════════════════════════
+   The project's home/landing page. Displays a header with project metadata and
+   a favorite toggle, followed by a responsive grid of dashboard widgets:
+   summary cards, charts, and recent activity lists.
+
+   This is a "smart" component: it injects services, manages state, and
+   delegates rendering to self-contained presentational widget components.
+
+   Route: /projects/{ProjectId:guid}
+
+   Layout structure:
+   ┌─────────────────────────────────────────────────────────────────┐
+   │ PAGE HEADER                                                     │
+   │ Project Name (h4) + Star icon + Description + Creation Date     │
+   ├─────────────────────────────────────────────────────────────────┤
+   │ SUMMARY CARDS (4 columns, handled by SummaryCardsWidget)        │
+   ├──────────────────────────┬──────────────────────────────────────┤
+   │ DEVELOPMENT TREND (md=7) │ CARD DISTRIBUTION (md=5)             │
+   ├──────────────────────────┼──────────────────────────────────────┤
+   │ RECENT ISSUES (md=6)     │ RECENT ACTIVITY (md=6)               │
+   └──────────────────────────┴──────────────────────────────────────┘
+
+   Spec reference: SPEC-002-project-dashboard (FR-1 to FR-6, FR-13 to FR-15)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+
+@page "/projects/{ProjectId:guid}"
+
+@using DispatchR.Abstractions.Send
+@using OwlNet.Application.Common.Models
+@using OwlNet.Application.Projects.Queries.GetProjectById
+@using OwlNet.Application.Projects.Commands.ToggleProjectFavorite
+@using OwlNet.Web.Services
+
+@inject IRequestHandler<GetProjectByIdQuery, ValueTask<Result<ProjectDto>>> GetProjectHandler
+@inject IRequestHandler<ToggleProjectFavoriteCommand, ValueTask<Result>> ToggleFavoriteHandler
+@inject ActiveProjectService ActiveProjectService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+@implements IDisposable
+
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Page Title — updates the browser tab title with the project name
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+<PageTitle>@(_project is not null ? $"{_project.Name} — OwlNet" : "Project — OwlNet")</PageTitle>
+
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Loading State — skeleton placeholders while project data is being fetched
+   (FR-15: loading skeleton on initial load)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+@if (_isLoading)
+{
+    <MudStack Spacing="6">
+        @* ── Header skeleton ──────────────────────────────────────────────── *@
+        <MudStack Spacing="2">
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="60%" Height="40px" />
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="80%" Height="20px" />
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="30%" Height="16px" />
+        </MudStack>
+
+        @* ── Summary cards skeleton ───────────────────────────────────────── *@
+        <MudGrid Spacing="3">
+            @for (var i = 0; i < 4; i++)
+            {
+                <MudItem xs="12" sm="6" md="3">
+                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="120px" />
+                </MudItem>
+            }
+        </MudGrid>
+
+        @* ── Charts skeleton ──────────────────────────────────────────────── *@
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="7">
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="350px" />
+            </MudItem>
+            <MudItem xs="12" md="5">
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="350px" />
+            </MudItem>
+        </MudGrid>
+
+        @* ── Lists skeleton ───────────────────────────────────────────────── *@
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="6">
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="300px" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="300px" />
+            </MudItem>
+        </MudGrid>
+    </MudStack>
+}
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Error State — project not found or archived
+   (FR-3: invalid/archived project shows "Project not found" with CTA)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+else if (_isNotFound)
+{
+    <MudStack AlignItems="AlignItems.Center"
+              Justify="Justify.Center"
+              Spacing="3"
+              Class="py-16">
+        <MudIcon Icon="@Icons.Material.Filled.SearchOff"
+                 Size="Size.Large"
+                 Color="Color.Default" />
+        <MudText Typo="Typo.h5" Align="Align.Center">
+            Project not found
+        </MudText>
+        <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+            The project may have been archived or does not exist.
+        </MudText>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.FolderOpen"
+                   OnClick="@OpenProjectSelectorAsync">
+            Select a project
+        </MudButton>
+    </MudStack>
+}
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Dashboard Content — header + widget grid
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+else if (_project is not null)
+{
+    <MudStack Spacing="6">
+        @* ── Page Header ──────────────────────────────────────────────────────
+           Displays project name with favorite star, description, and creation
+           date. (FR-5: header with name, description, star, date) *@
+        <MudStack Spacing="1">
+            @* Title row: project name + favorite toggle *@
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudText Typo="Typo.h4">@_project.Name</MudText>
+
+                @* Favorite toggle — filled star when favorited, outlined when not.
+                   (FR-5, FR-6: clicking toggles favorite with optimistic UI) *@
+                <MudIconButton Icon="@(_isFavorited
+                                   ? Icons.Material.Filled.Star
+                                   : Icons.Material.Filled.StarBorder)"
+                               Color="@(_isFavorited ? Color.Warning : Color.Default)"
+                               Size="Size.Medium"
+                               OnClick="@ToggleFavoriteAsync"
+                               Disabled="@_isTogglingFavorite"
+                               aria-label="@(_isFavorited
+                                   ? "Remove from favorites"
+                                   : "Add to favorites")" />
+            </MudStack>
+
+            @* Project description — shows "No description" in muted text if empty *@
+            @if (!string.IsNullOrWhiteSpace(_project.Description))
+            {
+                <MudText Typo="Typo.body1" Color="Color.Secondary">
+                    @_project.Description
+                </MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.body1" Color="Color.Tertiary">
+                    No description
+                </MudText>
+            }
+
+            @* Creation date in human-readable format *@
+            <MudText Typo="Typo.caption" Color="Color.Default">
+                Created @_project.CreatedAt.ToString("MMMM dd, yyyy")
+            </MudText>
+        </MudStack>
+
+        @* ── Summary Cards Widget (FR-7, FR-8) ────────────────────────────── *@
+        <SummaryCardsWidget />
+
+        @* ── Charts Row (FR-9, FR-10) ─────────────────────────────────────── *@
+        @* Development Trend takes 7/12 columns on md+, Card Distribution 5/12.
+           Both stack to full width on xs/sm. (FR-13: responsive layout) *@
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="7">
+                <DevelopmentTrendChart />
+            </MudItem>
+            <MudItem xs="12" md="5">
+                <CardDistributionChart />
+            </MudItem>
+        </MudGrid>
+
+        @* ── Lists Row (FR-11, FR-12) ─────────────────────────────────────── *@
+        @* Recent Issues and Recent Activity split evenly on md+,
+           stack to full width on xs/sm. (FR-13: responsive layout) *@
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="6">
+                <RecentIssuesList />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <RecentActivityTimeline />
+            </MudItem>
+        </MudGrid>
+    </MudStack>
+}
+
+@code {
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Parameters
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>The project ID extracted from the URL route segment.</summary>
+    [Parameter]
+    public Guid ProjectId { get; set; }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  State
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>The loaded project data, null until fetch completes.</summary>
+    private ProjectDto? _project;
+
+    /// <summary>True while the initial project data is being fetched.</summary>
+    private bool _isLoading = true;
+
+    /// <summary>True when the project was not found or is archived.</summary>
+    private bool _isNotFound;
+
+    /// <summary>
+    /// Local copy of the favorite state for optimistic UI updates.
+    /// Kept separate from _project.IsFavorited so we can revert on failure.
+    /// </summary>
+    private bool _isFavorited;
+
+    /// <summary>True while the favorite toggle command is in flight.</summary>
+    private bool _isTogglingFavorite;
+
+    /// <summary>Tracks the last loaded ProjectId to skip redundant loads when the parameter hasn't changed.</summary>
+    private Guid _lastLoadedProjectId;
+
+    /// <summary>Cancellation token source for all async operations in this component.</summary>
+    private readonly CancellationTokenSource _cts = new();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Lifecycle
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Loads the project when the component initializes or when the ProjectId
+    /// parameter changes (e.g., navigating between projects).
+    /// Uses OnParametersSetAsync because the route parameter may change without
+    /// the component being re-created (same page, different ID).
+    /// </summary>
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ProjectId == _lastLoadedProjectId)
+        {
+            return;
+        }
+
+        _lastLoadedProjectId = ProjectId;
+        await LoadProjectAsync();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Data Loading
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Fetches the project by ID and updates the component state.
+    /// Sets the project as active in the topbar context if needed (FR-4).
+    /// </summary>
+    private async Task LoadProjectAsync()
+    {
+        _isLoading = true;
+        _isNotFound = false;
+        _project = null;
+        StateHasChanged();
+
+        var query = new GetProjectByIdQuery { Id = ProjectId };
+        var result = await GetProjectHandler.Handle(query, _cts.Token);
+
+        if (result.IsFailure || result.Value.IsArchived)
+        {
+            // Project not found or archived — show error state (FR-3)
+            _isNotFound = true;
+            _isLoading = false;
+            return;
+        }
+
+        _project = result.Value;
+        _isFavorited = _project.IsFavorited;
+        _isLoading = false;
+
+        // FR-4: If the user navigated directly (bookmark, shared link), sync
+        // the active project context so the topbar shows the correct project.
+        if (ActiveProjectService.ActiveProject is null
+            || ActiveProjectService.ActiveProject.Id != _project.Id)
+        {
+            await ActiveProjectService.SetActiveProjectAsync(_project);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Favorite Toggle (FR-5, FR-6)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Toggles the project's favorite status with optimistic UI.
+    /// Immediately flips the star icon, then persists via the command handler.
+    /// Reverts the visual state and shows an error snackbar on failure.
+    /// </summary>
+    private async Task ToggleFavoriteAsync()
+    {
+        if (_project is null)
+        {
+            return;
+        }
+
+        _isTogglingFavorite = true;
+
+        // Optimistic UI: flip the star immediately for responsive feedback
+        var previousState = _isFavorited;
+        _isFavorited = !_isFavorited;
+        StateHasChanged();
+
+        var command = new ToggleProjectFavoriteCommand { Id = _project.Id };
+        var result = await ToggleFavoriteHandler.Handle(command, _cts.Token);
+
+        if (result.IsSuccess)
+        {
+            // Re-fetch the project to get the authoritative state from the server
+            var refreshQuery = new GetProjectByIdQuery { Id = _project.Id };
+            var refreshResult = await GetProjectHandler.Handle(refreshQuery, _cts.Token);
+
+            if (refreshResult.IsSuccess)
+            {
+                _project = refreshResult.Value;
+                _isFavorited = _project.IsFavorited;
+
+                // Keep the active project context in sync with the updated data
+                ActiveProjectService.UpdateActiveProjectData(_project);
+            }
+
+            Snackbar.Add(
+                _isFavorited ? "Added to favorites" : "Removed from favorites",
+                Severity.Success);
+        }
+        else
+        {
+            // Revert the optimistic UI change on failure
+            _isFavorited = previousState;
+            Snackbar.Add("Could not update favorite. Please try again.", Severity.Error);
+        }
+
+        _isTogglingFavorite = false;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Error State Actions
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Opens the project selector modal so the user can pick a different project.
+    /// Used as the CTA on the "Project not found" error state (FR-3).
+    /// </summary>
+    private async Task OpenProjectSelectorAsync()
+    {
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true,
+            CloseOnEscapeKey = true,
+            NoHeader = false
+        };
+
+        await DialogService.ShowAsync<ProjectSelectorModal>(
+            "Select a Project",
+            options);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Cleanup
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

@@ -40,6 +40,7 @@ public sealed class ProjectRepository : IProjectRepository
                 p.Name,
                 p.Description,
                 p.IsArchived,
+                p.IsFavorited,
                 p.CreatedAt,
                 p.UpdatedAt))
             .ToListAsync(cancellationToken);
@@ -56,6 +57,7 @@ public sealed class ProjectRepository : IProjectRepository
                 p.Name,
                 p.Description,
                 p.IsArchived,
+                p.IsFavorited,
                 p.CreatedAt,
                 p.UpdatedAt))
             .FirstOrDefaultAsync(cancellationToken);

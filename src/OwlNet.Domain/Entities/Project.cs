@@ -29,6 +29,12 @@ public sealed class Project
     public bool IsArchived { get; private set; }
 
     /// <summary>
+    /// Gets a value indicating whether this project has been marked as a favorite.
+    /// Defaults to <see langword="false"/>.
+    /// </summary>
+    public bool IsFavorited { get; private set; }
+
+    /// <summary>
     /// Gets the UTC timestamp indicating when this project was first created.
     /// </summary>
     public DateTimeOffset CreatedAt { get; private set; }
@@ -73,6 +79,7 @@ public sealed class Project
             Name = name,
             Description = description ?? string.Empty,
             IsArchived = false,
+            IsFavorited = false,
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -118,6 +125,15 @@ public sealed class Project
         }
 
         IsArchived = true;
+        UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    /// <summary>
+    /// Toggles the <see cref="IsFavorited"/> state and refreshes the <see cref="UpdatedAt"/> timestamp.
+    /// </summary>
+    public void ToggleFavorite()
+    {
+        IsFavorited = !IsFavorited;
         UpdatedAt = DateTimeOffset.UtcNow;
     }
 
