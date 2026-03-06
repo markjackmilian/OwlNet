@@ -175,6 +175,43 @@ namespace OwlNet.Infrastructure.Persistence.Migrations.Sqlite
                     b.ToTable("AppSettings", (string)null);
                 });
 
+            modelBuilder.Entity("OwlNet.Domain.Entities.Project", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("");
+
+                    b.Property<bool>("IsArchived")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Projects", (string)null);
+                });
+
             modelBuilder.Entity("OwlNet.Infrastructure.Identity.ApplicationUser", b =>
                 {
                     b.Property<string>("Id")

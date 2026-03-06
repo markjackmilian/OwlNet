@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using OwlNet.Application.Common.Interfaces;
 using OwlNet.Infrastructure.Identity;
 using OwlNet.Infrastructure.Persistence;
+using OwlNet.Infrastructure.Persistence.Repositories;
 using OwlNet.Infrastructure.Services;
 
 namespace OwlNet.Infrastructure;
@@ -54,6 +55,7 @@ public static class DependencyInjection
             .AddEntityFrameworkStores<ApplicationDbContext>()
             .AddDefaultTokenProviders();
 
+        services.AddScoped<IProjectRepository, ProjectRepository>();
         services.AddScoped<IAppSettingService, AppSettingService>();
         services.AddSingleton<ICliService, CliService>();
         services.AddSingleton<IEncryptionService, EncryptionService>();
