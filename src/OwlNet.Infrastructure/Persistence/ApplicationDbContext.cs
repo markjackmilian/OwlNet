@@ -29,6 +29,11 @@ public sealed class ApplicationDbContext : IdentityDbContext<ApplicationUser, Id
     public DbSet<AppSetting> AppSettings => Set<AppSetting>();
 
     /// <summary>
+    /// Gets the set of <see cref="Project"/> entities representing projects.
+    /// </summary>
+    public DbSet<Project> Projects => Set<Project>();
+
+    /// <summary>
     /// Configures the model by applying Identity table mappings and all
     /// <see cref="IEntityTypeConfiguration{TEntity}"/> implementations from the Infrastructure assembly.
     /// </summary>

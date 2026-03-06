@@ -1,7 +1,11 @@
 @inherits LayoutComponentBase
 @implements IDisposable
 
+@using OwlNet.Web.Services
+
 @inject NavigationManager NavigationManager
+@inject ActiveProjectService ActiveProjectService
+@inject IDialogService DialogService
 
 @* MudBlazor theme provider — uses the minimalist warm OwlNet theme.
    Dark mode is two-way bound so the toggle in the drawer footer updates the provider. *@
@@ -21,6 +25,26 @@
                        Edge="Edge.Start"
                        OnClick="@ToggleDrawer"
                        aria-label="Toggle navigation drawer" />
+
+        @* ── Active project indicator ────────────────────────────────────────
+           Shows the currently active project name, or a placeholder prompt.
+           Clicking opens the project selector modal. *@
+        <MudButton Variant="Variant.Text"
+                   Color="Color.Inherit"
+                   StartIcon="@Icons.Material.Filled.Folder"
+                   OnClick="@OpenProjectSelectorAsync"
+                   Class="ml-2 project-indicator"
+                   aria-label="Select project">
+            @if (ActiveProjectService.ActiveProject is not null)
+            {
+                @ActiveProjectService.ActiveProject.Name
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Style="opacity: 0.7;">Select a project</MudText>
+            }
+        </MudButton>
+
         <MudSpacer />
         @* Dark/light mode toggle *@
         <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Rounded.LightMode : Icons.Material.Rounded.DarkMode)"
@@ -172,16 +196,52 @@
     /// <summary>Tracks the current URL for the logout return-URL parameter.</summary>
     private string? _currentUrl;
 
+    /// <summary>Whether the active project has been restored from sessionStorage.</summary>
+    private bool _projectRestored;
+
     protected override void OnInitialized()
     {
         _currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
         NavigationManager.LocationChanged += OnLocationChanged;
+        ActiveProjectService.OnActiveProjectChanged += OnActiveProjectChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !_projectRestored)
+        {
+            _projectRestored = true;
+            await ActiveProjectService.RestoreFromSessionStorageAsync();
+            StateHasChanged();
+        }
     }
 
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
         _currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
         StateHasChanged();
+    }
+
+    /// <summary>Called when the active project changes — triggers a re-render of the topbar indicator.</summary>
+    private void OnActiveProjectChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>Opens the project selector modal dialog.</summary>
+    private async Task OpenProjectSelectorAsync()
+    {
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true,
+            CloseOnEscapeKey = true,
+            NoHeader = false
+        };
+
+        await DialogService.ShowAsync<OwlNet.Web.Components.Projects.ProjectSelectorModal>(
+            string.Empty,
+            options);
     }
 
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
@@ -191,5 +251,6 @@
     public void Dispose()
     {
         NavigationManager.LocationChanged -= OnLocationChanged;
+        ActiveProjectService.OnActiveProjectChanged -= OnActiveProjectChanged;
     }
 }

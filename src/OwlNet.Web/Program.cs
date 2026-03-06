@@ -9,6 +9,7 @@ using OwlNet.Infrastructure.Identity;
 using OwlNet.Infrastructure.Persistence;
 using OwlNet.Web.Components;
 using OwlNet.Web.Components.Account;
+using OwlNet.Web.Services;
 using Serilog;
 
 // ---------------------------------------------------------------------------
@@ -63,6 +64,12 @@ try
     // MudBlazor — Material Design component library
     // -----------------------------------------------------------------------
     builder.Services.AddMudServices();
+
+    // -----------------------------------------------------------------------
+    // Active Project Context — scoped service managing the selected project
+    // per circuit (Blazor Server connection). Persists to sessionStorage.
+    // -----------------------------------------------------------------------
+    builder.Services.AddScoped<ActiveProjectService>();
 
     // -----------------------------------------------------------------------
     // ASP.NET Core Identity — authentication & authorization scaffolding
