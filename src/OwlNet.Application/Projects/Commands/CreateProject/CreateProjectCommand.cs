@@ -14,6 +14,11 @@ public sealed record CreateProjectCommand : IRequest<CreateProjectCommand, Value
     public required string Name { get; init; }
 
     /// <summary>
+    /// The absolute filesystem path of the project folder. Required, maximum 500 characters.
+    /// </summary>
+    public required string Path { get; init; }
+
+    /// <summary>
     /// The optional project description. Maximum 500 characters.
     /// </summary>
     public string? Description { get; init; }

@@ -23,11 +23,15 @@ namespace OwlNet.Tests.Application.Projects;
 /// </summary>
 public sealed class ProjectCommandHandlerTests
 {
+    private const string DefaultPath = @"C:\Projects\TestProject";
+
     private readonly IProjectRepository _repository;
+    private readonly IFileSystem _fileSystem;
 
     public ProjectCommandHandlerTests()
     {
         _repository = Substitute.For<IProjectRepository>();
+        _fileSystem = Substitute.For<IFileSystem>();
     }
 
     // ──────────────────────────────────────────────
@@ -38,10 +42,13 @@ public sealed class ProjectCommandHandlerTests
     public async Task CreateProject_ValidCommand_ReturnsSuccessWithProjectId()
     {
         // Arrange
-        var command = new CreateProjectCommand { Name = "New Project", Description = "A test project" };
+        var command = new CreateProjectCommand { Name = "New Project", Path = DefaultPath, Description = "A test project" };
 
         _repository.ExistsWithNameAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(false));
+        _repository.ExistsWithPathAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _fileSystem.DirectoryExists(Arg.Any<string>()).Returns(true);
         _repository.AddAsync(Arg.Any<Project>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
         _repository.SaveChangesAsync(Arg.Any<CancellationToken>())
@@ -49,6 +56,7 @@ public sealed class ProjectCommandHandlerTests
 
         var sut = new CreateProjectCommandHandler(
             _repository,
+            _fileSystem,
             NullLogger<CreateProjectCommandHandler>.Instance);
 
         // Act
@@ -65,10 +73,13 @@ public sealed class ProjectCommandHandlerTests
     public async Task CreateProject_ValidCommand_PersistsProjectToRepository()
     {
         // Arrange
-        var command = new CreateProjectCommand { Name = "Persisted Project", Description = "Should be saved" };
+        var command = new CreateProjectCommand { Name = "Persisted Project", Path = DefaultPath, Description = "Should be saved" };
 
         _repository.ExistsWithNameAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(false));
+        _repository.ExistsWithPathAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _fileSystem.DirectoryExists(Arg.Any<string>()).Returns(true);
         _repository.AddAsync(Arg.Any<Project>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
         _repository.SaveChangesAsync(Arg.Any<CancellationToken>())
@@ -76,6 +87,7 @@ public sealed class ProjectCommandHandlerTests
 
         var sut = new CreateProjectCommandHandler(
             _repository,
+            _fileSystem,
             NullLogger<CreateProjectCommandHandler>.Instance);
 
         // Act
@@ -92,10 +104,13 @@ public sealed class ProjectCommandHandlerTests
     public async Task CreateProject_NullDescription_PersistsProjectWithEmptyDescription()
     {
         // Arrange
-        var command = new CreateProjectCommand { Name = "No Description", Description = null };
+        var command = new CreateProjectCommand { Name = "No Description", Path = DefaultPath, Description = null };
 
         _repository.ExistsWithNameAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(false));
+        _repository.ExistsWithPathAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _fileSystem.DirectoryExists(Arg.Any<string>()).Returns(true);
         _repository.AddAsync(Arg.Any<Project>(), Arg.Any<CancellationToken>())
             .Returns(Task.CompletedTask);
         _repository.SaveChangesAsync(Arg.Any<CancellationToken>())
@@ -103,6 +118,7 @@ public sealed class ProjectCommandHandlerTests
 
         var sut = new CreateProjectCommandHandler(
             _repository,
+            _fileSystem,
             NullLogger<CreateProjectCommandHandler>.Instance);
 
         // Act
@@ -127,13 +143,14 @@ public sealed class ProjectCommandHandlerTests
     public async Task CreateProject_DuplicateName_ReturnsFailure()
     {
         // Arrange
-        var command = new CreateProjectCommand { Name = "Existing Project", Description = "Duplicate" };
+        var command = new CreateProjectCommand { Name = "Existing Project", Path = DefaultPath, Description = "Duplicate" };
 
         _repository.ExistsWithNameAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(true));
 
         var sut = new CreateProjectCommandHandler(
             _repository,
+            _fileSystem,
             NullLogger<CreateProjectCommandHandler>.Instance);
 
         // Act
@@ -150,13 +167,14 @@ public sealed class ProjectCommandHandlerTests
     public async Task CreateProject_DuplicateName_DoesNotPersist()
     {
         // Arrange
-        var command = new CreateProjectCommand { Name = "Existing Project", Description = "Duplicate" };
+        var command = new CreateProjectCommand { Name = "Existing Project", Path = DefaultPath, Description = "Duplicate" };
 
         _repository.ExistsWithNameAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(true));
 
         var sut = new CreateProjectCommandHandler(
             _repository,
+            _fileSystem,
             NullLogger<CreateProjectCommandHandler>.Instance);
 
         // Act
@@ -168,6 +186,201 @@ public sealed class ProjectCommandHandlerTests
     }
 
     // ──────────────────────────────────────────────
+    // CreateProjectCommand — Duplicate Path
+    // ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task CreateProject_DuplicatePath_ReturnsFailure()
+    {
+        // Arrange
+        var command = new CreateProjectCommand { Name = "New Project", Path = DefaultPath, Description = "Duplicate path" };
+
+        _repository.ExistsWithNameAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _repository.ExistsWithPathAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(true));
+
+        var sut = new CreateProjectCommandHandler(
+            _repository,
+            _fileSystem,
+            NullLogger<CreateProjectCommandHandler>.Instance);
+
+        // Act
+        var result = await sut.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.ShouldSatisfyAllConditions(
+            () => result.IsFailure.ShouldBeTrue(),
+            () => result.Error.ShouldBe("A project with this path already exists.")
+        );
+    }
+
+    [Fact]
+    public async Task CreateProject_DuplicatePath_DoesNotPersist()
+    {
+        // Arrange
+        var command = new CreateProjectCommand { Name = "New Project", Path = DefaultPath, Description = "Duplicate path" };
+
+        _repository.ExistsWithNameAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _repository.ExistsWithPathAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(true));
+
+        var sut = new CreateProjectCommandHandler(
+            _repository,
+            _fileSystem,
+            NullLogger<CreateProjectCommandHandler>.Instance);
+
+        // Act
+        await sut.Handle(command, CancellationToken.None);
+
+        // Assert
+        await _repository.DidNotReceive().AddAsync(Arg.Any<Project>(), Arg.Any<CancellationToken>());
+        await _repository.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CreateProject_DuplicatePath_DoesNotCheckDirectoryExistence()
+    {
+        // Arrange
+        var command = new CreateProjectCommand { Name = "New Project", Path = DefaultPath, Description = "Duplicate path" };
+
+        _repository.ExistsWithNameAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _repository.ExistsWithPathAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(true));
+
+        var sut = new CreateProjectCommandHandler(
+            _repository,
+            _fileSystem,
+            NullLogger<CreateProjectCommandHandler>.Instance);
+
+        // Act
+        await sut.Handle(command, CancellationToken.None);
+
+        // Assert
+        _fileSystem.DidNotReceive().DirectoryExists(Arg.Any<string>());
+    }
+
+    // ──────────────────────────────────────────────
+    // CreateProjectCommand — Directory Does Not Exist
+    // ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task CreateProject_DirectoryDoesNotExist_ReturnsFailure()
+    {
+        // Arrange
+        var command = new CreateProjectCommand { Name = "New Project", Path = DefaultPath, Description = "Missing directory" };
+
+        _repository.ExistsWithNameAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _repository.ExistsWithPathAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _fileSystem.DirectoryExists(Arg.Any<string>()).Returns(false);
+
+        var sut = new CreateProjectCommandHandler(
+            _repository,
+            _fileSystem,
+            NullLogger<CreateProjectCommandHandler>.Instance);
+
+        // Act
+        var result = await sut.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.ShouldSatisfyAllConditions(
+            () => result.IsFailure.ShouldBeTrue(),
+            () => result.Error.ShouldBe("The specified directory does not exist.")
+        );
+    }
+
+    [Fact]
+    public async Task CreateProject_DirectoryDoesNotExist_DoesNotPersist()
+    {
+        // Arrange
+        var command = new CreateProjectCommand { Name = "New Project", Path = DefaultPath, Description = "Missing directory" };
+
+        _repository.ExistsWithNameAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _repository.ExistsWithPathAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _fileSystem.DirectoryExists(Arg.Any<string>()).Returns(false);
+
+        var sut = new CreateProjectCommandHandler(
+            _repository,
+            _fileSystem,
+            NullLogger<CreateProjectCommandHandler>.Instance);
+
+        // Act
+        await sut.Handle(command, CancellationToken.None);
+
+        // Assert
+        await _repository.DidNotReceive().AddAsync(Arg.Any<Project>(), Arg.Any<CancellationToken>());
+        await _repository.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    // ──────────────────────────────────────────────
+    // CreateProjectCommand — Path is persisted correctly
+    // ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task CreateProject_ValidCommand_PersistsProjectWithTrimmedPath()
+    {
+        // Arrange
+        var command = new CreateProjectCommand { Name = "Trimmed Path Project", Path = @"  C:\Projects\Test  ", Description = "Path with spaces" };
+
+        _repository.ExistsWithNameAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _repository.ExistsWithPathAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _fileSystem.DirectoryExists(Arg.Any<string>()).Returns(true);
+        _repository.AddAsync(Arg.Any<Project>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        _repository.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var sut = new CreateProjectCommandHandler(
+            _repository,
+            _fileSystem,
+            NullLogger<CreateProjectCommandHandler>.Instance);
+
+        // Act
+        await sut.Handle(command, CancellationToken.None);
+
+        // Assert
+        await _repository.Received(1).AddAsync(
+            Arg.Is<Project>(p => p.Path == @"C:\Projects\Test"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CreateProject_ValidCommand_ChecksDirectoryWithTrimmedPath()
+    {
+        // Arrange
+        var command = new CreateProjectCommand { Name = "Trimmed Check Project", Path = @"  C:\Projects\Test  ", Description = "Path with spaces" };
+
+        _repository.ExistsWithNameAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _repository.ExistsWithPathAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _fileSystem.DirectoryExists(Arg.Any<string>()).Returns(true);
+        _repository.AddAsync(Arg.Any<Project>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        _repository.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var sut = new CreateProjectCommandHandler(
+            _repository,
+            _fileSystem,
+            NullLogger<CreateProjectCommandHandler>.Instance);
+
+        // Act
+        await sut.Handle(command, CancellationToken.None);
+
+        // Assert
+        _fileSystem.Received(1).DirectoryExists(@"C:\Projects\Test");
+    }
+
+    // ──────────────────────────────────────────────
     // UpdateProjectCommand — Happy Path
     // ──────────────────────────────────────────────
 
@@ -175,7 +388,7 @@ public sealed class ProjectCommandHandlerTests
     public async Task UpdateProject_ValidCommand_ReturnsSuccess()
     {
         // Arrange
-        var project = Project.Create("Original Name", "Original description");
+        var project = Project.Create("Original Name", DefaultPath, "Original description");
         var command = new UpdateProjectCommand
         {
             Id = project.Id,
@@ -205,7 +418,7 @@ public sealed class ProjectCommandHandlerTests
     public async Task UpdateProject_ValidCommand_UpdatesEntityAndSaves()
     {
         // Arrange
-        var project = Project.Create("Original Name", "Original description");
+        var project = Project.Create("Original Name", DefaultPath, "Original description");
         var command = new UpdateProjectCommand
         {
             Id = project.Id,
@@ -239,7 +452,7 @@ public sealed class ProjectCommandHandlerTests
     public async Task UpdateProject_ValidCommand_ChecksNameUniquenessWithExcludedId()
     {
         // Arrange
-        var project = Project.Create("Original Name", "Original description");
+        var project = Project.Create("Original Name", DefaultPath, "Original description");
         var command = new UpdateProjectCommand
         {
             Id = project.Id,
@@ -333,7 +546,7 @@ public sealed class ProjectCommandHandlerTests
     public async Task UpdateProject_ArchivedProject_ReturnsFailure()
     {
         // Arrange
-        var project = Project.Create("Archived Project", "Cannot update");
+        var project = Project.Create("Archived Project", DefaultPath, "Cannot update");
         project.Archive();
 
         var command = new UpdateProjectCommand
@@ -364,7 +577,7 @@ public sealed class ProjectCommandHandlerTests
     public async Task UpdateProject_ArchivedProject_DoesNotCheckNameOrSave()
     {
         // Arrange
-        var project = Project.Create("Archived Project", "Cannot update");
+        var project = Project.Create("Archived Project", DefaultPath, "Cannot update");
         project.Archive();
 
         var command = new UpdateProjectCommand
@@ -398,7 +611,7 @@ public sealed class ProjectCommandHandlerTests
     public async Task UpdateProject_DuplicateName_ReturnsFailure()
     {
         // Arrange
-        var project = Project.Create("Original Name", "Original description");
+        var project = Project.Create("Original Name", DefaultPath, "Original description");
         var command = new UpdateProjectCommand
         {
             Id = project.Id,
@@ -429,7 +642,7 @@ public sealed class ProjectCommandHandlerTests
     public async Task UpdateProject_DuplicateName_DoesNotUpdateEntityOrSave()
     {
         // Arrange
-        var project = Project.Create("Original Name", "Original description");
+        var project = Project.Create("Original Name", DefaultPath, "Original description");
         var command = new UpdateProjectCommand
         {
             Id = project.Id,
@@ -462,7 +675,7 @@ public sealed class ProjectCommandHandlerTests
     public async Task ArchiveProject_ActiveProject_ReturnsSuccess()
     {
         // Arrange
-        var project = Project.Create("Active Project", "Will be archived");
+        var project = Project.Create("Active Project", DefaultPath, "Will be archived");
         var command = new ArchiveProjectCommand { Id = project.Id };
 
         _repository.GetEntityByIdAsync(project.Id, Arg.Any<CancellationToken>())
@@ -485,7 +698,7 @@ public sealed class ProjectCommandHandlerTests
     public async Task ArchiveProject_ActiveProject_SetsIsArchivedAndSaves()
     {
         // Arrange
-        var project = Project.Create("Active Project", "Will be archived");
+        var project = Project.Create("Active Project", DefaultPath, "Will be archived");
         var command = new ArchiveProjectCommand { Id = project.Id };
 
         _repository.GetEntityByIdAsync(project.Id, Arg.Any<CancellationToken>())
@@ -560,7 +773,7 @@ public sealed class ProjectCommandHandlerTests
     public async Task ArchiveProject_AlreadyArchived_ReturnsFailure()
     {
         // Arrange
-        var project = Project.Create("Archived Project", "Already archived");
+        var project = Project.Create("Archived Project", DefaultPath, "Already archived");
         project.Archive();
 
         var command = new ArchiveProjectCommand { Id = project.Id };
@@ -586,7 +799,7 @@ public sealed class ProjectCommandHandlerTests
     public async Task ArchiveProject_AlreadyArchived_DoesNotSave()
     {
         // Arrange
-        var project = Project.Create("Archived Project", "Already archived");
+        var project = Project.Create("Archived Project", DefaultPath, "Already archived");
         project.Archive();
 
         var command = new ArchiveProjectCommand { Id = project.Id };
@@ -613,7 +826,7 @@ public sealed class ProjectCommandHandlerTests
     public async Task RestoreProject_ArchivedProject_ReturnsSuccess()
     {
         // Arrange
-        var project = Project.Create("Archived Project", "Will be restored");
+        var project = Project.Create("Archived Project", DefaultPath, "Will be restored");
         project.Archive();
 
         var command = new RestoreProjectCommand { Id = project.Id };
@@ -638,7 +851,7 @@ public sealed class ProjectCommandHandlerTests
     public async Task RestoreProject_ArchivedProject_ClearsIsArchivedAndSaves()
     {
         // Arrange
-        var project = Project.Create("Archived Project", "Will be restored");
+        var project = Project.Create("Archived Project", DefaultPath, "Will be restored");
         project.Archive();
 
         var command = new RestoreProjectCommand { Id = project.Id };
@@ -715,7 +928,7 @@ public sealed class ProjectCommandHandlerTests
     public async Task RestoreProject_ActiveProject_ReturnsFailure()
     {
         // Arrange
-        var project = Project.Create("Active Project", "Not archived");
+        var project = Project.Create("Active Project", DefaultPath, "Not archived");
         var command = new RestoreProjectCommand { Id = project.Id };
 
         _repository.GetEntityByIdAsync(project.Id, Arg.Any<CancellationToken>())
@@ -739,7 +952,7 @@ public sealed class ProjectCommandHandlerTests
     public async Task RestoreProject_ActiveProject_DoesNotSave()
     {
         // Arrange
-        var project = Project.Create("Active Project", "Not archived");
+        var project = Project.Create("Active Project", DefaultPath, "Not archived");
         var command = new RestoreProjectCommand { Id = project.Id };
 
         _repository.GetEntityByIdAsync(project.Id, Arg.Any<CancellationToken>())
@@ -767,9 +980,9 @@ public sealed class ProjectCommandHandlerTests
         var now = DateTimeOffset.UtcNow;
         var projects = new List<ProjectDto>
         {
-            new(Guid.NewGuid(), "Alpha Project", "First project", false, false, now, now),
-            new(Guid.NewGuid(), "Beta Project", "Second project", false, false, now, now),
-            new(Guid.NewGuid(), "Gamma Project", "Third project", false, false, now, now)
+            new(Guid.NewGuid(), "Alpha Project", @"C:\Alpha", "First project", false, false, now, now),
+            new(Guid.NewGuid(), "Beta Project", @"C:\Beta", "Second project", false, false, now, now),
+            new(Guid.NewGuid(), "Gamma Project", @"C:\Gamma", "Third project", false, false, now, now)
         };
 
         _repository.GetAllActiveAsync(Arg.Any<CancellationToken>())
@@ -827,7 +1040,7 @@ public sealed class ProjectCommandHandlerTests
         // Arrange
         var projectId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
-        var projectDto = new ProjectDto(projectId, "Test Project", "A description", false, false, now, now);
+        var projectDto = new ProjectDto(projectId, "Test Project", DefaultPath, "A description", false, false, now, now);
 
         _repository.GetByIdAsync(projectId, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ProjectDto?>(projectDto));
@@ -846,6 +1059,7 @@ public sealed class ProjectCommandHandlerTests
             () => result.IsSuccess.ShouldBeTrue(),
             () => result.Value.Id.ShouldBe(projectId),
             () => result.Value.Name.ShouldBe("Test Project"),
+            () => result.Value.Path.ShouldBe(DefaultPath),
             () => result.Value.Description.ShouldBe("A description"),
             () => result.Value.IsArchived.ShouldBeFalse(),
             () => result.Value.CreatedAt.ShouldBe(now),
@@ -859,7 +1073,7 @@ public sealed class ProjectCommandHandlerTests
         // Arrange
         var projectId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
-        var projectDto = new ProjectDto(projectId, "Archived Project", "Archived", true, false, now, now);
+        var projectDto = new ProjectDto(projectId, "Archived Project", DefaultPath, "Archived", true, false, now, now);
 
         _repository.GetByIdAsync(projectId, Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<ProjectDto?>(projectDto));
@@ -918,7 +1132,7 @@ public sealed class ProjectCommandHandlerTests
     public async Task ToggleProjectFavorite_ValidId_ReturnsSuccess()
     {
         // Arrange
-        var project = Project.Create("Favorite Project", "Toggle test");
+        var project = Project.Create("Favorite Project", DefaultPath, "Toggle test");
         var command = new ToggleProjectFavoriteCommand { Id = project.Id };
 
         _repository.GetEntityByIdAsync(project.Id, Arg.Any<CancellationToken>())
@@ -941,7 +1155,7 @@ public sealed class ProjectCommandHandlerTests
     public async Task ToggleProjectFavorite_ValidId_CallsSaveChanges()
     {
         // Arrange
-        var project = Project.Create("Favorite Project", "Save test");
+        var project = Project.Create("Favorite Project", DefaultPath, "Save test");
         var command = new ToggleProjectFavoriteCommand { Id = project.Id };
 
         _repository.GetEntityByIdAsync(project.Id, Arg.Any<CancellationToken>())
@@ -964,7 +1178,7 @@ public sealed class ProjectCommandHandlerTests
     public async Task ToggleProjectFavorite_ValidId_TogglesIsFavorited()
     {
         // Arrange
-        var project = Project.Create("Favorite Project", "Toggle state test");
+        var project = Project.Create("Favorite Project", DefaultPath, "Toggle state test");
         project.IsFavorited.ShouldBeFalse();
 
         var command = new ToggleProjectFavoriteCommand { Id = project.Id };
