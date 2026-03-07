@@ -4,7 +4,8 @@ namespace OwlNet.Application.Projects.Commands.CreateProject;
 
 /// <summary>
 /// FluentValidation validator for <see cref="CreateProjectCommand"/>.
-/// Enforces name length (3-100 chars) and description length (max 500 chars) constraints.
+/// Enforces name length (3-100 chars), path (required, max 500 chars),
+/// and description length (max 500 chars) constraints.
 /// </summary>
 public sealed class CreateProjectCommandValidator : AbstractValidator<CreateProjectCommand>
 {
@@ -17,6 +18,10 @@ public sealed class CreateProjectCommandValidator : AbstractValidator<CreateProj
             .NotEmpty().WithMessage("Project name is required.")
             .MinimumLength(3).WithMessage("Project name must be at least 3 characters.")
             .MaximumLength(100).WithMessage("Project name must not exceed 100 characters.");
+
+        RuleFor(x => x.Path)
+            .NotEmpty().WithMessage("Path is required.")
+            .MaximumLength(500).WithMessage("Path must not exceed 500 characters.");
 
         RuleFor(x => x.Description)
             .MaximumLength(500).WithMessage("Project description must not exceed 500 characters.")

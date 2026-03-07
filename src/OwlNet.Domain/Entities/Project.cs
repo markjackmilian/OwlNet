@@ -17,6 +17,13 @@ public sealed class Project
     public string Name { get; private set; } = string.Empty;
 
     /// <summary>
+    /// Gets the absolute filesystem path of the project folder.
+    /// This value is set only via <see cref="Create"/> and is immutable after creation.
+    /// Must not be empty or whitespace and must not exceed 500 characters.
+    /// </summary>
+    public string Path { get; private set; } = string.Empty;
+
+    /// <summary>
     /// Gets the optional plain-text description. May be an empty string but never <see langword="null"/>.
     /// Maximum 500 characters.
     /// </summary>
@@ -50,10 +57,14 @@ public sealed class Project
     private Project() { }
 
     /// <summary>
-    /// Creates a new <see cref="Project"/> with the specified name and optional description.
+    /// Creates a new <see cref="Project"/> with the specified name, filesystem path, and optional description.
     /// </summary>
     /// <param name="name">
     /// The project name. Must not be <see langword="null"/> or whitespace and must be between 3 and 100 characters.
+    /// </param>
+    /// <param name="path">
+    /// The absolute filesystem path of the project folder. Must not be <see langword="null"/> or whitespace
+    /// and must not exceed 500 characters. The value is trimmed before assignment.
     /// </param>
     /// <param name="description">
     /// An optional plain-text description. A <see langword="null"/> value is coerced to <see cref="string.Empty"/>.
@@ -64,11 +75,15 @@ public sealed class Project
     /// Thrown when <paramref name="name"/> is <see langword="null"/>, empty, whitespace, or not between 3 and 100 characters.
     /// </exception>
     /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="path"/> is <see langword="null"/>, empty, or whitespace, or exceeds 500 characters.
+    /// </exception>
+    /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="description"/> exceeds 500 characters.
     /// </exception>
-    public static Project Create(string name, string? description)
+    public static Project Create(string name, string path, string? description)
     {
         ValidateName(name);
+        ValidatePath(path);
         ValidateDescription(description);
 
         var now = DateTimeOffset.UtcNow;
@@ -77,6 +92,7 @@ public sealed class Project
         {
             Id = Guid.NewGuid(),
             Name = name,
+            Path = path.Trim(),
             Description = description ?? string.Empty,
             IsArchived = false,
             IsFavorited = false,
@@ -164,6 +180,19 @@ public sealed class Project
         if (name.Length < 3 || name.Length > 100)
         {
             throw new ArgumentException("Project name must be between 3 and 100 characters.", nameof(name));
+        }
+    }
+
+    private static void ValidatePath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new ArgumentException("Project path must not be null or whitespace.", nameof(path));
+        }
+
+        if (path.Trim().Length > 500)
+        {
+            throw new ArgumentException("Project path must not exceed 500 characters.", nameof(path));
         }
     }
 

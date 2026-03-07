@@ -5,6 +5,7 @@ namespace OwlNet.Application.Common.Models;
 /// </summary>
 /// <param name="Id">The unique project identifier.</param>
 /// <param name="Name">The project name.</param>
+/// <param name="Path">The absolute filesystem path of the project folder.</param>
 /// <param name="Description">The optional project description.</param>
 /// <param name="IsArchived">Whether the project is archived.</param>
 /// <param name="IsFavorited">Whether the project is marked as a favorite.</param>
@@ -13,6 +14,7 @@ namespace OwlNet.Application.Common.Models;
 public sealed record ProjectDto(
     Guid Id,
     string Name,
+    string Path,
     string Description,
     bool IsArchived,
     bool IsFavorited,

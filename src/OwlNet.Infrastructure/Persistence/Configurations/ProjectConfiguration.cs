@@ -6,7 +6,7 @@ namespace OwlNet.Infrastructure.Persistence.Configurations;
 
 /// <summary>
 /// EF Core Fluent API configuration for the <see cref="Project"/> entity.
-/// Maps the entity to the <c>Projects</c> table with a unique case-insensitive index on <see cref="Project.Name"/>.
+/// Maps the entity to the <c>Projects</c> table with unique indexes on <see cref="Project.Name"/> and <see cref="Project.Path"/>.
 /// </summary>
 public sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
 {
@@ -22,6 +22,13 @@ public sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
             .HasMaxLength(100);
 
         builder.HasIndex(p => p.Name)
+            .IsUnique();
+
+        builder.Property(p => p.Path)
+            .IsRequired()
+            .HasMaxLength(500);
+
+        builder.HasIndex(p => p.Path)
             .IsUnique();
 
         builder.Property(p => p.Description)

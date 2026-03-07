@@ -189,6 +189,20 @@
                               Disabled="@_isSaving" />
 
                 <MudTextField T="string"
+                              @bind-Value="_formPath"
+                              Label="Path"
+                              Required="true"
+                              RequiredError="Project path is required"
+                              Variant="Variant.Outlined"
+                              Counter="500"
+                              MaxLength="500"
+                              Immediate="true"
+                              Error="@(!string.IsNullOrEmpty(_formPathError))"
+                              ErrorText="@_formPathError"
+                              Disabled="@(_isSaving || _viewMode == ViewMode.Edit)"
+                              HelperText="@(_viewMode == ViewMode.Edit ? "Path cannot be changed after creation" : "Absolute path to the project folder")" />
+
+                <MudTextField T="string"
                               @bind-Value="_formDescription"
                               Label="Description (optional)"
                               Variant="Variant.Outlined"
@@ -292,11 +306,17 @@
     /// <summary>The project name in the create/edit form.</summary>
     private string _formName = string.Empty;
 
+    /// <summary>The absolute filesystem path in the create form. Read-only in edit mode.</summary>
+    private string _formPath = string.Empty;
+
     /// <summary>The project description in the create/edit form.</summary>
     private string _formDescription = string.Empty;
 
     /// <summary>Inline error for the name field (e.g., duplicate name).</summary>
     private string _formNameError = string.Empty;
+
+    /// <summary>Inline error for the path field (e.g., duplicate path, directory not found).</summary>
+    private string _formPathError = string.Empty;
 
     /// <summary>General form error message.</summary>
     private string _formError = string.Empty;
@@ -312,7 +332,8 @@
     /// Save button is disabled when the name is too short or a save is in progress.
     /// </summary>
     private bool IsSaveDisabled =>
-        string.IsNullOrWhiteSpace(_formName) || _formName.Trim().Length < 3 || _isSaving;
+        string.IsNullOrWhiteSpace(_formName) || _formName.Trim().Length < 3 || _isSaving
+        || (_viewMode == ViewMode.Create && string.IsNullOrWhiteSpace(_formPath));
 
     // ═══════════════════════════════════════════════════════════════════════════
     //  Lifecycle
@@ -393,6 +414,7 @@
         _viewMode = ViewMode.Create;
         _editingProject = null;
         _formName = string.Empty;
+        _formPath = string.Empty;
         _formDescription = string.Empty;
         ClearFormErrors();
     }
@@ -403,6 +425,7 @@
         _viewMode = ViewMode.Edit;
         _editingProject = project;
         _formName = project.Name;
+        _formPath = project.Path;
         _formDescription = project.Description;
         ClearFormErrors();
     }
@@ -454,6 +477,7 @@
         var command = new CreateProjectCommand
         {
             Name = _formName.Trim(),
+            Path = _formPath.Trim(),
             Description = string.IsNullOrWhiteSpace(_formDescription) ? null : _formDescription.Trim()
         };
 
@@ -512,6 +536,11 @@
         {
             _formNameError = error;
         }
+        else if (error.Contains("path already exists", StringComparison.OrdinalIgnoreCase)
+                 || error.Contains("directory does not exist", StringComparison.OrdinalIgnoreCase))
+        {
+            _formPathError = error;
+        }
         else
         {
             _formError = error;
@@ -565,6 +594,7 @@
     private void ClearFormErrors()
     {
         _formNameError = string.Empty;
+        _formPathError = string.Empty;
         _formError = string.Empty;
     }
 

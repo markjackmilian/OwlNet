@@ -46,6 +46,18 @@ public interface IProjectRepository
     Task<bool> ExistsWithNameAsync(string name, Guid? excludeId = null, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Checks whether a project with the given filesystem path already exists.
+    /// The check includes all projects (active and archived) to prevent path conflicts.
+    /// </summary>
+    /// <param name="path">The filesystem path to check.</param>
+    /// <param name="excludeId">
+    /// An optional project ID to exclude from the check (for future use during updates).
+    /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns><see langword="true"/> if a project with the path exists; otherwise <see langword="false"/>.</returns>
+    Task<bool> ExistsWithPathAsync(string path, Guid? excludeId = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Adds a new project to the data store.
     /// </summary>
     /// <param name="project">The project entity to add.</param>

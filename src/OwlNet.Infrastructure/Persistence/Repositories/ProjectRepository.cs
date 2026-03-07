@@ -38,6 +38,7 @@ public sealed class ProjectRepository : IProjectRepository
             .Select(p => new ProjectDto(
                 p.Id,
                 p.Name,
+                p.Path,
                 p.Description,
                 p.IsArchived,
                 p.IsFavorited,
@@ -55,6 +56,7 @@ public sealed class ProjectRepository : IProjectRepository
             .Select(p => new ProjectDto(
                 p.Id,
                 p.Name,
+                p.Path,
                 p.Description,
                 p.IsArchived,
                 p.IsFavorited,
@@ -83,6 +85,27 @@ public sealed class ProjectRepository : IProjectRepository
         // permanently delete the archived project (future feature).
         var query = _dbContext.Projects
             .Where(p => p.Name.ToLower() == name.ToLower());
+
+        if (excludeId.HasValue)
+        {
+            query = query.Where(p => p.Id != excludeId.Value);
+        }
+
+        return await query.AnyAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> ExistsWithPathAsync(
+        string path,
+        Guid? excludeId = null,
+        CancellationToken cancellationToken = default)
+    {
+        // Path uniqueness is enforced across ALL projects (including archived ones).
+        // Comparison is case-insensitive because Windows filesystem paths are
+        // case-insensitive. This prevents two projects from pointing at the same
+        // directory even when casing differs (e.g. "C:\Code" vs "c:\code").
+        var query = _dbContext.Projects
+            .Where(p => p.Path.ToLower() == path.Trim().ToLower());
 
         if (excludeId.HasValue)
         {

@@ -12,6 +12,8 @@ namespace OwlNet.Tests.Domain.Entities;
 /// </summary>
 public sealed class ProjectTests
 {
+    private const string DefaultPath = @"C:\Projects\TestProject";
+
     // ──────────────────────────────────────────────
     // Create — Happy Path
     // ──────────────────────────────────────────────
@@ -21,11 +23,12 @@ public sealed class ProjectTests
     {
         // Arrange
         var name = "OwlNet Project";
+        var path = @"C:\Projects\OwlNet";
         var description = "A sample project for testing.";
         var before = DateTimeOffset.UtcNow;
 
         // Act
-        var project = Project.Create(name, description);
+        var project = Project.Create(name, path, description);
 
         // Assert
         var after = DateTimeOffset.UtcNow;
@@ -33,6 +36,7 @@ public sealed class ProjectTests
         project.ShouldSatisfyAllConditions(
             () => project.Id.ShouldNotBe(Guid.Empty),
             () => project.Name.ShouldBe(name),
+            () => project.Path.ShouldBe(path),
             () => project.Description.ShouldBe(description),
             () => project.IsArchived.ShouldBeFalse(),
             () => project.CreatedAt.ShouldBe(project.UpdatedAt),
@@ -48,7 +52,7 @@ public sealed class ProjectTests
         string? description = null;
 
         // Act
-        var project = Project.Create("Valid Name", description);
+        var project = Project.Create("Valid Name", DefaultPath, description);
 
         // Assert
         project.Description.ShouldBe(string.Empty);
@@ -58,7 +62,7 @@ public sealed class ProjectTests
     public void Create_ValidNameOnly_SetsDescriptionToEmpty()
     {
         // Arrange & Act
-        var project = Project.Create("Another Project", null);
+        var project = Project.Create("Another Project", DefaultPath, null);
 
         // Assert
         project.ShouldSatisfyAllConditions(
@@ -79,7 +83,7 @@ public sealed class ProjectTests
 
         // Act & Assert
         var exception = Should.Throw<ArgumentException>(
-            () => Project.Create(name, "Some description"));
+            () => Project.Create(name, DefaultPath, "Some description"));
 
         exception.ParamName.ShouldBe("name");
     }
@@ -92,7 +96,7 @@ public sealed class ProjectTests
 
         // Act & Assert
         var exception = Should.Throw<ArgumentException>(
-            () => Project.Create(name, "Some description"));
+            () => Project.Create(name, DefaultPath, "Some description"));
 
         exception.ParamName.ShouldBe("name");
     }
@@ -106,7 +110,7 @@ public sealed class ProjectTests
     {
         // Act & Assert
         var exception = Should.Throw<ArgumentException>(
-            () => Project.Create(name, "Some description"));
+            () => Project.Create(name, DefaultPath, "Some description"));
 
         exception.ParamName.ShouldBe("name");
     }
@@ -118,7 +122,7 @@ public sealed class ProjectTests
     {
         // Act & Assert
         var exception = Should.Throw<ArgumentException>(
-            () => Project.Create(name, "Some description"));
+            () => Project.Create(name, DefaultPath, "Some description"));
 
         exception.ShouldSatisfyAllConditions(
             () => exception.ParamName.ShouldBe("name"),
@@ -134,7 +138,7 @@ public sealed class ProjectTests
 
         // Act & Assert
         var exception = Should.Throw<ArgumentException>(
-            () => Project.Create(name, "Some description"));
+            () => Project.Create(name, DefaultPath, "Some description"));
 
         exception.ShouldSatisfyAllConditions(
             () => exception.ParamName.ShouldBe("name"),
@@ -149,7 +153,7 @@ public sealed class ProjectTests
         var name = "Abc";
 
         // Act
-        var project = Project.Create(name, null);
+        var project = Project.Create(name, DefaultPath, null);
 
         // Assert
         project.Name.ShouldBe(name);
@@ -162,10 +166,99 @@ public sealed class ProjectTests
         var name = new string('x', 100);
 
         // Act
-        var project = Project.Create(name, null);
+        var project = Project.Create(name, DefaultPath, null);
 
         // Assert
         project.Name.ShouldBe(name);
+    }
+
+    // ──────────────────────────────────────────────
+    // Create — Path Validation
+    // ──────────────────────────────────────────────
+
+    [Fact]
+    public void Create_NullPath_ThrowsArgumentException()
+    {
+        // Arrange
+        string path = null!;
+
+        // Act & Assert
+        var exception = Should.Throw<ArgumentException>(
+            () => Project.Create("Valid Name", path, "Some description"));
+
+        exception.ParamName.ShouldBe("path");
+    }
+
+    [Fact]
+    public void Create_EmptyPath_ThrowsArgumentException()
+    {
+        // Arrange
+        var path = string.Empty;
+
+        // Act & Assert
+        var exception = Should.Throw<ArgumentException>(
+            () => Project.Create("Valid Name", path, "Some description"));
+
+        exception.ParamName.ShouldBe("path");
+    }
+
+    [Theory]
+    [InlineData(" ")]
+    [InlineData("  ")]
+    [InlineData("\t")]
+    [InlineData("\n")]
+    public void Create_WhitespacePath_ThrowsArgumentException(string path)
+    {
+        // Act & Assert
+        var exception = Should.Throw<ArgumentException>(
+            () => Project.Create("Valid Name", path, "Some description"));
+
+        exception.ShouldSatisfyAllConditions(
+            () => exception.ParamName.ShouldBe("path"),
+            () => exception.Message.ShouldContain("must not be null or whitespace")
+        );
+    }
+
+    [Fact]
+    public void Create_PathTooLong_ThrowsArgumentException()
+    {
+        // Arrange
+        var path = new string('p', 501);
+
+        // Act & Assert
+        var exception = Should.Throw<ArgumentException>(
+            () => Project.Create("Valid Name", path, "Some description"));
+
+        exception.ShouldSatisfyAllConditions(
+            () => exception.ParamName.ShouldBe("path"),
+            () => exception.Message.ShouldContain("500")
+        );
+    }
+
+    [Fact]
+    public void Create_PathExactly500Chars_Succeeds()
+    {
+        // Arrange
+        var path = new string('p', 500);
+
+        // Act
+        var project = Project.Create("Valid Name", path, null);
+
+        // Assert
+        project.Path.ShouldBe(path);
+    }
+
+    [Fact]
+    public void Create_PathWithLeadingAndTrailingSpaces_IsTrimmed()
+    {
+        // Arrange
+        var path = @"  C:\Projects\Test  ";
+
+        // Act
+        var project = Project.Create("Valid Name", path, null);
+
+        // Assert
+        project.Path.ShouldBe(@"C:\Projects\Test");
     }
 
     // ──────────────────────────────────────────────
@@ -180,7 +273,7 @@ public sealed class ProjectTests
 
         // Act & Assert
         var exception = Should.Throw<ArgumentException>(
-            () => Project.Create("Valid Name", description));
+            () => Project.Create("Valid Name", DefaultPath, description));
 
         exception.ShouldSatisfyAllConditions(
             () => exception.ParamName.ShouldBe("description"),
@@ -195,7 +288,7 @@ public sealed class ProjectTests
         var description = new string('d', 500);
 
         // Act
-        var project = Project.Create("Valid Name", description);
+        var project = Project.Create("Valid Name", DefaultPath, description);
 
         // Assert
         project.Description.ShouldBe(description);
@@ -209,7 +302,7 @@ public sealed class ProjectTests
     public void Update_ValidNameAndDescription_UpdatesPropertiesAndTimestamp()
     {
         // Arrange
-        var project = Project.Create("Original Name", "Original description");
+        var project = Project.Create("Original Name", DefaultPath, "Original description");
         var createdAt = project.CreatedAt;
         var newName = "Updated Name";
         var newDescription = "Updated description";
@@ -230,13 +323,31 @@ public sealed class ProjectTests
     public void Update_NullDescription_CoercesToEmptyString()
     {
         // Arrange
-        var project = Project.Create("Original Name", "Has a description");
+        var project = Project.Create("Original Name", DefaultPath, "Has a description");
 
         // Act
         project.Update("Updated Name", null);
 
         // Assert
         project.Description.ShouldBe(string.Empty);
+    }
+
+    // ──────────────────────────────────────────────
+    // Update — Does NOT Change Path
+    // ──────────────────────────────────────────────
+
+    [Fact]
+    public void Update_DoesNotChangePath()
+    {
+        // Arrange
+        var originalPath = @"C:\Projects\Original";
+        var project = Project.Create("Original Name", originalPath, "Original description");
+
+        // Act
+        project.Update("Updated Name", "Updated description");
+
+        // Assert
+        project.Path.ShouldBe(originalPath);
     }
 
     // ──────────────────────────────────────────────
@@ -247,7 +358,7 @@ public sealed class ProjectTests
     public void Update_NullName_ThrowsArgumentException()
     {
         // Arrange
-        var project = Project.Create("Valid Name", null);
+        var project = Project.Create("Valid Name", DefaultPath, null);
 
         // Act & Assert
         var exception = Should.Throw<ArgumentException>(
@@ -260,7 +371,7 @@ public sealed class ProjectTests
     public void Update_NameTooShort_ThrowsArgumentException()
     {
         // Arrange
-        var project = Project.Create("Valid Name", null);
+        var project = Project.Create("Valid Name", DefaultPath, null);
 
         // Act & Assert
         var exception = Should.Throw<ArgumentException>(
@@ -276,7 +387,7 @@ public sealed class ProjectTests
     public void Update_NameTooLong_ThrowsArgumentException()
     {
         // Arrange
-        var project = Project.Create("Valid Name", null);
+        var project = Project.Create("Valid Name", DefaultPath, null);
         var longName = new string('x', 101);
 
         // Act & Assert
@@ -293,7 +404,7 @@ public sealed class ProjectTests
     public void Update_DescriptionTooLong_ThrowsArgumentException()
     {
         // Arrange
-        var project = Project.Create("Valid Name", null);
+        var project = Project.Create("Valid Name", DefaultPath, null);
         var longDescription = new string('d', 501);
 
         // Act & Assert
@@ -314,7 +425,7 @@ public sealed class ProjectTests
     public void Archive_ActiveProject_SetsIsArchivedAndUpdatesTimestamp()
     {
         // Arrange
-        var project = Project.Create("Active Project", "Will be archived");
+        var project = Project.Create("Active Project", DefaultPath, "Will be archived");
         var createdAt = project.CreatedAt;
 
         // Act
@@ -332,7 +443,7 @@ public sealed class ProjectTests
     public void Archive_AlreadyArchived_ThrowsInvalidOperationException()
     {
         // Arrange
-        var project = Project.Create("Active Project", null);
+        var project = Project.Create("Active Project", DefaultPath, null);
         project.Archive();
 
         // Act & Assert
@@ -350,7 +461,7 @@ public sealed class ProjectTests
     public void Restore_ArchivedProject_ClearsIsArchivedAndUpdatesTimestamp()
     {
         // Arrange
-        var project = Project.Create("Archived Project", "Will be restored");
+        var project = Project.Create("Archived Project", DefaultPath, "Will be restored");
         project.Archive();
         var archivedAt = project.UpdatedAt;
 
@@ -368,7 +479,7 @@ public sealed class ProjectTests
     public void Restore_ActiveProject_ThrowsInvalidOperationException()
     {
         // Arrange
-        var project = Project.Create("Active Project", null);
+        var project = Project.Create("Active Project", DefaultPath, null);
 
         // Act & Assert
         var exception = Should.Throw<InvalidOperationException>(
@@ -385,7 +496,7 @@ public sealed class ProjectTests
     public void ToggleFavorite_WhenNotFavorited_SetsIsFavoritedToTrue()
     {
         // Arrange
-        var project = Project.Create("Favorite Test", "Toggle favorite");
+        var project = Project.Create("Favorite Test", DefaultPath, "Toggle favorite");
         var beforeToggle = project.UpdatedAt;
         project.IsFavorited.ShouldBeFalse();
 
@@ -403,7 +514,7 @@ public sealed class ProjectTests
     public void ToggleFavorite_WhenFavorited_SetsIsFavoritedToFalse()
     {
         // Arrange
-        var project = Project.Create("Favorite Test", "Toggle favorite twice");
+        var project = Project.Create("Favorite Test", DefaultPath, "Toggle favorite twice");
         project.ToggleFavorite(); // now true
         var afterFirstToggle = project.UpdatedAt;
 
@@ -421,7 +532,7 @@ public sealed class ProjectTests
     public void ToggleFavorite_WhenArchived_StillToggles()
     {
         // Arrange
-        var project = Project.Create("Archived Favorite", "Can still toggle");
+        var project = Project.Create("Archived Favorite", DefaultPath, "Can still toggle");
         project.Archive();
 
         // Act
@@ -438,7 +549,7 @@ public sealed class ProjectTests
     public void ToggleFavorite_UpdatesUpdatedAtTimestamp()
     {
         // Arrange
-        var project = Project.Create("Timestamp Test", "Verify timestamp updates");
+        var project = Project.Create("Timestamp Test", DefaultPath, "Verify timestamp updates");
         var createdAt = project.CreatedAt;
 
         // Act
