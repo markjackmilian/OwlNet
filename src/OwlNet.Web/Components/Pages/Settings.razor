@@ -92,8 +92,13 @@ else
 {
     <MudStack Spacing="4">
 
+        @* ── Card: OpenCode Server ───────────────────────────────────────
+           Panel component for configuring the OpenCode Server connection,
+           managing the server process (start/stop), and monitoring status. *@
+        <OpenCodeServerPanel />
+
         @* ── Card: OpenCode Health Check ─────────────────────────────────
-           Panel component handling OpenCode integration health-check,
+           Panel component handling OpenCode CLI tool health-check,
            version display, and installation via NPM. *@
         <OpenCodeHealthCheckPanel />
 

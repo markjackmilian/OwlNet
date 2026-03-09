@@ -1,0 +1,54 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   OpenCode Server status indicator — compact badge for the TopBar.
+   Uses MudBlazor theme CSS variables for colors so it adapts to dark/light mode.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Container button — minimal padding for a tight fit in the AppBar.
+   Overrides MudButton defaults to remove text-transform and reduce min-width. */
+::deep .opencode-status-indicator {
+    text-transform: none !important;
+    min-width: auto !important;
+    padding: 4px 8px !important;
+    gap: 6px;
+}
+
+/* ── Status dot — small colored circle ──────────────────────────────────── */
+
+.opencode-status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* ── Dot color variants — driven by MudBlazor theme palette variables ──── */
+
+/* Running: green — server is healthy and responding */
+.opencode-status-dot--running {
+    background-color: var(--mud-palette-success);
+}
+
+/* Stopped / Unknown: muted gray — server is not active */
+.opencode-status-dot--stopped,
+.opencode-status-dot--unknown {
+    background-color: var(--mud-palette-text-disabled);
+}
+
+/* Starting / Stopping: amber — transitional state in progress */
+.opencode-status-dot--starting,
+.opencode-status-dot--stopping {
+    background-color: var(--mud-palette-warning);
+}
+
+/* Error: red — server encountered a problem */
+.opencode-status-dot--error {
+    background-color: var(--mud-palette-error);
+}
+
+/* ── Status text — small, subtle caption next to the dot ────────────────── */
+
+::deep .opencode-status-text {
+    white-space: nowrap;
+    opacity: 0.85;
+}

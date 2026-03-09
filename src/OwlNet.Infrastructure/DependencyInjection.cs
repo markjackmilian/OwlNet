@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using OwlNet.Application.Common.Constants;
 using OwlNet.Application.Common.Interfaces;
 using OwlNet.Infrastructure.Identity;
 using OwlNet.Infrastructure.Persistence;
@@ -66,6 +67,21 @@ public static class DependencyInjection
             client.BaseAddress = new Uri("https://openrouter.ai/api/v1/");
             client.Timeout = TimeSpan.FromSeconds(15);
         });
+
+        // ── OpenCode Server integration ─────────────────────────────────────
+        // Typed HTTP client for OpenCode Server API calls.
+        // No BaseAddress — the URL is resolved at request time from IAppSettingService.
+        services.AddHttpClient<IOpenCodeClient, OpenCodeClient>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(OpenCodeConstants.DefaultTimeoutSeconds);
+        });
+
+        // Singleton manager for the OpenCode Server process lifecycle.
+        // Registered as singleton because it manages a single global process.
+        services.AddSingleton<IOpenCodeServerManager, OpenCodeServerManager>();
+
+        // Background service for auto-start and periodic health check polling.
+        services.AddHostedService<OpenCodeServerHostedService>();
 
         return services;
     }
