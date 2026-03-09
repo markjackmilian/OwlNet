@@ -1,6 +1,6 @@
 # SPEC: Project-Scoped Navigation Shell
 
-> **Status:** Todo
+> **Status:** Done
 > **Created:** 2026-03-09
 > **Author:** owl-planner + user
 > **Priority:** High
