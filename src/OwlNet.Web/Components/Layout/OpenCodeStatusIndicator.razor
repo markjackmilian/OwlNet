@@ -1,0 +1,134 @@
+@*
+    OpenCode Server status indicator — compact badge for the TopBar.
+
+    Displays a small colored dot + status text inside the MudAppBar.
+    - Running:  green dot  + "v{version}" (e.g., "v1.2.20")
+    - Stopped:  gray dot   + "Offline"
+    - Starting: amber dot  + "Starting..."
+    - Stopping: amber dot  + "Stopping..."
+    - Error:    red dot    + "Error"
+    - Unknown:  gray dot   + "..."
+
+    Clicking the indicator navigates to /settings so the user can manage the server.
+    A tooltip provides full status details on hover.
+*@
+
+@using OwlNet.Application.Common.Interfaces
+@using OwlNet.Application.Common.Models
+
+@inject IOpenCodeServerManager ServerManager
+@inject NavigationManager NavigationManager
+
+@implements IDisposable
+
+@* Tooltip shows full status details (state, version, URL, or error message) *@
+<MudTooltip Text="@TooltipText" Placement="Placement.Bottom">
+    @* Text button styled to blend into the AppBar — clicking navigates to Settings *@
+    <MudButton Variant="Variant.Text"
+               Color="Color.Inherit"
+               Size="Size.Small"
+               OnClick="@NavigateToSettings"
+               Class="opencode-status-indicator"
+               aria-label="OpenCode Server status">
+        @* Colored dot — CSS class determines the color based on server state *@
+        <span class="opencode-status-dot @DotCssClass"></span>
+        @* Status text — version number when running, descriptive label otherwise *@
+        <MudText Typo="Typo.caption" Class="opencode-status-text">@StatusText</MudText>
+    </MudButton>
+</MudTooltip>
+
+@code {
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Lifecycle — subscribe to server status changes for real-time updates
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    protected override void OnInitialized()
+    {
+        // Subscribe to status change events so the indicator updates in real-time
+        // when the server starts, stops, or encounters an error
+        ServerManager.OnStatusChanged += OnStatusChanged;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Event Handlers
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Called by <see cref="IOpenCodeServerManager.OnStatusChanged"/> when the server
+    /// state changes. Triggers a UI re-render on the Blazor synchronization context.
+    /// </summary>
+    private void OnStatusChanged()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Navigates to the Settings page where the user can manage the OpenCode Server
+    /// (configure URL, start/stop, test connection).
+    /// </summary>
+    private void NavigateToSettings()
+    {
+        NavigationManager.NavigateTo("/settings");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Computed Properties — derived UI state for the indicator display
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>The current server status snapshot from the server manager.</summary>
+    private OpenCodeServerStatus Status => ServerManager.CurrentStatus;
+
+    /// <summary>
+    /// Short text displayed next to the dot. Shows the version when running,
+    /// or a brief state description otherwise.
+    /// </summary>
+    private string StatusText => Status.State switch
+    {
+        OpenCodeServerState.Running => $"v{Status.Version}",
+        OpenCodeServerState.Stopped => "Offline",
+        OpenCodeServerState.Starting => "Starting...",
+        OpenCodeServerState.Stopping => "Stopping...",
+        OpenCodeServerState.Error => "Error",
+        _ => "..."
+    };
+
+    /// <summary>
+    /// CSS class applied to the status dot to set its color via theme CSS variables.
+    /// </summary>
+    private string DotCssClass => Status.State switch
+    {
+        OpenCodeServerState.Running => "opencode-status-dot--running",
+        OpenCodeServerState.Stopped => "opencode-status-dot--stopped",
+        OpenCodeServerState.Starting => "opencode-status-dot--starting",
+        OpenCodeServerState.Stopping => "opencode-status-dot--stopping",
+        OpenCodeServerState.Error => "opencode-status-dot--error",
+        _ => "opencode-status-dot--unknown"
+    };
+
+    /// <summary>
+    /// Detailed tooltip text shown on hover. Includes state, version, URL, or error details
+    /// depending on the current server state.
+    /// </summary>
+    private string TooltipText => Status.State switch
+    {
+        OpenCodeServerState.Running => $"OpenCode Server — Connected (v{Status.Version})\n{Status.ServerUrl}",
+        OpenCodeServerState.Stopped => "OpenCode Server — Stopped",
+        OpenCodeServerState.Starting => "OpenCode Server — Starting...",
+        OpenCodeServerState.Stopping => "OpenCode Server — Stopping...",
+        OpenCodeServerState.Error => $"OpenCode Server — Error: {Status.ErrorMessage}",
+        _ => "OpenCode Server — Checking..."
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Cleanup — unsubscribe from status change events
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Unsubscribes from the server status change event to prevent memory leaks
+    /// and stale UI updates when this component is removed from the render tree.
+    /// </summary>
+    public void Dispose()
+    {
+        ServerManager.OnStatusChanged -= OnStatusChanged;
+    }
+}

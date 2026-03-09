@@ -1,0 +1,283 @@
+@using OwlNet.Application.Common.Interfaces
+@using OwlNet.Application.Common.Models
+@using OwlNet.Application.Common.Constants
+
+@* ═══════════════════════════════════════════════════════════════════════════════
+   OpenCode Server Panel — Smart Component
+   ═══════════════════════════════════════════════════════════════════════════════
+   Self-contained panel that manages the OpenCode Server connection configuration
+   and lifecycle. Allows the user to configure the server URL, test connectivity,
+   start/stop the server process, and view real-time status updates.
+
+   UI states:
+   ┌──────────┐  success   ┌──────────────────────────────────────────────────┐
+   │ Loading   │──────────▶│ Form (Server URL + action buttons)               │
+   │ (spinner) │           │  ┌─ Status chip: Running / Stopped / Error / ... │
+   └──────────┘           │  ├─ URL change warning (if server running)       │
+                           │  ├─ Test Connection → success/failure chip       │
+                           │  ├─ Start/Stop Server → snackbar feedback        │
+                           │  └─ Save → persists URL to database              │
+                           └──────────────────────────────────────────────────┘
+
+   Services injected:
+   - IAppSettingService       — reads/writes the server URL setting
+   - IOpenCodeServerManager   — manages server process lifecycle and status
+   - IOpenCodeClient          — performs health checks against the server
+   - ISnackbar                — shows toast notifications for user feedback
+
+   Spec reference: specs/todo/SPEC-004-opencode-client-core.md (FR-3 through FR-7)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+
+<MudCard Outlined="true">
+    @* ── Card Header ──────────────────────────────────────────────────────────
+       Avatar icon + title + subtitle + live status chip.
+       The status chip reflects the current server state from IOpenCodeServerManager
+       and updates in real-time via the OnStatusChanged event subscription. *@
+    <MudCardHeader>
+        <CardHeaderAvatar>
+            <MudAvatar Color="Color.Tertiary" Variant="Variant.Filled" Rounded="true">
+                <MudIcon Icon="@Icons.Material.Filled.Cloud" />
+            </MudAvatar>
+        </CardHeaderAvatar>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h6">OpenCode Server</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Configure and manage the OpenCode Server connection.
+            </MudText>
+        </CardHeaderContent>
+        <CardHeaderActions>
+            @if (!_isLoading)
+            {
+                @* ── Status Chip — reflects the live server state ─────────── *@
+                @switch (ServerManager.CurrentStatus.State)
+                {
+                    case OpenCodeServerState.Running:
+                        <MudChip T="string"
+                                 Color="Color.Success"
+                                 Icon="@Icons.Material.Filled.CheckCircle"
+                                 Size="Size.Small">
+                            Connected &mdash; v@(ServerManager.CurrentStatus.Version ?? "?")
+                        </MudChip>
+                        break;
+
+                    case OpenCodeServerState.Stopped:
+                        <MudChip T="string"
+                                 Color="Color.Default"
+                                 Icon="@Icons.Material.Filled.Stop"
+                                 Size="Size.Small">
+                            Stopped
+                        </MudChip>
+                        break;
+
+                    case OpenCodeServerState.Starting:
+                        <MudChip T="string"
+                                 Color="Color.Default"
+                                 Size="Size.Small">
+                            <MudProgressCircular Size="Size.Small"
+                                                 Indeterminate="true"
+                                                 Class="mr-1"
+                                                 Style="width:16px;height:16px;" />
+                            Starting...
+                        </MudChip>
+                        break;
+
+                    case OpenCodeServerState.Stopping:
+                        <MudChip T="string"
+                                 Color="Color.Default"
+                                 Size="Size.Small">
+                            <MudProgressCircular Size="Size.Small"
+                                                 Indeterminate="true"
+                                                 Class="mr-1"
+                                                 Style="width:16px;height:16px;" />
+                            Stopping...
+                        </MudChip>
+                        break;
+
+                    case OpenCodeServerState.Error:
+                        <MudChip T="string"
+                                 Color="Color.Error"
+                                 Icon="@Icons.Material.Filled.ErrorOutline"
+                                 Size="Size.Small">
+                            Error
+                        </MudChip>
+                        break;
+
+                    case OpenCodeServerState.Unknown:
+                    default:
+                        <MudChip T="string"
+                                 Color="Color.Warning"
+                                 Icon="@Icons.Material.Filled.HelpOutline"
+                                 Size="Size.Small">
+                            Checking...
+                        </MudChip>
+                        break;
+                }
+            }
+        </CardHeaderActions>
+    </MudCardHeader>
+
+    @* ── Card Content — loading spinner or configuration form ─────────────── *@
+    <MudCardContent>
+        @if (_isLoading)
+        {
+            @* Loading state — show spinner while fetching saved URL from database *@
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                <MudText Typo="Typo.body2">Loading configuration...</MudText>
+            </MudStack>
+        }
+        else
+        {
+            <MudStack Spacing="3">
+                @* ── Server URL Field ────────────────────────────────────────
+                   Editable text field for the OpenCode Server base URL.
+                   Validated inline: required + valid URL format. *@
+                <MudTextField T="string"
+                              Value="@_serverUrl"
+                              ValueChanged="@OnServerUrlChanged"
+                              Label="Server URL"
+                              HelperText="@($"Default: {OpenCodeConstants.DefaultServerUrl}")"
+                              Required="true"
+                              RequiredError="Server URL is required"
+                              Validation="@(new Func<string, string?>(ValidateUrl))"
+                              Variant="Variant.Outlined"
+                              Disabled="@IsFieldDisabled" />
+
+                @* ── URL Change Warning ──────────────────────────────────────
+                   Shown when the user has modified the URL in the text field
+                   but the server is still running on the previously saved URL.
+                   Prompts the user to stop and restart to apply the change. *@
+                @if (ShowUrlChangeWarning)
+                {
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                        Server is running on the previous URL. Stop and restart to apply changes.
+                    </MudAlert>
+                }
+
+                @* ── Test Connection Result ──────────────────────────────────
+                   Displayed after the user clicks "Test Connection".
+                   Shows a success chip with version or an error chip with details. *@
+                @if (_testResult is not null)
+                {
+                    @if (_testResult.IsSuccess && _testResult.Value.IsHealthy)
+                    {
+                        <MudChip T="string"
+                                 Color="Color.Success"
+                                 Icon="@Icons.Material.Filled.CheckCircle"
+                                 Size="Size.Medium">
+                            Connected &mdash; v@(_testResult.Value.Version ?? "unknown")
+                        </MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string"
+                                 Color="Color.Error"
+                                 Icon="@Icons.Material.Filled.ErrorOutline"
+                                 Size="Size.Medium">
+                            @(_testResult.IsFailure
+                                ? _testResult.Error
+                                : "Server reported unhealthy")
+                        </MudChip>
+                    }
+                }
+            </MudStack>
+        }
+    </MudCardContent>
+
+    @* ── Card Actions — Test Connection, Start/Stop, Save ─────────────────── *@
+    @if (!_isLoading)
+    {
+        <MudCardActions>
+            @* ── Test Connection Button ─────────────────────────────────
+               Tests connectivity against the CURRENT text field URL (not saved).
+               Disabled during other async operations. *@
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Default"
+                       StartIcon="@Icons.Material.Filled.NetworkCheck"
+                       Disabled="@IsTestDisabled"
+                       OnClick="@TestConnectionAsync">
+                @if (_isTesting)
+                {
+                    <MudProgressCircular Size="Size.Small"
+                                         Indeterminate="true"
+                                         Class="mr-2" />
+                    @:Testing...
+                }
+                else
+                {
+                    @:Test Connection
+                }
+            </MudButton>
+
+            @* ── Start/Stop Server Button ───────────────────────────────
+               Conditionally shows Start or Stop based on the current server state.
+               Start: visible when Stopped, Error, or Unknown.
+               Stop: visible when Running, Starting, or Error. *@
+            @if (ShowStartButton)
+            {
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Success"
+                           StartIcon="@Icons.Material.Filled.PlayArrow"
+                           Disabled="@IsStartStopDisabled"
+                           OnClick="@StartServerAsync"
+                           Class="ml-2">
+                    @if (ServerManager.CurrentStatus.State == OpenCodeServerState.Starting)
+                    {
+                        <MudProgressCircular Size="Size.Small"
+                                             Indeterminate="true"
+                                             Class="mr-2" />
+                        @:Starting...
+                    }
+                    else
+                    {
+                        @:Start Server
+                    }
+                </MudButton>
+            }
+            else if (ShowStopButton)
+            {
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Error"
+                           StartIcon="@Icons.Material.Filled.Stop"
+                           Disabled="@IsStartStopDisabled"
+                           OnClick="@StopServerAsync"
+                           Class="ml-2">
+                    @if (ServerManager.CurrentStatus.State == OpenCodeServerState.Stopping)
+                    {
+                        <MudProgressCircular Size="Size.Small"
+                                             Indeterminate="true"
+                                             Class="mr-2" />
+                        @:Stopping...
+                    }
+                    else
+                    {
+                        @:Stop Server
+                    }
+                </MudButton>
+            }
+
+            <MudSpacer />
+
+            @* ── Save Button ──────────────────────────────────────────────
+               Persists the server URL to the database via IAppSettingService.
+               Disabled when URL is empty/invalid or any async operation is running. *@
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Save"
+                       Disabled="@IsSaveDisabled"
+                       OnClick="@SaveUrlAsync">
+                @if (_isSaving)
+                {
+                    <MudProgressCircular Size="Size.Small"
+                                         Indeterminate="true"
+                                         Class="mr-2" />
+                    @:Saving...
+                }
+                else
+                {
+                    @:Save
+                }
+            </MudButton>
+        </MudCardActions>
+    }
+</MudCard>

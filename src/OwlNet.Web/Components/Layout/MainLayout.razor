@@ -47,6 +47,10 @@
         </MudButton>
 
         <MudSpacer />
+        @* ── OpenCode Server status indicator ────────────────────────────────
+           Compact badge showing server connection state (green/red dot + version).
+           Clicking navigates to the Settings page for server management. *@
+        <OpenCodeStatusIndicator />
         @* Dark/light mode toggle *@
         <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Rounded.LightMode : Icons.Material.Rounded.DarkMode)"
                        Color="Color.Inherit"
