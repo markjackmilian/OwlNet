@@ -1,0 +1,91 @@
+@* ═══════════════════════════════════════════════════════════════════════════════
+   CardDetailDialog — Card Detail Modal (Placeholder)
+   ═══════════════════════════════════════════════════════════════════════════════
+   Displays a card's priority, full Markdown description (un-clamped), and a
+   "Coming soon" placeholder message. Opened when the user clicks a card on
+   the Kanban board (FR-14).
+
+   This is a temporary placeholder dialog. The full card detail view with
+   editing, comments, assignments, and activity history will be implemented
+   in a future spec.
+
+   Spec reference: SPEC-project-board-page (FR-14)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+
+@using OwlNet.Web.Services
+
+@inject IMarkdownService MarkdownService
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+
+            @* ── Priority Badge ───────────────────────────────────────────────
+               Colored chip showing the card's priority level (FR-15). *@
+            <MudChip T="string"
+                     Size="Size.Small"
+                     Color="@GetPriorityColor(Card.Priority)"
+                     Variant="Variant.Filled">
+                @Card.Priority.ToString()
+            </MudChip>
+
+            @* ── Full Description ─────────────────────────────────────────────
+               Renders the card's Markdown description as HTML without line-clamp,
+               so the user can read the full content in the modal. *@
+            <MudText Typo="Typo.body1" Class="card-detail-description">
+                @((MarkupString)MarkdownService.ToHtml(Card.Description))
+            </MudText>
+
+            @* ── Placeholder Notice ───────────────────────────────────────────
+               Indicates that the full card detail view is not yet implemented. *@
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
+                Card Detail — Coming soon
+            </MudAlert>
+
+        </MudStack>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Cascading Parameters
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// The dialog instance provided by MudBlazor's dialog system.
+    /// Used to close or cancel the dialog programmatically.
+    /// </summary>
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Parameters
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// The board card whose details are displayed in this dialog.
+    /// Contains the title, description (Markdown), priority, and status.
+    /// </summary>
+    [Parameter]
+    public BoardCardItem Card { get; set; } = null!;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Helpers
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Maps a <see cref="CardPriority"/> to a MudBlazor <see cref="Color"/>
+    /// for the priority chip. Each priority level has a distinct color to
+    /// provide clear visual differentiation (FR-15).
+    /// </summary>
+    /// <param name="priority">The card's priority level.</param>
+    /// <returns>The MudBlazor color for the priority chip.</returns>
+    private static Color GetPriorityColor(CardPriority priority) => priority switch
+    {
+        CardPriority.Critical => Color.Error,
+        CardPriority.High     => Color.Warning,
+        CardPriority.Medium   => Color.Info,
+        CardPriority.Low      => Color.Success,
+        _                     => Color.Default
+    };
+}

@@ -30,6 +30,9 @@
     <!-- DispatchR: CQRS mediator — registered in composition root per Clean Architecture -->
     <PackageReference Include="DispatchR.Mediator" />
 
+    <!-- Markdig: Markdown-to-HTML conversion for card descriptions (FR-18, FR-19) -->
+    <PackageReference Include="Markdig" />
+
     <!-- MudBlazor: Material Design component library for Blazor -->
     <PackageReference Include="MudBlazor" />
   </ItemGroup>

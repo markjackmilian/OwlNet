@@ -1,0 +1,175 @@
+@* ═══════════════════════════════════════════════════════════════════════════════
+   KanbanBoard — Presentational (Dumb) Component
+   ═══════════════════════════════════════════════════════════════════════════════
+   Renders the full project Kanban board with five fixed columns:
+   Backlog, To Evaluate, Develop, Review, and Done.
+
+   Uses MudBlazor's MudDropContainer<T> / MudDropZone<T> for drag-and-drop
+   card movement between columns. Each column is identified by its
+   BoardStatus enum name. Dropping a card updates its Status property.
+
+   This is a pure presentational component: it receives the card list via
+   a parameter and delegates card click handling to a MudDialog. No data
+   fetching or business logic — only rendering and user interaction.
+
+   Spec reference: SPEC-project-board-page (FR-5 through FR-14, FR-20 through FR-25)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+
+@inject IDialogService DialogService
+
+@* ═══════════════════════════════════════════════════════════════════════════════
+   MudDropContainer — wraps the entire board.
+   - Items: the full list of draggable cards
+   - ItemsSelector: maps each card to its column by comparing Status to zone ID
+   - ItemDropped: fires when a card is dropped into a (possibly different) zone
+   - ItemRenderer: renders each card using the KanbanCard component
+   - ChildContent: the column layout (5 drop zones)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+<MudDropContainer T="BoardCardItem"
+                  Items="Cards"
+                  ItemsSelector="@((item, zone) => item.Status.ToString() == zone)"
+                  ItemDropped="OnItemDropped"
+                  Class="board-drop-container">
+    <ChildContent>
+        <div class="board-layout">
+            @foreach (var column in _columns)
+            {
+                <div class="board-column">
+
+                    @* ── Column Header ────────────────────────────────────────
+                       Colored bar with card count badge, column name, and an
+                       "Add card" button (non-functional placeholder per FR-23).
+                       The CSS modifier class determines the header color. *@
+                    <div class="board-column-header board-column-header--@column.CssModifier">
+                        <div class="board-column-count">@GetColumnCount(column.Status)</div>
+                        <span class="board-column-title">@column.Name</span>
+                        <MudTooltip Text="Coming soon">
+                            <MudIconButton Icon="@Icons.Material.Filled.Add"
+                                           Size="Size.Small"
+                                           Class="board-column-add"
+                                           aria-label="@($"Add card to {column.Name}")" />
+                        </MudTooltip>
+                    </div>
+
+                    @* ── Drop Zone ────────────────────────────────────────────
+                       Each zone is identified by the BoardStatus enum name.
+                       AllowReorder enables card reordering within the same
+                       column (FR-12). *@
+                    <MudDropZone T="BoardCardItem"
+                                 Identifier="@column.Status.ToString()"
+                                 AllowReorder="true"
+                                 Class="board-dropzone" />
+                </div>
+            }
+        </div>
+    </ChildContent>
+
+    @* ── Item Renderer ────────────────────────────────────────────────────────
+       Delegates card rendering to the KanbanCard component, which handles
+       priority badge, title, and Markdown description display (FR-9). *@
+    <ItemRenderer>
+        <KanbanCard Card="@context" OnCardClicked="OnCardClicked" />
+    </ItemRenderer>
+</MudDropContainer>
+
+@code {
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Parameters
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// The list of board cards to display across the five columns.
+    /// Each card's <see cref="BoardCardItem.Status"/> determines which column
+    /// it appears in. This list is mutated in-place when cards are dragged
+    /// between columns (MudDropContainer updates the item's Status).
+    /// </summary>
+    [Parameter, EditorRequired]
+    public List<BoardCardItem> Cards { get; set; } = [];
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Column Definitions
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Static metadata for the five board columns (FR-5). Each entry defines
+    /// the column's display name, corresponding <see cref="BoardStatus"/>,
+    /// and CSS class modifier for the header color.
+    /// </summary>
+    private static readonly ColumnDefinition[] _columns =
+    [
+        new("Backlog", BoardStatus.Backlog, "backlog"),
+        new("To Evaluate", BoardStatus.ToEvaluate, "evaluate"),
+        new("Develop", BoardStatus.Develop, "develop"),
+        new("Review", BoardStatus.Review, "review"),
+        new("Done", BoardStatus.Done, "done")
+    ];
+
+    /// <summary>
+    /// Immutable record describing a single board column's metadata.
+    /// </summary>
+    /// <param name="Name">Display name shown in the column header.</param>
+    /// <param name="Status">The <see cref="BoardStatus"/> this column represents.</param>
+    /// <param name="CssModifier">CSS class suffix for the column header color.</param>
+    private sealed record ColumnDefinition(string Name, BoardStatus Status, string CssModifier);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Event Handlers
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Handles a card being dropped into a column (FR-10, FR-11).
+    /// Parses the drop zone identifier back to a <see cref="BoardStatus"/>
+    /// and updates the card's Status, causing MudDropContainer to re-evaluate
+    /// which zone the card belongs to.
+    /// </summary>
+    /// <param name="info">
+    /// Drop event info containing the dragged item and the target zone identifier.
+    /// </param>
+    private void OnItemDropped(MudItemDropInfo<BoardCardItem> info)
+    {
+        if (info.Item is not null
+            && Enum.TryParse<BoardStatus>(info.DropzoneIdentifier, out var newStatus))
+        {
+            info.Item.Status = newStatus;
+        }
+    }
+
+    /// <summary>
+    /// Handles a card click by opening the <see cref="CardDetailDialog"/> modal (FR-14).
+    /// Displays the card's title, priority, and full Markdown description.
+    /// </summary>
+    /// <param name="card">The card that was clicked.</param>
+    private async Task OnCardClicked(BoardCardItem card)
+    {
+        var parameters = new DialogParameters<CardDetailDialog>
+        {
+            { x => x.Card, card }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true,
+            CloseOnEscapeKey = true,
+            CloseButton = true
+        };
+
+        await DialogService.ShowAsync<CardDetailDialog>(
+            card.Title,
+            parameters,
+            options);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Helpers
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Returns the number of cards currently in the specified column (FR-6).
+    /// Used by the column header to display a live count badge.
+    /// </summary>
+    /// <param name="status">The board status (column) to count cards for.</param>
+    /// <returns>The number of cards with the given status.</returns>
+    private int GetColumnCount(BoardStatus status) =>
+        Cards.Count(c => c.Status == status);
+}

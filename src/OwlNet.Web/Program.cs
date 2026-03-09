@@ -72,6 +72,13 @@ try
     builder.Services.AddScoped<ActiveProjectService>();
 
     // -----------------------------------------------------------------------
+    // Markdown Service — converts Markdown text to sanitized HTML for card
+    // descriptions (FR-18, FR-19). Singleton because it is stateless and
+    // the underlying MarkdownPipeline is thread-safe.
+    // -----------------------------------------------------------------------
+    builder.Services.AddSingleton<IMarkdownService, MarkdownService>();
+
+    // -----------------------------------------------------------------------
     // ASP.NET Core Identity — authentication & authorization scaffolding
     // -----------------------------------------------------------------------
     builder.Services.AddCascadingAuthenticationState();

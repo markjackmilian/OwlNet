@@ -1,0 +1,26 @@
+/* ═══════════════════════════════════════════════════════════════════════════════
+   Board.razor scoped styles — Loading Skeleton
+   ═══════════════════════════════════════════════════════════════════════════════
+   Styles for the board loading skeleton that mimics the five-column layout
+   with placeholder card shapes (FR-25). Displayed while the project data
+   is being validated on initial load.
+
+   Spec reference: SPEC-project-board-page (FR-25)
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+
+/* ── Skeleton Board Layout ─────────────────────────────────────────────────── */
+/* Mirrors the real board's flex layout so the skeleton feels like a natural
+   preview of the content that will appear once loading completes. */
+
+.board-skeleton {
+    display: flex;
+    gap: 16px;
+    min-height: 400px;
+}
+
+/* Each skeleton column takes equal space, matching the real column layout */
+.board-skeleton-column {
+    flex: 1 1 0;
+    min-width: 200px;
+}

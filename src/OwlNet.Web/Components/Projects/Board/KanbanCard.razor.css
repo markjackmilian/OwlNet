@@ -1,0 +1,152 @@
+/* ═══════════════════════════════════════════════════════════════════════════════
+   KanbanCard.razor scoped styles — Project Board Card
+   ═══════════════════════════════════════════════════════════════════════════════
+   Styles for individual Kanban board cards. Uses the "board-card-" prefix to
+   distinguish from the Home page's "kanban-card-" prefix.
+
+   Color values use MudBlazor CSS custom properties (--mud-palette-*) for theme
+   compatibility. Priority badge colors use pastel backgrounds with dark text
+   for readability in both light and dark modes.
+
+   Spec reference: SPEC-project-board-page (FR-9, FR-13, FR-15, FR-20)
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+
+/* ── Card Container ────────────────────────────────────────────────────────── */
+/* Main card wrapper with subtle border, rounded corners, and grab cursor
+   for drag-and-drop affordance. Hover lifts the card slightly; active state
+   shows grabbing cursor with a slight scale-down for tactile feedback. */
+
+.board-card {
+    background-color: var(--mud-palette-surface);
+    border: 1px solid var(--mud-palette-divider);
+    border-radius: 10px;
+    padding: 14px;
+    cursor: grab;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.board-card:hover {
+    transform: translateY(-1px);
+    border-color: var(--mud-palette-lines-inputs);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.board-card:active {
+    cursor: grabbing;
+    transform: scale(0.99);
+}
+
+
+/* ── Priority Badge ────────────────────────────────────────────────────────── */
+/* Small colored pill indicating the card's priority level (FR-15).
+   Each variant uses a pastel background with a dark contrasting text color
+   for accessibility and readability. */
+
+.board-card-priority {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 5px;
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    margin-bottom: 8px;
+    line-height: 1.4;
+}
+
+
+/* ── Priority Badge Colors ─────────────────────────────────────────────────── */
+
+/* Critical — soft red background with dark red text */
+.board-card-priority--critical {
+    background-color: #FEE2E2;
+    color: #B91C1C;
+}
+
+/* High — soft orange background with dark orange text */
+.board-card-priority--high {
+    background-color: #FED7AA;
+    color: #9A3412;
+}
+
+/* Medium — soft blue background with dark blue text */
+.board-card-priority--medium {
+    background-color: #DBEAFE;
+    color: #1E40AF;
+}
+
+/* Low — soft green background with dark green text */
+.board-card-priority--low {
+    background-color: #D1FAE5;
+    color: #065F46;
+}
+
+
+/* ── Card Title ────────────────────────────────────────────────────────────── */
+/* Bold title text clamped to 2 lines with ellipsis overflow (FR-9).
+   Uses ::deep because MudText renders an inner element that scoped CSS
+   cannot reach without the combinator. */
+
+::deep .board-card-title {
+    font-weight: 600 !important;
+    font-size: 0.875rem !important;
+    margin-bottom: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-height: 1.4;
+}
+
+
+/* ── Card Description ──────────────────────────────────────────────────────── */
+/* Markdown-rendered HTML clamped to 3 lines (FR-9, FR-19).
+   Inner HTML elements (p, ul, li) have their margins reset to keep the
+   card compact. Uses ::deep to penetrate into the rendered Markdown HTML. */
+
+.board-card-description {
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.8rem;
+    line-height: 1.5;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+}
+
+/* Reset margins on Markdown-rendered elements inside the description
+   to prevent excessive spacing that would break the line-clamp layout. */
+::deep .board-card-description p,
+::deep .board-card-description ul,
+::deep .board-card-description ol,
+::deep .board-card-description li {
+    margin: 0;
+    padding: 0;
+}
+
+::deep .board-card-description ul,
+::deep .board-card-description ol {
+    padding-left: 1.2em;
+}
+
+/* Inline code within descriptions — subtle background for readability */
+::deep .board-card-description code {
+    background-color: var(--mud-palette-background);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 0.75rem;
+}
+
+
+/* ── Drag Feedback ─────────────────────────────────────────────────────────── */
+/* When MudDropContainer is dragging a card, it applies .mud-drop-item-dragging
+   to the drag source element. The card inside becomes semi-transparent with a
+   subtle rotation to indicate it's being moved (FR-13). */
+
+::deep .mud-drop-item-dragging .board-card {
+    opacity: 0.4;
+    transform: rotate(1deg);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
