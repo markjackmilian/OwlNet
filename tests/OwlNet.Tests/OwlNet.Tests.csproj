@@ -22,6 +22,7 @@
     <ProjectReference Include="..\..\src\OwlNet.Domain\OwlNet.Domain.csproj" />
     <ProjectReference Include="..\..\src\OwlNet.Application\OwlNet.Application.csproj" />
     <ProjectReference Include="..\..\src\OwlNet.Infrastructure\OwlNet.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\OwlNet.Web\OwlNet.Web.csproj" />
   </ItemGroup>
 
   <ItemGroup>

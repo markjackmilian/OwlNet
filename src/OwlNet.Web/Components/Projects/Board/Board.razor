@@ -1,16 +1,17 @@
 @* ═══════════════════════════════════════════════════════════════════════════════
-   Board — Placeholder Page
+   Board — Smart Page (Container Component)
    ═══════════════════════════════════════════════════════════════════════════════
-   A placeholder page for the project Board (Kanban) feature. Displays a
-   "Coming soon" message while the full board functionality is being built.
+   The project Kanban board page. Handles routing, project validation, active
+   project sync, and mock data initialization. Delegates all board rendering
+   to the KanbanBoard presentational component.
 
-   This is a "smart" component: it injects services, validates the project,
-   and syncs the active project context — following the same pattern as
-   ProjectDashboard.razor.
+   Displays five columns (Backlog, To Evaluate, Develop, Review, Done) with
+   drag-and-drop card movement. Cards are populated from static mock data
+   that resets on page refresh.
 
    Route: /projects/{ProjectId:guid}/board
 
-   Spec reference: SPEC-project-scoped-navigation-shell (FR-18, FR-20, FR-21)
+   Spec reference: SPEC-project-board-page (FR-1 through FR-4, FR-25)
    ═══════════════════════════════════════════════════════════════════════════════ *@
 
 @page "/projects/{ProjectId:guid}/board"
@@ -32,14 +33,24 @@
 <PageTitle>@(_project is not null ? $"Board — {_project.Name} — OwlNet" : "Board — OwlNet")</PageTitle>
 
 @* ═══════════════════════════════════════════════════════════════════════════════
-   Loading State — skeleton placeholders while project data is being fetched
+   Loading State — skeleton mimicking the five-column board layout (FR-25).
+   Each column shows a header placeholder and three card-shaped rectangles
+   so the skeleton feels like a natural preview of the real board.
    ═══════════════════════════════════════════════════════════════════════════════ *@
 @if (_isLoading)
 {
-    <MudStack Spacing="4">
-        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="40%" Height="36px" />
-        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="60%" Height="20px" />
-    </MudStack>
+    <div class="board-skeleton">
+        @for (var i = 0; i < 5; i++)
+        {
+            <div class="board-skeleton-column">
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="100%" Height="40px" Class="mb-3 rounded-lg" />
+                @for (var j = 0; j < 3; j++)
+                {
+                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="100%" Height="120px" Class="mb-2 rounded-lg" />
+                }
+            </div>
+        }
+    </div>
 }
 @* ═══════════════════════════════════════════════════════════════════════════════
    Error State — project not found or archived
@@ -70,25 +81,12 @@ else if (_isNotFound)
     </MudStack>
 }
 @* ═══════════════════════════════════════════════════════════════════════════════
-   Board Placeholder — "Coming soon" message with project context
-   (FR-18: placeholder page at /projects/{projectId}/board)
+   Board Content — KanbanBoard presentational component (FR-5 through FR-14).
+   Renders the five-column drag-and-drop board with mock card data.
    ═══════════════════════════════════════════════════════════════════════════════ *@
 else if (_project is not null)
 {
-    <MudStack AlignItems="AlignItems.Center"
-              Justify="Justify.Center"
-              Spacing="3"
-              Class="py-16">
-        <MudIcon Icon="@Icons.Material.Filled.ViewKanban"
-                 Size="Size.Large"
-                 Color="Color.Default" />
-        <MudText Typo="Typo.h5" Align="Align.Center">
-            Board
-        </MudText>
-        <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
-            Board for @_project.Name — Coming soon
-        </MudText>
-    </MudStack>
+    <KanbanBoard Cards="_cards" />
 }
 
 @code {
@@ -106,6 +104,9 @@ else if (_project is not null)
 
     /// <summary>The loaded project data, null until fetch completes.</summary>
     private ProjectDto? _project;
+
+    /// <summary>The list of board cards populated from mock data after project load.</summary>
+    private List<BoardCardItem> _cards = [];
 
     /// <summary>True while the initial project data is being fetched.</summary>
     private bool _isLoading = true;
@@ -168,6 +169,11 @@ else if (_project is not null)
 
         _project = result.Value;
         _isLoading = false;
+
+        // Populate the board with mock card data (FR-16, FR-17).
+        // CreateCards() returns a fresh list each time so drag-and-drop
+        // mutations do not persist across page refreshes.
+        _cards = BoardMockData.CreateCards();
 
         // FR-21: If the user navigated directly (bookmark, shared link), sync
         // the active project context so the topbar shows the correct project.

@@ -1,0 +1,131 @@
+@* ═══════════════════════════════════════════════════════════════════════════════
+   KanbanCard — Presentational (Dumb) Component
+   ═══════════════════════════════════════════════════════════════════════════════
+   Renders a single card on the project Kanban board. Displays the card's
+   priority badge, title (max 2 lines), and Markdown-rendered description
+   (clamped to 3 lines).
+
+   This is a pure presentational component: it receives data via parameters
+   and communicates user interactions via EventCallback. No data fetching or
+   business logic — only rendering and event forwarding.
+
+   Used inside the ItemRenderer of MudDropContainer in the parent Board page.
+
+   Spec reference: SPEC-project-board-page (FR-9, FR-13, FR-14, FR-15, FR-20)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+
+@using OwlNet.Web.Services
+
+@inject IMarkdownService MarkdownService
+
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Card Container — clickable wrapper that raises OnCardClicked when clicked.
+   The "board-card" class provides hover/active/drag visual feedback via CSS.
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+<div class="board-card" @onclick="HandleClick">
+
+    @* ── Priority Badge ─────────────────────────────────────────────────────────
+       Colored pill indicating the card's priority level (FR-9, FR-15).
+       CSS class suffix determines the badge color (critical/high/medium/low). *@
+    <span class="board-card-priority @GetPriorityClass(Card.Priority)">
+        @GetPriorityLabel(Card.Priority)
+    </span>
+
+    @* ── Title ──────────────────────────────────────────────────────────────────
+       Bold card title, clamped to 2 lines with ellipsis via CSS (FR-9). *@
+    <MudText Typo="Typo.subtitle1" Class="board-card-title">
+        @Card.Title
+    </MudText>
+
+    @* ── Description ────────────────────────────────────────────────────────────
+       Markdown rendered to HTML, visually clamped to 3 lines (FR-9, FR-18, FR-19).
+       Uses MarkupString to inject the sanitized HTML from IMarkdownService.
+       The ::deep selector in scoped CSS resets inner HTML element margins. *@
+    <div class="board-card-description">
+        @((MarkupString)RenderedDescription)
+    </div>
+
+</div>
+
+@code {
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Parameters
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// The board card data to display. Contains the card's title, description,
+    /// priority level, and current board status. Required by the parent component.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public BoardCardItem Card { get; set; } = null!;
+
+    /// <summary>
+    /// Callback raised when the user clicks anywhere on the card (FR-14).
+    /// The parent component handles this to open a card detail dialog.
+    /// </summary>
+    [Parameter]
+    public EventCallback<BoardCardItem> OnCardClicked { get; set; }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Computed Properties
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// The card description converted from Markdown to sanitized HTML.
+    /// Returns empty string if the description is null or empty, preventing
+    /// unnecessary DOM nodes in the rendered output.
+    /// </summary>
+    private string RenderedDescription =>
+        string.IsNullOrWhiteSpace(Card.Description)
+            ? string.Empty
+            : MarkdownService.ToHtml(Card.Description);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Event Handlers
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Handles the card click event by forwarding it to the parent via
+    /// <see cref="OnCardClicked"/>. The parent decides what to do (e.g.,
+    /// open a detail dialog per FR-14).
+    /// </summary>
+    private async Task HandleClick()
+    {
+        await OnCardClicked.InvokeAsync(Card);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Priority Helpers
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Maps a <see cref="CardPriority"/> value to its corresponding CSS class
+    /// for the priority badge color. Each priority has a distinct pastel
+    /// background with dark text for readability (FR-15).
+    /// </summary>
+    /// <param name="priority">The card's priority level.</param>
+    /// <returns>The CSS class name for the priority badge color variant.</returns>
+    private static string GetPriorityClass(CardPriority priority) => priority switch
+    {
+        CardPriority.Critical => "board-card-priority--critical",
+        CardPriority.High     => "board-card-priority--high",
+        CardPriority.Medium   => "board-card-priority--medium",
+        CardPriority.Low      => "board-card-priority--low",
+        _                     => "board-card-priority--medium"
+    };
+
+    /// <summary>
+    /// Maps a <see cref="CardPriority"/> value to its human-readable display
+    /// label shown inside the priority badge pill (FR-15).
+    /// </summary>
+    /// <param name="priority">The card's priority level.</param>
+    /// <returns>The display text for the priority badge.</returns>
+    private static string GetPriorityLabel(CardPriority priority) => priority switch
+    {
+        CardPriority.Critical => "Critical",
+        CardPriority.High     => "High",
+        CardPriority.Medium   => "Medium",
+        CardPriority.Low      => "Low",
+        _                     => "Medium"
+    };
+}
