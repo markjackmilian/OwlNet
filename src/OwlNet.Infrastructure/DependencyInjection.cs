@@ -76,6 +76,13 @@ public static class DependencyInjection
             client.Timeout = TimeSpan.FromSeconds(OpenCodeConstants.DefaultTimeoutSeconds);
         });
 
+        // Typed HTTP client for OpenCode session management API calls.
+        // No BaseAddress — the URL is resolved at request time.
+        services.AddHttpClient<IOpenCodeSessionService, OpenCodeSessionService>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(OpenCodeConstants.DefaultTimeoutSeconds);
+        });
+
         // Singleton manager for the OpenCode Server process lifecycle.
         // Registered as singleton because it manages a single global process.
         services.AddSingleton<IOpenCodeServerManager, OpenCodeServerManager>();
