@@ -24,4 +24,9 @@ public static class OpenCodeConstants
     /// Default polling interval in seconds for health check monitoring.
     /// </summary>
     public const int DefaultPollingIntervalSeconds = 30;
+
+    /// <summary>
+    /// Extended HTTP timeout in seconds for AI prompt/message calls that may take significant time.
+    /// </summary>
+    public const int MessageTimeoutSeconds = 300;
 }

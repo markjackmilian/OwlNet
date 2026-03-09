@@ -1,6 +1,6 @@
 # SPEC-006: OpenCode Messaging
 
-> **Status:** Todo
+> **Status:** Done
 > **Created:** 2026-03-07
 > **Author:** owl-planner + user
 > **Priority:** High
@@ -85,20 +85,20 @@ Messages in OpenCode are composed of **parts** (text, tool calls, tool results, 
 
 ## Acceptance Criteria
 
-- [ ] Messaging methods are defined in an interface in the Application layer.
-- [ ] Implementation calls the correct OpenCode Server endpoints in the Infrastructure layer.
-- [ ] `MessageDto`, `MessagePartDto`, `MessageWithPartsDto`, and `SendPromptRequest` records are defined.
-- [ ] Send prompt calls `POST /session/:id/message` with correct body structure.
-- [ ] Send prompt async calls `POST /session/:id/prompt_async`.
-- [ ] List messages calls `GET /session/:id/message` and returns ordered collection.
-- [ ] Get message by ID calls `GET /session/:id/message/:messageID`.
-- [ ] Execute command calls `POST /session/:id/command`.
-- [ ] Optional model override is supported in prompt requests.
-- [ ] Optional agent selection is supported in prompt requests.
-- [ ] Extended timeout (300s) is enforced for prompt calls.
-- [ ] All methods propagate `CancellationToken` and return `Result<T>`.
-- [ ] Structured logging with session ID, message ID, timing.
-- [ ] Unit tests cover: send prompt, list messages, get message, command execution, timeout, error scenarios.
+- [x] Messaging methods are defined in an interface in the Application layer.
+- [x] Implementation calls the correct OpenCode Server endpoints in the Infrastructure layer.
+- [x] `MessageDto`, `MessagePartDto`, `MessageWithPartsDto`, and `SendPromptRequest` records are defined.
+- [x] Send prompt calls `POST /session/:id/message` with correct body structure.
+- [x] Send prompt async calls `POST /session/:id/prompt_async`.
+- [x] List messages calls `GET /session/:id/message` and returns ordered collection.
+- [x] Get message by ID calls `GET /session/:id/message/:messageID`.
+- [x] Execute command calls `POST /session/:id/command`.
+- [x] Optional model override is supported in prompt requests.
+- [x] Optional agent selection is supported in prompt requests.
+- [x] Extended timeout (300s) is enforced for prompt calls.
+- [x] All methods propagate `CancellationToken` and return `Result<T>`.
+- [x] Structured logging with session ID, message ID, timing.
+- [x] Unit tests cover: send prompt, list messages, get message, command execution, timeout, error scenarios.
 
 ## Dependencies
 
