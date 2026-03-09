@@ -1,0 +1,218 @@
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Project Settings — Placeholder Page
+   ═══════════════════════════════════════════════════════════════════════════════
+   A placeholder page for project-level settings. Currently displays a
+   "Coming soon" message while validating the project ID and syncing the
+   active project context.
+
+   This is a "smart" component: it injects services, manages state, and
+   follows the same loading/validation/sync pattern as ProjectDashboard.
+
+   Route: /projects/{ProjectId:guid}/settings
+
+   NOTE: This route does NOT conflict with the global settings page at
+   /settings because the :guid constraint requires a valid GUID segment.
+
+   Spec reference: SPEC-project-scoped-navigation-shell (FR-19, FR-20, FR-21)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+
+@page "/projects/{ProjectId:guid}/settings"
+
+@using DispatchR.Abstractions.Send
+@using OwlNet.Application.Common.Models
+@using OwlNet.Application.Projects.Queries.GetProjectById
+@using OwlNet.Web.Services
+
+@inject IRequestHandler<GetProjectByIdQuery, ValueTask<Result<ProjectDto>>> GetProjectHandler
+@inject ActiveProjectService ActiveProjectService
+@inject IDialogService DialogService
+
+@implements IDisposable
+
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Page Title — updates the browser tab with the project name when loaded
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+<PageTitle>@(_project is not null ? $"Settings — {_project.Name} — OwlNet" : "Project Settings — OwlNet")</PageTitle>
+
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Loading State — simple skeleton placeholders while project data is fetched
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+@if (_isLoading)
+{
+    <MudStack Spacing="4" AlignItems="AlignItems.Center" Class="py-16">
+        <MudSkeleton SkeletonType="SkeletonType.Circle" Width="64px" Height="64px" />
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="200px" Height="32px" />
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="260px" Height="20px" />
+    </MudStack>
+}
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Error State — project not found or archived
+   (FR-20: invalid/archived project shows "Project not found" consistent with
+   the project dashboard behavior)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+else if (_isNotFound)
+{
+    <MudStack AlignItems="AlignItems.Center"
+              Justify="Justify.Center"
+              Spacing="3"
+              Class="py-16">
+        <MudIcon Icon="@Icons.Material.Filled.SearchOff"
+                 Size="Size.Large"
+                 Color="Color.Default" />
+        <MudText Typo="Typo.h5" Align="Align.Center">
+            Project not found
+        </MudText>
+        <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+            The project may have been archived or does not exist.
+        </MudText>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.FolderOpen"
+                   OnClick="@OpenProjectSelectorAsync">
+            Select a project
+        </MudButton>
+    </MudStack>
+}
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Success State — Placeholder content for project settings
+   (FR-19: displays "Project Settings — Coming soon" with the project name)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+else if (_project is not null)
+{
+    <MudStack AlignItems="AlignItems.Center"
+              Justify="Justify.Center"
+              Spacing="3"
+              Class="py-16">
+        <MudIcon Icon="@Icons.Material.Filled.Settings"
+                 Size="Size.Large"
+                 Color="Color.Default" />
+        <MudText Typo="Typo.h5" Align="Align.Center">
+            Project Settings
+        </MudText>
+        <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+            Settings for @_project.Name — Coming soon
+        </MudText>
+    </MudStack>
+}
+
+@code {
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Parameters
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>The project ID extracted from the URL route segment.</summary>
+    [Parameter]
+    public Guid ProjectId { get; set; }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  State
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>The loaded project data, null until fetch completes.</summary>
+    private ProjectDto? _project;
+
+    /// <summary>True while the initial project data is being fetched.</summary>
+    private bool _isLoading = true;
+
+    /// <summary>True when the project was not found or is archived.</summary>
+    private bool _isNotFound;
+
+    /// <summary>Tracks the last loaded ProjectId to skip redundant loads when the parameter hasn't changed.</summary>
+    private Guid _lastLoadedProjectId;
+
+    /// <summary>Cancellation token source for all async operations in this component.</summary>
+    private readonly CancellationTokenSource _cts = new();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Lifecycle
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Loads the project when the component initializes or when the ProjectId
+    /// parameter changes (e.g., navigating between projects).
+    /// Uses OnParametersSetAsync because the route parameter may change without
+    /// the component being re-created (same page, different ID).
+    /// </summary>
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ProjectId == _lastLoadedProjectId)
+        {
+            return;
+        }
+
+        _lastLoadedProjectId = ProjectId;
+        await LoadProjectAsync();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Data Loading
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Fetches the project by ID and updates the component state.
+    /// Sets the project as active in the topbar context if needed (FR-21).
+    /// </summary>
+    private async Task LoadProjectAsync()
+    {
+        _isLoading = true;
+        _isNotFound = false;
+        _project = null;
+        StateHasChanged();
+
+        var query = new GetProjectByIdQuery { Id = ProjectId };
+        var result = await GetProjectHandler.Handle(query, _cts.Token);
+
+        if (result.IsFailure || result.Value.IsArchived)
+        {
+            // Project not found or archived — show error state (FR-20)
+            _isNotFound = true;
+            _isLoading = false;
+            return;
+        }
+
+        _project = result.Value;
+        _isLoading = false;
+
+        // FR-21: If the user navigated directly (bookmark, shared link), sync
+        // the active project context so the topbar shows the correct project.
+        if (ActiveProjectService.ActiveProject is null
+            || ActiveProjectService.ActiveProject.Id != _project.Id)
+        {
+            await ActiveProjectService.SetActiveProjectAsync(_project);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Error State Actions
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Opens the project selector modal so the user can pick a different project.
+    /// Used as the CTA on the "Project not found" error state (FR-20).
+    /// </summary>
+    private async Task OpenProjectSelectorAsync()
+    {
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true,
+            CloseOnEscapeKey = true,
+            NoHeader = false
+        };
+
+        await DialogService.ShowAsync<ProjectSelectorModal>(
+            "Select a Project",
+            options);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Cleanup
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

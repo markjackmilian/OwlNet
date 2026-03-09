@@ -9,7 +9,7 @@
 @inject IDialogService DialogService
 
 @* MudBlazor theme provider — uses the minimalist warm OwlNet theme.
-   Dark mode is two-way bound so the toggle in the drawer footer updates the provider. *@
+   Dark mode is two-way bound so the toggle in the topbar updates the provider. *@
 <MudThemeProvider Theme="@OwlNetTheme.Theme" @bind-IsDarkMode="_isDarkMode" />
 
 @* MudBlazor service providers for popovers, dialogs, and snackbar notifications *@
@@ -19,17 +19,37 @@
 
 <MudLayout>
     @* ── Top application bar ─────────────────────────────────────────────
-       Flat, minimal header. Left: hamburger toggle. Right: dark mode, notifications, user. *@
+       Flat, minimal header.
+       Left:  hamburger (project-only) → brand → project selector.
+       Right: settings gear → OpenCode status → dark mode → notifications → user avatar. *@
     <MudAppBar Elevation="0" Dense="true" Class="main-appbar">
-        <MudIconButton Icon="@Icons.Material.Filled.Menu"
-                       Color="Color.Inherit"
-                       Edge="Edge.Start"
-                       OnClick="@ToggleDrawer"
-                       aria-label="Toggle navigation drawer" />
 
-        @* ── Active project indicator ────────────────────────────────────────
+        @* ── Left side ───────────────────────────────────────────────────── *@
+
+        @* Hamburger toggle — only rendered when a project is active,
+           because the sidebar is hidden otherwise (FR-14, FR-15). *@
+        @if (ActiveProjectService.ActiveProject is not null)
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Menu"
+                           Color="Color.Inherit"
+                           Edge="Edge.Start"
+                           OnClick="@ToggleDrawer"
+                           aria-label="Toggle navigation drawer" />
+        }
+
+        @* ── OwlNet brand ────────────────────────────────────────────────
+           Owl icon + "OwlNet" text displayed inline in the topbar.
+           Always visible regardless of project context (FR-11). *@
+        <div class="topbar-brand">
+            <MudIcon Icon="@Icons.Material.Rounded.NightsStay"
+                     Size="Size.Medium"
+                     Class="brand-icon" />
+            <MudText Typo="Typo.h6" Class="brand-text ml-2">OwlNet</MudText>
+        </div>
+
+        @* ── Active project indicator ────────────────────────────────────
            Shows the currently active project name, or a placeholder prompt.
-           Clicking opens the project selector modal. *@
+           Clicking opens the project selector modal (FR-16). *@
         <MudButton Variant="Variant.Text"
                    Color="Color.Inherit"
                    StartIcon="@Icons.Material.Filled.Folder"
@@ -47,116 +67,64 @@
         </MudButton>
 
         <MudSpacer />
-        @* ── OpenCode Server status indicator ────────────────────────────────
+
+        @* ── Right side ──────────────────────────────────────────────────── *@
+
+        @* Settings gear — navigates to global application settings (FR-12, FR-13).
+           Positioned first in the right-side group, before the OpenCode indicator. *@
+        <MudIconButton Icon="@Icons.Material.Filled.Settings"
+                       Color="Color.Inherit"
+                       OnClick="@NavigateToSettings"
+                       aria-label="Application settings" />
+
+        @* ── OpenCode Server status indicator ────────────────────────────
            Compact badge showing server connection state (green/red dot + version).
            Clicking navigates to the Settings page for server management. *@
         <OpenCodeStatusIndicator />
+
         @* Dark/light mode toggle *@
         <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Rounded.LightMode : Icons.Material.Rounded.DarkMode)"
                        Color="Color.Inherit"
                        OnClick="@ToggleDarkMode"
                        aria-label="Toggle dark mode" />
+
         @* Notification bell *@
         <MudIconButton Icon="@Icons.Material.Rounded.NotificationsNone"
                        Color="Color.Inherit"
                        aria-label="Notifications" />
+
         @* User avatar *@
         <MudAvatar Size="Size.Small" Class="ml-2" Variant="Variant.Outlined" aria-label="User menu">
             <MudIcon Icon="@Icons.Material.Rounded.Person" />
         </MudAvatar>
     </MudAppBar>
 
-    @* ── Collapsible mini drawer (light sidebar) ──────────────────────────
-       Light background driven by theme DrawerBackground palette.
-       Mini mode at 68px, expanded at 250px for a tighter, cleaner feel. *@
-    <MudDrawer @bind-Open="_drawerOpen"
-               ClipMode="DrawerClipMode.Always"
-               Elevation="0"
-               Variant="@DrawerVariant.Mini"
-               MiniWidth="68px"
-               Width="250px"
-               OpenMiniOnHover="false"
-               Class="main-drawer">
+    @* ── Collapsible mini drawer (project-scoped sidebar) ─────────────────
+       Only rendered when a project is active (FR-1, FR-2).
+       Contains project-scoped navigation items only — brand and footer
+       have been relocated to the topbar / removed. *@
+    @if (ActiveProjectService.ActiveProject is not null)
+    {
+        <MudDrawer @bind-Open="_drawerOpen"
+                   ClipMode="DrawerClipMode.Always"
+                   Elevation="0"
+                   Variant="@DrawerVariant.Mini"
+                   MiniWidth="68px"
+                   Width="250px"
+                   OpenMiniOnHover="false"
+                   Class="main-drawer">
 
-        <div class="drawer-content">
-
-            @* ── Brand header ────────────────────────────────────────────
-               Expanded: owl icon + "OwlNet" text. Mini: icon only, centered. *@
-            <div class="brand-header @(_drawerOpen ? "brand-header--expanded" : "brand-header--mini")">
-                <MudIcon Icon="@Icons.Material.Rounded.NightsStay"
-                         Size="Size.Medium"
-                         Class="brand-icon" />
-                @if (_drawerOpen)
-                {
-                    <MudText Typo="Typo.h6" Class="brand-text ml-2">OwlNet</MudText>
-                }
+            <div class="drawer-content">
+                @* ── Navigation menu ─────────────────────────────────────────
+                   Project-scoped navigation items (Dashboard, Board, Settings).
+                   Fills the full vertical space now that brand header and
+                   drawer footer have been removed (FR-9, FR-10). *@
+                <div class="drawer-nav-scroll">
+                    <NavMenu />
+                </div>
             </div>
-
-            @* ── Navigation menu ─────────────────────────────────────────
-               Fills remaining vertical space. *@
-            <div class="drawer-nav-scroll">
-                <NavMenu IsExpanded="_drawerOpen" />
-            </div>
-
-            @* ── Drawer footer ───────────────────────────────────────────
-               User profile + dark/light toggle at the bottom. *@
-            <div class="drawer-footer">
-                @* Dark / Light toggle row — mirrors the reference image *@
-                @if (_drawerOpen)
-                {
-                    <div class="drawer-theme-toggle">
-                        <MudIconButton Icon="@Icons.Material.Rounded.DarkMode"
-                                       Size="Size.Small"
-                                       Class="@(_isDarkMode ? "theme-toggle-active" : "theme-toggle-inactive")"
-                                       OnClick="@(() => _isDarkMode = true)"
-                                       aria-label="Dark mode" />
-                        <MudText Typo="Typo.caption" Class="theme-toggle-label">Dark</MudText>
-                        <MudSpacer />
-                        <MudIconButton Icon="@Icons.Material.Rounded.LightMode"
-                                       Size="Size.Small"
-                                       Class="@(!_isDarkMode ? "theme-toggle-active" : "theme-toggle-inactive")"
-                                       OnClick="@(() => _isDarkMode = false)"
-                                       aria-label="Light mode" />
-                        <MudText Typo="Typo.caption" Class="theme-toggle-label">Light</MudText>
-                    </div>
-                }
-
-                @* User profile *@
-                <AuthorizeView>
-                    <Authorized>
-                        <div class="drawer-user-profile @(_drawerOpen ? "" : "drawer-user-profile--mini")">
-                            <MudAvatar Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled" Class="drawer-user-avatar">
-                                @(context.User.Identity?.Name?.Substring(0, 1).ToUpper() ?? "U")
-                            </MudAvatar>
-                            @if (_drawerOpen)
-                            {
-                                <div class="drawer-user-info">
-                                    <MudText Typo="Typo.body2" Class="drawer-user-name">
-                                        @context.User.Identity?.Name
-                                    </MudText>
-                                    <MudText Typo="Typo.caption" Class="drawer-user-role">
-                                        Member
-                                    </MudText>
-                                </div>
-                                @* POST form for logout — the /Account/Logout endpoint requires
-                                   POST + form-encoded returnUrl. Antiforgery is disabled on
-                                   this endpoint because tokens generated during SSR prerender
-                                   are unreliable when submitted from interactive circuits. *@
-                                <form method="post" action="Account/Logout" style="margin: 0;">
-                                    <input type="hidden" name="returnUrl" value="@_currentUrl" />
-                                    <MudIconButton Icon="@Icons.Material.Rounded.Logout"
-                                                   Size="Size.Small"
-                                                   ButtonType="ButtonType.Submit"
-                                                   Class="drawer-logout-btn"
-                                                   aria-label="Logout" />
-                                </form>
-                            }
-                        </div>
-                    </Authorized>
-                </AuthorizeView>
-            </div>
-        </div>
-    </MudDrawer>
+        </MudDrawer>
+    }
 
     @* ── Main content area ───────────────────────────────────────────────
        Comfortable padding for a spacious, airy dashboard feel. *@
@@ -198,16 +166,11 @@
     /// <summary>Controls whether dark mode is active.</summary>
     private bool _isDarkMode;
 
-    /// <summary>Tracks the current URL for the logout return-URL parameter.</summary>
-    private string? _currentUrl;
-
     /// <summary>Whether the active project has been restored from sessionStorage.</summary>
     private bool _projectRestored;
 
     protected override void OnInitialized()
     {
-        _currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
-        NavigationManager.LocationChanged += OnLocationChanged;
         ActiveProjectService.OnActiveProjectChanged += OnActiveProjectChanged;
     }
 
@@ -219,12 +182,6 @@
             await ActiveProjectService.RestoreFromSessionStorageAsync();
             StateHasChanged();
         }
-    }
-
-    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
-    {
-        _currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
-        StateHasChanged();
     }
 
     /// <summary>Called when the active project changes — triggers a re-render of the topbar indicator.</summary>
@@ -261,13 +218,15 @@
         }
     }
 
+    /// <summary>Navigates to the global application settings page (FR-12).</summary>
+    private void NavigateToSettings() => NavigationManager.NavigateTo("/settings");
+
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
     private void ToggleDarkMode() => _isDarkMode = !_isDarkMode;
     private void RecoverFromError() => _errorBoundary?.Recover();
 
     public void Dispose()
     {
-        NavigationManager.LocationChanged -= OnLocationChanged;
         ActiveProjectService.OnActiveProjectChanged -= OnActiveProjectChanged;
     }
 }
