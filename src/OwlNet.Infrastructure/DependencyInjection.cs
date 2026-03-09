@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using OwlNet.Application.Common.Constants;
 using OwlNet.Application.Common.Interfaces;
 using OwlNet.Infrastructure.Identity;
@@ -97,6 +98,26 @@ public static class DependencyInjection
 
         // Background service for auto-start and periodic health check polling.
         services.AddHostedService<OpenCodeServerHostedService>();
+
+        // Named HTTP client for OpenCode Server SSE event streaming.
+        // Uses infinite timeout because SSE connections are long-lived persistent streams.
+        services.AddHttpClient("OpenCodeEventService", client =>
+        {
+            client.Timeout = Timeout.InfiniteTimeSpan;
+        });
+
+        // Singleton event service for OpenCode Server SSE event streaming.
+        // Maintains a persistent SSE connection and distributes events to subscribers.
+        services.AddSingleton<IOpenCodeEventService>(sp =>
+        {
+            var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+            var httpClient = httpClientFactory.CreateClient("OpenCodeEventService");
+            return new OpenCodeEventService(
+                httpClient,
+                sp.GetRequiredService<IServiceScopeFactory>(),
+                sp.GetRequiredService<IOpenCodeServerManager>(),
+                sp.GetRequiredService<ILogger<OpenCodeEventService>>());
+        });
 
         return services;
     }

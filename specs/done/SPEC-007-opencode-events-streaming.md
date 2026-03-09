@@ -1,6 +1,6 @@
 # SPEC-007: OpenCode Events Streaming
 
-> **Status:** Todo
+> **Status:** Done
 > **Created:** 2026-03-07
 > **Author:** owl-planner + user
 > **Priority:** High
@@ -74,19 +74,19 @@ OwlNet needs to subscribe to this event stream to keep the UI and backend state 
 
 ## Acceptance Criteria
 
-- [ ] `IOpenCodeEventService` interface is defined in the Application layer.
-- [ ] Implementation connects to `GET /event` SSE endpoint in the Infrastructure layer.
-- [ ] SSE events are parsed into typed `OpenCodeEventDto` records.
-- [ ] Multiple consumers can subscribe to events by type.
-- [ ] Automatic reconnection with exponential backoff (1s initial, 30s max).
-- [ ] "Connection lost" and "connection restored" notifications are emitted.
-- [ ] `server.connected` event is handled as stream activation confirmation.
-- [ ] Well-known event type constants are defined.
-- [ ] Subscription can be started and stopped explicitly.
-- [ ] Graceful disposal of SSE connection on shutdown.
-- [ ] Structured logging for connection lifecycle and events.
-- [ ] Malformed or unknown events are handled gracefully (no crashes).
-- [ ] Unit tests cover: event parsing, reconnection logic, consumer notification, error handling, disposal.
+- [x] `IOpenCodeEventService` interface is defined in the Application layer.
+- [x] Implementation connects to `GET /event` SSE endpoint in the Infrastructure layer.
+- [x] SSE events are parsed into typed `OpenCodeEventDto` records.
+- [x] Multiple consumers can subscribe to events by type.
+- [x] Automatic reconnection with exponential backoff (1s initial, 30s max).
+- [x] "Connection lost" and "connection restored" notifications are emitted.
+- [x] `server.connected` event is handled as stream activation confirmation.
+- [x] Well-known event type constants are defined.
+- [x] Subscription can be started and stopped explicitly.
+- [x] Graceful disposal of SSE connection on shutdown.
+- [x] Structured logging for connection lifecycle and events.
+- [x] Malformed or unknown events are handled gracefully (no crashes).
+- [x] Unit tests cover: event parsing, reconnection logic, consumer notification, error handling, disposal.
 
 ## Dependencies
 
