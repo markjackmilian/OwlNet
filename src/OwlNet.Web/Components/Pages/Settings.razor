@@ -97,6 +97,11 @@ else
            version display, and installation via NPM. *@
         <OpenCodeHealthCheckPanel />
 
+        @* ── Card: Git Health Check ──────────────────────────────────────
+           Panel component that verifies Git is installed on the host
+           machine by running git --version via ICliService. *@
+        <GitHealthCheckPanel />
+
         @* ── Card: LLM Provider Configuration ────────────────────────────
            Panel component handling OpenRouter API key and model ID
            configuration, connection verification, and encrypted storage. *@
