@@ -1,0 +1,229 @@
+@using OwlNet.Application.Common.Interfaces
+@using OwlNet.Application.Common.Models
+
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Git Health Check Panel — Smart Component
+   ═══════════════════════════════════════════════════════════════════════════════
+   Self-contained panel that checks whether Git is installed on the host machine
+   by running `git --version` via ICliService. Unlike the OpenCode panel, this
+   component has NO install flow — it only reports status and links the user to
+   the official Git download page if Git is missing.
+
+   State machine:
+   ┌──────────┐  success   ┌───────────┐
+   │ Checking  │──────────▶│ Installed  │  (green chip with version)
+   │ (spinner) │           └───────────┘
+   └─────┬────┘
+         │ failure
+         ▼
+   ┌──────────────┐
+   │ NotInstalled  │  (red chip + link to git-scm.com)
+   └──────────────┘
+
+   Services injected:
+   - ICliService — executes CLI commands on the host OS
+
+   Spec reference: specs/todo/SPEC-git-health-check.md (FR-1 through FR-7)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+
+@inject ICliService CliService
+
+@implements IDisposable
+
+<MudCard Outlined="true">
+    @* ── Card Header ──────────────────────────────────────────────────────────
+       Consistent header style matching other Settings page cards:
+       avatar icon + title + subtitle. Uses the Code icon to represent
+       Git / source control (distinct from OpenCode's MonitorHeart icon). *@
+    <MudCardHeader>
+        <CardHeaderAvatar>
+            <MudAvatar Color="Color.Primary" Variant="Variant.Filled" Rounded="true">
+                <MudIcon Icon="@Icons.Material.Filled.Code" />
+            </MudAvatar>
+        </CardHeaderAvatar>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h6">Git Health Check</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Verify that Git is installed and available on the host machine.
+            </MudText>
+        </CardHeaderContent>
+    </MudCardHeader>
+
+    @* ── Card Content — state-dependent rendering ─────────────────────────── *@
+    <MudCardContent>
+        @switch (_state)
+        {
+            @* ── Checking: initial load spinner while running git --version ── *@
+            case HealthCheckState.Checking:
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                    <MudText Typo="Typo.body2">Checking Git status...</MudText>
+                </MudStack>
+                break;
+
+            @* ── Installed: green chip showing the detected version.
+                 If the output was empty (edge case), show "Installed" without version detail. *@
+            case HealthCheckState.Installed:
+                <MudChip T="string"
+                         Color="Color.Success"
+                         Icon="@Icons.Material.Filled.CheckCircle"
+                         Size="Size.Medium">
+                    @if (string.IsNullOrWhiteSpace(_version))
+                    {
+                        @:Installed
+                    }
+                    else
+                    {
+                        @:Installed &mdash; v@(_version)
+                    }
+                </MudChip>
+                break;
+
+            @* ── NotInstalled: red chip + link to the official Git download page.
+                 FR-5: provide a direct link so the user can install Git manually.
+                 FR-6: we intentionally do NOT offer an automatic install button. *@
+            case HealthCheckState.NotInstalled:
+                <MudStack Spacing="3">
+                    <MudChip T="string"
+                             Color="Color.Error"
+                             Icon="@Icons.Material.Filled.Cancel"
+                             Size="Size.Medium">
+                        Not installed
+                    </MudChip>
+                    <MudText Typo="Typo.body2">
+                        Git is required but was not found. Download and install it from
+                        <MudLink Href="https://git-scm.com"
+                                 Target="_blank"
+                                 Typo="Typo.body2"
+                                 Color="Color.Primary">
+                            <b>git-scm.com</b>
+                        </MudLink>
+                    </MudText>
+                </MudStack>
+                break;
+        }
+    </MudCardContent>
+</MudCard>
+
+@code {
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  State — enum-driven UI rendering
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// All possible states for the Git health check panel. Each state maps to a
+    /// distinct visual representation in the card content area.
+    /// </summary>
+    private enum HealthCheckState
+    {
+        /// <summary>Initial load — running <c>git --version</c>.</summary>
+        Checking,
+
+        /// <summary>Git is installed; version may be available.</summary>
+        Installed,
+
+        /// <summary>Git is not installed or not found on PATH.</summary>
+        NotInstalled
+    }
+
+    /// <summary>Current state of the health check panel.</summary>
+    private HealthCheckState _state = HealthCheckState.Checking;
+
+    /// <summary>
+    /// The detected Git version string (e.g. "2.43.0").
+    /// Populated when <c>git --version</c> succeeds and output is non-empty.
+    /// May remain empty if the command succeeds but produces no output.
+    /// </summary>
+    private string _version = string.Empty;
+
+    /// <summary>
+    /// Cancellation token source scoped to this component's lifetime.
+    /// Cancelled in <see cref="Dispose"/> to abort any in-flight CLI calls
+    /// if the user navigates away.
+    /// </summary>
+    private readonly CancellationTokenSource _cts = new();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Lifecycle — check Git on initialization
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// On first load, automatically checks whether Git is installed
+    /// by running <c>git --version</c> with a 10-second timeout.
+    /// </summary>
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckGitVersionAsync();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Version Check — determines if Git is installed
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Executes <c>git --version</c> on the host machine.
+    /// On success, extracts the version number from the output (e.g. "git version 2.43.0"
+    /// → "2.43.0") and transitions to <see cref="HealthCheckState.Installed"/>.
+    /// On failure (non-zero exit code, timeout, or command not found), transitions to
+    /// <see cref="HealthCheckState.NotInstalled"/>.
+    /// </summary>
+    private async Task CheckGitVersionAsync()
+    {
+        _state = HealthCheckState.Checking;
+        StateHasChanged();
+
+        var result = await CliService.RunCommandAsync(
+            "git",
+            "--version",
+            timeoutMs: 10_000,
+            cancellationToken: _cts.Token);
+
+        if (result.IsSuccess)
+        {
+            // `git --version` typically outputs "git version 2.43.0" or similar.
+            // Extract just the version number by taking the last whitespace-delimited
+            // token, which handles variations like "git version 2.43.0.windows.1".
+            _version = ParseVersionFromOutput(result.Output);
+            _state = HealthCheckState.Installed;
+        }
+        else
+        {
+            _state = HealthCheckState.NotInstalled;
+        }
+    }
+
+    /// <summary>
+    /// Extracts the version number from the raw <c>git --version</c> output.
+    /// For typical output like "git version 2.43.0", returns "2.43.0".
+    /// Returns an empty string if the output is null or whitespace-only.
+    /// </summary>
+    /// <param name="output">The raw standard output from <c>git --version</c>.</param>
+    /// <returns>The extracted version string, or empty if parsing fails.</returns>
+    private static string ParseVersionFromOutput(string output)
+    {
+        if (string.IsNullOrWhiteSpace(output))
+        {
+            return string.Empty;
+        }
+
+        // Split on whitespace and take the last token.
+        // "git version 2.43.0"           → "2.43.0"
+        // "git version 2.43.0.windows.1" → "2.43.0.windows.1"
+        var parts = output.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length > 0 ? parts[^1] : string.Empty;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Cleanup — cancel in-flight CLI operations on dispose
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Cancels any in-flight CLI commands when the component is disposed
+    /// (e.g., user navigates away from the Settings page). Satisfies FR-7.
+    /// </summary>
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}
