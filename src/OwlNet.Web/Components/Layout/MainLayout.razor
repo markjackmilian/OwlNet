@@ -1,6 +1,7 @@
 @inherits LayoutComponentBase
 @implements IDisposable
 
+@using OwlNet.Application.Common.Models
 @using OwlNet.Web.Services
 
 @inject NavigationManager NavigationManager
@@ -228,7 +229,10 @@
         InvokeAsync(StateHasChanged);
     }
 
-    /// <summary>Opens the project selector modal dialog.</summary>
+    /// <summary>
+    /// Opens the project selector modal dialog.
+    /// When the user selects a project, navigates to that project's dashboard.
+    /// </summary>
     private async Task OpenProjectSelectorAsync()
     {
         var options = new DialogOptions
@@ -239,9 +243,18 @@
             NoHeader = false
         };
 
-        await DialogService.ShowAsync<OwlNet.Web.Components.Projects.ProjectSelectorModal>(
+        var dialog = await DialogService.ShowAsync<OwlNet.Web.Components.Projects.ProjectSelectorModal>(
             string.Empty,
             options);
+
+        var result = await dialog.Result;
+
+        // Navigate to the project dashboard only when the user actively selected a project
+        // (not when they closed/cancelled the dialog)
+        if (result is { Canceled: false, Data: ProjectDto project })
+        {
+            NavigationManager.NavigateTo($"/projects/{project.Id}");
+        }
     }
 
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
