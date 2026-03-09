@@ -56,18 +56,6 @@ h1:focus {
     transition: width 0.2s ease-in-out;
 }
 
-/* ── Section group labels ────────────────────────────────────────────────
-   Small, uppercase, muted headings that visually separate navigation
-   groups (e.g., "Main", "Settings", "Account"). */
-.mud-drawer .nav-section-label {
-    color: var(--mud-palette-text-secondary);
-    font-weight: 500;
-    font-size: 0.65rem;
-    letter-spacing: 0.08em;
-    padding-bottom: 2px;
-    user-select: none;
-}
-
 /* ── Nav link base styles ────────────────────────────────────────────────
    Dark text on light sidebar. Icons use a muted gray for hierarchy. */
 .mud-drawer .mud-nav-link {
@@ -119,11 +107,6 @@ h1:focus {
     display: none !important;
 }
 
-/* Hide custom child content wrapper (badge nav links) */
-.mud-drawer.mud-drawer--mini .mud-nav-link .nav-link-content {
-    display: none !important;
-}
-
 /* Center icon in mini drawer */
 .mud-drawer.mud-drawer--mini .mud-nav-link {
     justify-content: center;
@@ -136,45 +119,6 @@ h1:focus {
 /* Remove icon right margin for true centering */
 .mud-drawer.mud-drawer--mini .mud-nav-link .mud-nav-link-icon {
     margin: 0 !important;
-}
-
-/* ── Nav link content wrapper ────────────────────────────────────────────
-   Flex container for text + badge alignment. */
-.mud-drawer .nav-link-content {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-}
-
-/* ── Nav link badges ─────────────────────────────────────────────────────
-   Small rounded pill badges. Primary uses a soft primary tint,
-   secondary uses a subtle gray. */
-.mud-drawer .nav-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 20px;
-    height: 18px;
-    padding: 0 6px;
-    border-radius: 9px;
-    font-size: 0.65rem;
-    font-weight: 600;
-    line-height: 1;
-    flex-shrink: 0;
-    margin-left: 8px;
-}
-
-/* Primary badge — soft primary background with primary text */
-.mud-drawer .nav-badge--primary {
-    background-color: var(--mud-palette-primary);
-    color: var(--mud-palette-primary-text);
-}
-
-/* Secondary badge — subtle gray pill */
-.mud-drawer .nav-badge--secondary {
-    background-color: var(--mud-palette-background);
-    color: var(--mud-palette-text-secondary);
 }
 
 /* ── Drawer dividers ─────────────────────────────────────────────────────

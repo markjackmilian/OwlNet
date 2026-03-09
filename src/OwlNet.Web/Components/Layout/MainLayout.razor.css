@@ -1,4 +1,4 @@
-/* MainLayout scoped styles — minimalist light sidebar design.
+/* MainLayout scoped styles — project-scoped navigation shell.
    The sidebar uses the theme's DrawerBackground (warm off-white in light mode,
    dark surface in dark mode). All colors reference CSS custom properties
    from the MudBlazor theme so they adapt automatically. */
@@ -9,40 +9,13 @@
     border-bottom: 1px solid var(--mud-palette-divider);
 }
 
-/* ── Drawer ──────────────────────────────────────────────────────────────────
-   Right border for separation instead of shadow. */
-::deep .main-drawer {
-    border-right: 1px solid var(--mud-palette-divider) !important;
-}
-
-/* ── Drawer content flex container ───────────────────────────────────────────
-   Vertical flex column so the footer is pushed to the bottom. */
-.drawer-content {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    overflow: hidden;
-}
-
-/* ── Brand header base ───────────────────────────────────────────────────────
-   Horizontal flex for icon + text alignment. */
-.brand-header {
+/* ── Topbar brand ────────────────────────────────────────────────────────────
+   Inline flex row for the owl icon + "OwlNet" text in the topbar.
+   Always visible regardless of project context (FR-11). */
+.topbar-brand {
     display: flex;
     align-items: center;
-    padding: 16px 16px 12px;
-    min-height: 48px;
-    flex-shrink: 0;
-    transition: padding 0.2s ease;
-}
-
-.brand-header--expanded {
-    justify-content: flex-start;
-}
-
-.brand-header--mini {
-    justify-content: center;
-    padding-left: 0;
-    padding-right: 0;
+    user-select: none;
 }
 
 /* Brand icon — uses primary color for brand identity */
@@ -51,7 +24,7 @@
     flex-shrink: 0;
 }
 
-/* Brand text — dark, bold for readability on light sidebar */
+/* Brand text — bold for readability, inherits topbar text color */
 ::deep .brand-text {
     color: var(--mud-palette-text-primary) !important;
     white-space: nowrap;
@@ -59,92 +32,29 @@
     letter-spacing: -.02em;
 }
 
+/* ── Drawer ──────────────────────────────────────────────────────────────────
+   Right border for separation instead of shadow.
+   Only rendered when a project is active (FR-1, FR-2). */
+::deep .main-drawer {
+    border-right: 1px solid var(--mud-palette-divider) !important;
+}
+
+/* ── Drawer content flex container ───────────────────────────────────────────
+   Vertical flex column filling the full drawer height.
+   Brand header and footer have been removed — only nav content remains. */
+.drawer-content {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
 /* ── Scrollable navigation area ──────────────────────────────────────────────
-   Fills the remaining vertical space. */
+   Fills the full vertical space of the drawer. */
 .drawer-nav-scroll {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-}
-
-/* ── Drawer footer ───────────────────────────────────────────────────────────
-   Pinned to the bottom via flexbox. */
-.drawer-footer {
-    flex-shrink: 0;
-    padding: 8px 0;
-    border-top: 1px solid var(--mud-palette-divider);
-}
-
-/* ── Theme toggle row ────────────────────────────────────────────────────────
-   Dark/Light toggle at the bottom of the drawer, matching the reference design. */
-.drawer-theme-toggle {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    padding: 6px 12px;
-    margin: 0 8px 4px;
-    border-radius: 10px;
-    background-color: var(--mud-palette-background);
-}
-
-::deep .theme-toggle-active {
-    color: var(--mud-palette-primary) !important;
-}
-
-::deep .theme-toggle-inactive {
-    color: var(--mud-palette-text-disabled) !important;
-}
-
-::deep .theme-toggle-label {
-    color: var(--mud-palette-text-secondary) !important;
-    font-size: 0.7rem !important;
-}
-
-/* ── User profile section ────────────────────────────────────────────────────
-   Horizontal flex row: avatar + user info + logout button. */
-.drawer-user-profile {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 16px;
-}
-
-.drawer-user-profile--mini {
-    justify-content: center;
-    padding-left: 0;
-    padding-right: 0;
-}
-
-/* User info text block — name + role stacked vertically. */
-.drawer-user-info {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-}
-
-::deep .drawer-user-name {
-    color: var(--mud-palette-text-primary) !important;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-weight: 500 !important;
-}
-
-::deep .drawer-user-role {
-    color: var(--mud-palette-text-secondary) !important;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-/* Logout button — subtle, non-intrusive */
-::deep .drawer-logout-btn {
-    color: var(--mud-palette-text-secondary) !important;
-    flex-shrink: 0;
-}
-
-::deep .drawer-logout-btn:hover {
-    color: var(--mud-palette-text-primary) !important;
 }
 
 /* ── Error boundary card ─────────────────────────────────────────────────────
