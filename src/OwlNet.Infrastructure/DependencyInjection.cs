@@ -83,6 +83,14 @@ public static class DependencyInjection
             client.Timeout = TimeSpan.FromSeconds(OpenCodeConstants.DefaultTimeoutSeconds);
         });
 
+        // Typed HTTP client for OpenCode messaging API calls (prompts, messages, commands).
+        // Uses an extended timeout (300s) because AI prompt responses can take several minutes.
+        // No BaseAddress — the URL is resolved at request time.
+        services.AddHttpClient<IOpenCodeMessageService, OpenCodeMessageService>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(OpenCodeConstants.MessageTimeoutSeconds);
+        });
+
         // Singleton manager for the OpenCode Server process lifecycle.
         // Registered as singleton because it manages a single global process.
         services.AddSingleton<IOpenCodeServerManager, OpenCodeServerManager>();
