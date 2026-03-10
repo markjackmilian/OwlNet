@@ -1,6 +1,6 @@
 # SPEC: Agent Creation Wizard
 
-> **Status:** Todo
+> **Status:** Done
 > **Created:** 2026-03-10
 > **Author:** owl-planner + user
 > **Priority:** High (P2 — depends on P1)

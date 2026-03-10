@@ -1,0 +1,399 @@
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Create Agent Page — 3-Step Agent Creation Wizard
+   ═══════════════════════════════════════════════════════════════════════════════
+   A smart page component that guides the user through creating a new AI agent
+   definition file via an LLM-assisted wizard. The wizard has three steps:
+
+     Step 1 — Initial Form: Collect agent type, name, and description.
+     Step 2 — LLM Refinement Conversation: Chat-like Q&A with the LLM to
+              refine the agent definition before generation.
+     Step 3 — Preview & Edit: Review and edit the generated Markdown, then save.
+
+   The LLM acts as an "agent architect" — it may ask clarifying questions to
+   produce a more targeted agent, or proceed directly to generation if the
+   initial description is sufficiently clear.
+
+   Route: /projects/{ProjectId:guid}/agents/new
+
+   Layout structure:
+   ┌─────────────────────────────────────────────────────────────────┐
+   │ BACK BUTTON + PAGE HEADER ("New Agent")                        │
+   ├─────────────────────────────────────────────────────────────────┤
+   │ STEP 1: Initial Form                                           │
+   │  ┌─ Agent Type (Radio: Primary / Subagent)                     │
+   │  ├─ Agent Name (text, validated)                                │
+   │  ├─ Description (multiline, validated)                          │
+   │  └─ [Generate] button                                           │
+   ├─────────────────────────────────────────────────────────────────┤
+   │ STEP 2: LLM Conversation                                       │
+   │  ┌─ Chat bubbles (assistant left, user right)                   │
+   │  ├─ Loading indicator during LLM calls                          │
+   │  └─ Text input + [Send] + [Skip & Generate]                    │
+   ├─────────────────────────────────────────────────────────────────┤
+   │ STEP 3: Preview & Edit                                          │
+   │  ┌─ Editable MudTextField (monospace, full-width)               │
+   │  └─ [Save Agent] + [Back to Form]                               │
+   └─────────────────────────────────────────────────────────────────┘
+
+   Spec reference: SPEC-P2-agent-creation-wizard (FR-1 to FR-22)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+
+@page "/projects/{ProjectId:guid}/agents/new"
+
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Page Title — updates the browser tab (FR-4: "New Agent — {ProjectName} — OwlNet")
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+<PageTitle>@(_project is not null ? $"New Agent — {_project.Name} — OwlNet" : "New Agent — OwlNet")</PageTitle>
+
+@* ═══════════════════════════════════════════════════════════════════════════════
+   ErrorBoundary — catches rendering exceptions and shows a user-friendly
+   recovery UI instead of crashing the entire page.
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+<ErrorBoundary @ref="_errorBoundary">
+    <ChildContent>
+        @* ═══════════════════════════════════════════════════════════════════════════════
+           Loading State — skeleton placeholders while project data is fetched
+           ═══════════════════════════════════════════════════════════════════════════════ *@
+        @if (_isLoading)
+        {
+            <MudStack Spacing="4">
+                @* ── Back button + header skeleton ──────────────────────────────── *@
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="120px" Height="36px" />
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="250px" Height="40px" />
+                @* ── Form skeleton — placeholder fields ─────────────────────────── *@
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="56px" />
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="56px" />
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="120px" />
+            </MudStack>
+        }
+        @* ═══════════════════════════════════════════════════════════════════════════════
+           Error State — project not found or archived (FR-2)
+           ═══════════════════════════════════════════════════════════════════════════════ *@
+        else if (_isNotFound)
+        {
+            <MudStack AlignItems="AlignItems.Center"
+                      Justify="Justify.Center"
+                      Spacing="3"
+                      Class="py-16">
+                <MudIcon Icon="@Icons.Material.Filled.SearchOff"
+                         Size="Size.Large"
+                         Color="Color.Default" />
+                <MudText Typo="Typo.h5" Align="Align.Center">
+                    Project not found
+                </MudText>
+                <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+                    The project may have been archived or does not exist.
+                </MudText>
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.ArrowBack"
+                           OnClick="@NavigateToAgentList">
+                    Back to projects
+                </MudButton>
+            </MudStack>
+        }
+        @* ═══════════════════════════════════════════════════════════════════════════════
+           Content State — wizard steps (form → conversation → preview)
+           ═══════════════════════════════════════════════════════════════════════════════ *@
+        else if (_project is not null)
+        {
+            @* ── Back Button — navigates to the agent list page (FR-5) ──────────── *@
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Default"
+                       StartIcon="@Icons.Material.Filled.ArrowBack"
+                       OnClick="@NavigateToAgentList"
+                       Class="mb-2">
+                Back to Agents
+            </MudButton>
+
+            @* ── Page Header ────────────────────────────────────────────────────── *@
+            <MudText Typo="Typo.h4" Class="mb-4">New Agent</MudText>
+
+            @* ── Step Indicator — shows which wizard step the user is on ─────── *@
+            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mb-6">
+                <MudChip T="string"
+                         Size="Size.Small"
+                         Color="@(_currentStep == WizardStep.Form ? Color.Primary : Color.Default)"
+                         Variant="@(_currentStep == WizardStep.Form ? Variant.Filled : Variant.Outlined)">
+                    1. Details
+                </MudChip>
+                <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small" />
+                <MudChip T="string"
+                         Size="Size.Small"
+                         Color="@(_currentStep == WizardStep.Conversation ? Color.Primary : Color.Default)"
+                         Variant="@(_currentStep == WizardStep.Conversation ? Variant.Filled : Variant.Outlined)">
+                    2. Refine
+                </MudChip>
+                <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small" />
+                <MudChip T="string"
+                         Size="Size.Small"
+                         Color="@(_currentStep == WizardStep.Preview ? Color.Primary : Color.Default)"
+                         Variant="@(_currentStep == WizardStep.Preview ? Variant.Filled : Variant.Outlined)">
+                    3. Preview
+                </MudChip>
+            </MudStack>
+
+            @* ═══════════════════════════════════════════════════════════════════════
+               STEP 1 — Initial Form (FR-6 to FR-9)
+               Collects agent type, name, and description before sending to the LLM.
+               ═══════════════════════════════════════════════════════════════════════ *@
+            @if (_currentStep == WizardStep.Form)
+            {
+                <MudPaper Elevation="1" Class="pa-6">
+                    <MudForm @ref="_form" @bind-IsValid="_formIsValid">
+                        <MudStack Spacing="4">
+                            @* ── Agent Type — radio group: Primary or Subagent (FR-6, FR-9)
+                               "All" mode is intentionally excluded — it's an advanced option
+                               that can be set manually in the editor (SPEC-P3). ──────────── *@
+                            <div>
+                                <MudText Typo="Typo.subtitle1" Class="mb-2">Agent Type</MudText>
+                                <MudRadioGroup T="string" @bind-Value="_agentType">
+                                    <MudRadio T="string"
+                                              Value="@("subagent")"
+                                              Color="Color.Primary">
+                                        Subagent
+                                    </MudRadio>
+                                    <MudRadio T="string"
+                                              Value="@("primary")"
+                                              Color="Color.Primary">
+                                        Primary
+                                    </MudRadio>
+                                </MudRadioGroup>
+                            </div>
+
+                            @* ── Agent Name — alphanumeric + hyphens, 2-50 chars (FR-6)
+                               Becomes the filename: {agentName}.md ──────────────────────── *@
+                            <MudTextField @bind-Value="_agentName"
+                                          Label="Agent Name"
+                                          Placeholder="e.g. code-reviewer"
+                                          HelperText="2-50 characters. Letters, numbers, and hyphens only."
+                                          Required="true"
+                                          RequiredError="Agent name is required."
+                                          Validation="@(new Func<string, string?>(ValidateAgentName))"
+                                          Immediate="true"
+                                          Variant="Variant.Outlined"
+                                          Adornment="Adornment.Start"
+                                          AdornmentIcon="@Icons.Material.Filled.SmartToy" />
+
+                            @* ── Description — multiline, 10-500 chars (FR-6)
+                               Describes what the agent should do; sent to the LLM as context. *@
+                            <MudTextField @bind-Value="_description"
+                                          Label="Description"
+                                          Placeholder="Describe what this agent should do, its responsibilities, and any specific behaviors..."
+                                          HelperText="10-500 characters. Be as specific as possible for better results."
+                                          Required="true"
+                                          RequiredError="Description is required."
+                                          Validation="@(new Func<string, string?>(ValidateDescription))"
+                                          Immediate="true"
+                                          Variant="Variant.Outlined"
+                                          Lines="4" />
+
+                            @* ── Generate Button — enabled only when all validation passes (FR-7) *@
+                            <MudStack Row="true" Justify="Justify.FlexEnd">
+                                <MudButton Variant="Variant.Filled"
+                                           Color="Color.Primary"
+                                           Disabled="@(!_formIsValid || _isProcessing)"
+                                           StartIcon="@Icons.Material.Filled.AutoAwesome"
+                                           OnClick="@HandleGenerateClickAsync">
+                                    @if (_isProcessing)
+                                    {
+                                        <MudProgressCircular Size="Size.Small"
+                                                             Indeterminate="true"
+                                                             Class="mr-2" />
+                                    }
+                                    Generate
+                                </MudButton>
+                            </MudStack>
+                        </MudStack>
+                    </MudForm>
+                </MudPaper>
+            }
+
+            @* ═══════════════════════════════════════════════════════════════════════
+               STEP 2 — LLM Refinement Conversation (FR-10 to FR-17)
+               Chat-like panel where the LLM asks clarifying questions and the user
+               provides answers. The conversation continues until the LLM has enough
+               information to generate the agent, or the user clicks "Skip & Generate".
+               ═══════════════════════════════════════════════════════════════════════ *@
+            else if (_currentStep == WizardStep.Conversation)
+            {
+                <MudPaper Elevation="1" Class="pa-4">
+                    @* ── Conversation Messages — scrollable area with chat bubbles ── *@
+                    <MudPaper Elevation="0"
+                              Class="pa-4 mb-4"
+                              Style="max-height: 500px; overflow-y: auto; background: transparent;"
+                              @ref="_chatContainer">
+                        <MudStack Spacing="3">
+                            @foreach (var message in _displayMessages)
+                            {
+                                @* Assistant messages: left-aligned, default surface color (FR-12) *@
+                                @if (message.Role == "assistant")
+                                {
+                                    <MudStack Row="true" Justify="Justify.FlexStart">
+                                        <MudPaper Elevation="1"
+                                                  Class="pa-3"
+                                                  Style="max-width: 80%; border-radius: 12px 12px 12px 0;"
+                                                  @key="message">
+                                            @if (message.IsError)
+                                            {
+                                                @* Error messages shown with error styling and optional retry *@
+                                                <MudStack Spacing="2">
+                                                    <MudText Color="Color.Error">
+                                                        <MudIcon Icon="@Icons.Material.Filled.ErrorOutline"
+                                                                 Size="Size.Small"
+                                                                 Class="mr-1" />
+                                                        @message.Content
+                                                    </MudText>
+                                                    <MudButton Variant="Variant.Text"
+                                                               Color="Color.Primary"
+                                                               Size="Size.Small"
+                                                               StartIcon="@Icons.Material.Filled.Refresh"
+                                                               OnClick="@RetryLastRequestAsync">
+                                                        Retry
+                                                    </MudButton>
+                                                </MudStack>
+                                            }
+                                            else
+                                            {
+                                                @* Normal assistant message with pre-wrap for line breaks *@
+                                                <MudText Style="white-space: pre-wrap;">@message.Content</MudText>
+                                            }
+                                        </MudPaper>
+                                    </MudStack>
+                                }
+                                @* User messages: right-aligned, primary color tint (FR-12) *@
+                                else
+                                {
+                                    <MudStack Row="true" Justify="Justify.FlexEnd">
+                                        <MudPaper Elevation="1"
+                                                  Class="pa-3 mud-theme-primary"
+                                                  Style="max-width: 80%; border-radius: 12px 12px 0 12px;"
+                                                  @key="message">
+                                            <MudText Style="white-space: pre-wrap; color: var(--mud-palette-primary-text);">
+                                                @message.Content
+                                            </MudText>
+                                        </MudPaper>
+                                    </MudStack>
+                                }
+                            }
+
+                            @* ── Typing indicator — shown while waiting for LLM response (FR-16) *@
+                            @if (_isProcessing)
+                            {
+                                <MudStack Row="true" Justify="Justify.FlexStart">
+                                    <MudPaper Elevation="1"
+                                              Class="pa-3"
+                                              Style="border-radius: 12px 12px 12px 0;">
+                                        <MudProgressCircular Size="Size.Small"
+                                                             Indeterminate="true"
+                                                             Color="Color.Primary" />
+                                    </MudPaper>
+                                </MudStack>
+                            }
+                        </MudStack>
+                    </MudPaper>
+
+                    @* ── Input Area — text field + Send + Skip & Generate buttons ── *@
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.End">
+                        <MudTextField @bind-Value="_userInput"
+                                      Label="Your answer"
+                                      Placeholder="Type your response..."
+                                      Variant="Variant.Outlined"
+                                      Disabled="@_isProcessing"
+                                      Immediate="true"
+                                      Lines="2"
+                                      OnKeyDown="@HandleChatKeyDownAsync"
+                                      Style="flex: 1;" />
+                        <MudStack Spacing="1">
+                            @* Send button — sends the user's answer to the LLM (FR-12) *@
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Primary"
+                                       Disabled="@(_isProcessing || string.IsNullOrWhiteSpace(_userInput))"
+                                       StartIcon="@Icons.Material.Filled.Send"
+                                       OnClick="@SendUserMessageAsync">
+                                Send
+                            </MudButton>
+                            @* Skip & Generate — bypasses further questions (FR-12) *@
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Secondary"
+                                       Disabled="@_isProcessing"
+                                       StartIcon="@Icons.Material.Filled.SkipNext"
+                                       OnClick="@SkipAndGenerateAsync"
+                                       Size="Size.Small">
+                                Skip &amp; Generate
+                            </MudButton>
+                        </MudStack>
+                    </MudStack>
+                </MudPaper>
+            }
+
+            @* ═══════════════════════════════════════════════════════════════════════
+               STEP 3 — Preview & Edit (FR-18 to FR-22)
+               Displays the generated agent Markdown in an editable text field.
+               The user can freely edit frontmatter and body before saving.
+               ═══════════════════════════════════════════════════════════════════════ *@
+            else if (_currentStep == WizardStep.Preview)
+            {
+                <MudPaper Elevation="1" Class="pa-6">
+                    <MudStack Spacing="4">
+                        <MudText Typo="Typo.h6">
+                            Review &amp; Edit Agent Definition
+                        </MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            Review the generated agent definition below. You can freely edit the YAML
+                            frontmatter and the system prompt body before saving.
+                        </MudText>
+
+                        @* ── Editable Markdown — monospace, full-width, generous height (FR-19, FR-20) *@
+                        <MudTextField @bind-Value="_generatedMarkdown"
+                                      Variant="Variant.Outlined"
+                                      Lines="25"
+                                      Style="font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; font-size: 0.875rem;"
+                                      Immediate="true"
+                                      FullWidth="true" />
+
+                        @* ── Action Buttons — Save Agent + Back to Form (FR-21) ──── *@
+                        <MudStack Row="true" Spacing="2" Justify="Justify.FlexEnd">
+                            @* Back to Form — confirmation dialog before discarding (FR-21) *@
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Default"
+                                       StartIcon="@Icons.Material.Filled.ArrowBack"
+                                       Disabled="@_isSaving"
+                                       OnClick="@HandleBackToFormAsync">
+                                Back to Form
+                            </MudButton>
+
+                            @* Save Agent — writes the file and navigates to agent list (FR-22) *@
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.Save"
+                                       Disabled="@(_isSaving || string.IsNullOrWhiteSpace(_generatedMarkdown))"
+                                       OnClick="@SaveAgentAsync">
+                                @if (_isSaving)
+                                {
+                                    <MudProgressCircular Size="Size.Small"
+                                                         Indeterminate="true"
+                                                         Class="mr-2" />
+                                }
+                                Save Agent
+                            </MudButton>
+                        </MudStack>
+                    </MudStack>
+                </MudPaper>
+            }
+        }
+    </ChildContent>
+    <ErrorContent>
+        @* ── Error recovery UI — shown when an unhandled rendering exception occurs ── *@
+        <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="3" Class="py-16">
+            <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Size="Size.Large" Color="Color.Error" />
+            <MudText Typo="Typo.h5" Align="Align.Center">Something went wrong</MudText>
+            <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+                An unexpected error occurred. Please try again.
+            </MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@RecoverFromError">
+                Try Again
+            </MudButton>
+        </MudStack>
+    </ErrorContent>
+</ErrorBoundary>

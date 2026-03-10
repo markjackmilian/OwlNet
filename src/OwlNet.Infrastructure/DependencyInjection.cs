@@ -70,6 +70,12 @@ public static class DependencyInjection
             client.Timeout = TimeSpan.FromSeconds(15);
         });
 
+        services.AddHttpClient<ILlmChatService, LlmChatService>(client =>
+        {
+            client.BaseAddress = new Uri("https://openrouter.ai/api/v1/");
+            client.Timeout = TimeSpan.FromSeconds(60);
+        });
+
         // ── OpenCode Server integration ─────────────────────────────────────
         // Typed HTTP client for OpenCode Server API calls.
         // No BaseAddress — the URL is resolved at request time from IAppSettingService.
