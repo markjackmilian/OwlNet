@@ -1,6 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <EmbeddedResource Include="Agents\Resources\AgentArchitectSystemPrompt.txt" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\OwlNet.Domain\OwlNet.Domain.csproj" />
   </ItemGroup>
 
