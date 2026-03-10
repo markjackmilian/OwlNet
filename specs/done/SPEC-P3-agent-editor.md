@@ -1,6 +1,6 @@
 # SPEC: Agent Editor
 
-> **Status:** Todo
+> **Status:** Done
 > **Created:** 2026-03-10
 > **Author:** owl-planner + user
 > **Priority:** Medium (P3 — depends on P1, can be implemented in parallel with P2)
