@@ -1,0 +1,249 @@
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Agent Editor Page — View, Edit, Save, and Delete an Agent Definition
+   ═══════════════════════════════════════════════════════════════════════════════
+   A smart page component that loads an existing agent's Markdown file and
+   presents it in a full-text editor. The user can:
+
+     - View the agent summary (name, type badge, description) parsed from
+       the YAML frontmatter.
+     - Edit the full raw Markdown content (frontmatter + body) in a monospace
+       text field.
+     - Save changes back to the filesystem, overwriting the original file.
+     - Delete the agent file with a confirmation dialog.
+     - Navigate back to the agent list with an unsaved-changes guard.
+
+   The summary header updates only after a successful save, not in real-time
+   as the user types, for simplicity and performance.
+
+   Route: /projects/{ProjectId:guid}/agents/{AgentName}
+
+   Layout structure:
+   ┌─────────────────────────────────────────────────────────────────┐
+   │ BACK BUTTON ("Back to Agents")                                  │
+   ├─────────────────────────────────────────────────────────────────┤
+   │ SUMMARY HEADER                                                  │
+   │  ┌─ Agent Name (h5) + Type Badge (MudChip) ─────────────────── │
+   │  └─ Description (body2, secondary color) ────────────────────── │
+   ├─────────────────────────────────────────────────────────────────┤
+   │ EDITOR                                                          │
+   │  ┌─ MudTextField (multiline, monospace, full-width, Lines=20) ─ │
+   │  └─ Full raw Markdown content (YAML frontmatter + body) ─────── │
+   ├─────────────────────────────────────────────────────────────────┤
+   │ ACTION BUTTONS                                                  │
+   │  ┌─ [Delete] (Outlined, Error, left) ──────────────────────── │
+   │  └─ [Save] (Filled, Primary, right, disabled when clean) ──── │
+   └─────────────────────────────────────────────────────────────────┘
+
+   Spec reference: SPEC-P3-agent-editor (FR-1 to FR-26, FR-33)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+
+@page "/projects/{ProjectId:guid}/agents/{AgentName}"
+
+@using DispatchR.Abstractions.Send
+@using OwlNet.Application.Common.Models
+@using OwlNet.Application.Projects.Queries.GetProjectById
+@using OwlNet.Application.Agents.Queries.GetAgentFile
+@using OwlNet.Application.Agents.Commands.UpdateAgent
+@using OwlNet.Application.Agents.Commands.DeleteAgent
+@using OwlNet.Web.Services
+
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Page Title — updates the browser tab (FR-6)
+   Format: "{AgentName} — Agents — {ProjectName} — OwlNet"
+   Falls back to "Agent — OwlNet" while loading or when data is unavailable.
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+<PageTitle>@(_agent is not null ? $"{AgentName} — Agents — {_project!.Name} — OwlNet" : "Agent — OwlNet")</PageTitle>
+
+@* ═══════════════════════════════════════════════════════════════════════════════
+   ErrorBoundary — catches rendering exceptions and shows a user-friendly
+   recovery UI instead of crashing the entire page.
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+<ErrorBoundary @ref="_errorBoundary">
+    <ChildContent>
+        @* ═══════════════════════════════════════════════════════════════════════
+           Loading State — skeleton placeholders while project and agent data
+           are being fetched from the filesystem (FR-33)
+           ═══════════════════════════════════════════════════════════════════════ *@
+        @if (_isLoading)
+        {
+            <MudStack Spacing="4">
+                @* ── Back button skeleton ─────────────────────────────────────── *@
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="140px" Height="36px" />
+                @* ── Summary header skeleton (name + chip + description) ──────── *@
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="200px" Height="32px" />
+                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="80px" Height="28px" />
+                </MudStack>
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="350px" Height="20px" />
+                @* ── Editor skeleton ──────────────────────────────────────────── *@
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="400px" />
+                @* ── Action buttons skeleton ──────────────────────────────────── *@
+                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="100px" Height="40px" />
+                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="100px" Height="40px" />
+                </MudStack>
+            </MudStack>
+        }
+        @* ═══════════════════════════════════════════════════════════════════════
+           Project Not Found State — shown when the project ID is invalid or
+           the project is archived (FR-3)
+           ═══════════════════════════════════════════════════════════════════════ *@
+        else if (_isProjectNotFound)
+        {
+            <MudStack AlignItems="AlignItems.Center"
+                      Justify="Justify.Center"
+                      Spacing="3"
+                      Class="py-16">
+                <MudIcon Icon="@Icons.Material.Filled.SearchOff"
+                         Size="Size.Large"
+                         Color="Color.Default" />
+                <MudText Typo="Typo.h5" Align="Align.Center">
+                    Project not found
+                </MudText>
+                <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+                    The project may have been archived or does not exist.
+                </MudText>
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.ArrowBack"
+                           OnClick="@NavigateToAgentList">
+                    Back to projects
+                </MudButton>
+            </MudStack>
+        }
+        @* ═══════════════════════════════════════════════════════════════════════
+           Agent Not Found State — shown when the agent file does not exist
+           at the expected path (FR-4)
+           ═══════════════════════════════════════════════════════════════════════ *@
+        else if (_isAgentNotFound)
+        {
+            <MudStack AlignItems="AlignItems.Center"
+                      Justify="Justify.Center"
+                      Spacing="3"
+                      Class="py-16">
+                <MudIcon Icon="@Icons.Material.Filled.SmartToy"
+                         Size="Size.Large"
+                         Color="Color.Default" />
+                <MudText Typo="Typo.h5" Align="Align.Center">
+                    Agent not found
+                </MudText>
+                <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+                    The agent file "@(AgentName).md" could not be found in this project.
+                </MudText>
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.ArrowBack"
+                           OnClick="@NavigateToAgentList">
+                    Back to Agents
+                </MudButton>
+            </MudStack>
+        }
+        @* ═══════════════════════════════════════════════════════════════════════
+           Content State — summary header + editor + action buttons
+           Shown when both project and agent data are loaded successfully.
+           ═══════════════════════════════════════════════════════════════════════ *@
+        else if (_project is not null && _agent is not null)
+        {
+            @* ── Back Button — navigates to the agent list page (FR-23, FR-24, FR-25, FR-26)
+               If the editor has unsaved changes, a confirmation dialog is shown
+               before navigating away to prevent accidental data loss. ──────────── *@
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Default"
+                       StartIcon="@Icons.Material.Filled.ArrowBack"
+                       OnClick="@NavigateBackAsync"
+                       Class="mb-2">
+                Back to Agents
+            </MudButton>
+
+            @* ═══════════════════════════════════════════════════════════════════
+               Summary Header — agent name, type badge, and description (FR-7, FR-8)
+               These values are derived from the frontmatter and update only
+               after a successful save, not in real-time as the user types.
+               ═══════════════════════════════════════════════════════════════════ *@
+            <MudStack Spacing="1" Class="mb-4">
+                @* ── Agent name + type badge on the same row ──────────────────── *@
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudText Typo="Typo.h5">@AgentName</MudText>
+                    <MudChip T="string"
+                             Size="Size.Small"
+                             Color="@GetChipColor(_agentMode)"
+                             Variant="Variant.Filled">
+                        @GetChipText(_agentMode)
+                    </MudChip>
+                </MudStack>
+
+                @* ── Description — secondary text below the name ──────────────── *@
+                @if (!string.IsNullOrWhiteSpace(_agentDescription))
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        @_agentDescription
+                    </MudText>
+                }
+            </MudStack>
+
+            @* ═══════════════════════════════════════════════════════════════════
+               Editor — full raw Markdown content in a monospace text field
+               (FR-9, FR-10, FR-11, FR-12)
+               Uses Immediate="true" so _editorContent updates on every keystroke,
+               enabling real-time dirty state detection for the Save button.
+               ═══════════════════════════════════════════════════════════════════ *@
+            <MudTextField @bind-Value="_editorContent"
+                          Label="Agent content"
+                          Variant="Variant.Outlined"
+                          Lines="20"
+                          Style="font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; font-size: 0.875rem;"
+                          Immediate="true"
+                          FullWidth="true" />
+
+            @* ═══════════════════════════════════════════════════════════════════
+               Action Buttons — Delete (left) and Save (right)
+               (FR-13 to FR-22)
+               Delete is always enabled; Save is enabled only when dirty.
+               ═══════════════════════════════════════════════════════════════════ *@
+            <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mt-4">
+                @* ── Delete Button — removes the agent file after confirmation
+                   (FR-18, FR-19, FR-20, FR-21, FR-22) ────────────────────────── *@
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Error"
+                           StartIcon="@Icons.Material.Filled.Delete"
+                           Disabled="@_isDeleting"
+                           OnClick="@DeleteAsync">
+                    @if (_isDeleting)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Delete
+                </MudButton>
+
+                @* ── Save Button — writes editor content to the filesystem
+                   (FR-13, FR-14, FR-15, FR-16, FR-17)
+                   Disabled when the content matches the last saved version (clean)
+                   or when a save operation is already in progress. ────────────── *@
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Save"
+                           Disabled="@(!_isDirty || _isSaving)"
+                           OnClick="@SaveAsync">
+                    @if (_isSaving)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Save
+                </MudButton>
+            </MudStack>
+        }
+    </ChildContent>
+    <ErrorContent>
+        @* ── Error recovery UI — shown when an unhandled rendering exception occurs ── *@
+        <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="3" Class="py-16">
+            <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Size="Size.Large" Color="Color.Error" />
+            <MudText Typo="Typo.h5" Align="Align.Center">Something went wrong</MudText>
+            <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+                An unexpected error occurred. Please try again.
+            </MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@RecoverFromError">
+                Try Again
+            </MudButton>
+        </MudStack>
+    </ErrorContent>
+</ErrorBoundary>
