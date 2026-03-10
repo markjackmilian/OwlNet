@@ -13,7 +13,7 @@
    Layout structure:
    ┌─────────────────────────────────────────────────────────────────┐
    │ PAGE HEADER                                                     │
-   │ "Agents" (h4) + [Add Agent] button                             │
+   │ "Agents" (h4) + [Add System Agent] button + [Add Agent] button │
    ├─────────────────────────────────────────────────────────────────┤
    │ AGENT LIST                                                      │
    │  ┌─ Agent row: Name (bold) | Type chip | Description | Edit →  │
@@ -33,6 +33,7 @@
 @using OwlNet.Application.Projects.Queries.GetProjectById
 @using OwlNet.Application.Projects.Queries.GetProjectAgents
 @using OwlNet.Web.Services
+@using OwlNet.Web.Components.Projects.Agents
 
 @inject IRequestHandler<GetProjectByIdQuery, ValueTask<Result<ProjectDto>>> GetProjectHandler
 @inject IRequestHandler<GetProjectAgentsQuery, ValueTask<Result<IReadOnlyList<AgentFileDto>>>> GetAgentsHandler
@@ -101,16 +102,25 @@ else if (_isNotFound)
 else if (_project is not null)
 {
     @* ── Page Header ──────────────────────────────────────────────────────
-       Title and "Add Agent" button, always visible when project is loaded.
-       (FR-20, FR-21: Add Agent action navigates to /agents/new) *@
+       Title and action buttons, always visible when project is loaded.
+       "Add System Agent" opens the install modal (FR-1, FR-2, FR-3).
+       "Add Agent" navigates to the creation wizard (FR-20, FR-21). *@
     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
         <MudText Typo="Typo.h4">Agents</MudText>
-        <MudButton Variant="Variant.Filled"
-                   Color="Color.Primary"
-                   StartIcon="@Icons.Material.Filled.Add"
-                   OnClick="@NavigateToAddAgent">
-            Add Agent
-        </MudButton>
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Outlined"
+                       Color="Color.Secondary"
+                       StartIcon="@Icons.Material.Filled.LibraryAdd"
+                       OnClick="@OpenInstallSystemAgentModalAsync">
+                Add System Agent
+            </MudButton>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="@NavigateToAddAgent">
+                Add Agent
+            </MudButton>
+        </MudStack>
     </MudStack>
 
     @* ── Error Alert — shown when agent loading fails ─────────────────────
@@ -366,6 +376,47 @@ else if (_project is not null)
     private void NavigateToAgent(string agentName)
     {
         NavigationManager.NavigateTo($"/projects/{ProjectId}/agents/{agentName}");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  System Agent Install Modal (FR-1, FR-2, FR-3, FR-20, FR-21)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Opens the <see cref="InstallSystemAgentModal"/> dialog so the user can
+    /// browse and install a system-provided agent definition into this project.
+    /// Passes the current <see cref="ProjectId"/> and wires up the
+    /// <see cref="OnSystemAgentInstalledAsync"/> callback for post-install refresh.
+    /// </summary>
+    private async Task OpenInstallSystemAgentModalAsync()
+    {
+        var parameters = new DialogParameters<InstallSystemAgentModal>
+        {
+            { x => x.ProjectId, ProjectId },
+            { x => x.OnInstalled, EventCallback.Factory.Create<string>(this, OnSystemAgentInstalledAsync) }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseOnEscapeKey = true
+        };
+
+        await DialogService.ShowAsync<InstallSystemAgentModal>("Add System Agent", parameters, options);
+    }
+
+    /// <summary>
+    /// Invoked by <see cref="InstallSystemAgentModal"/> after a system agent has been
+    /// successfully installed. Shows a success snackbar and refreshes the agent list
+    /// so the newly installed agent appears immediately without a full page reload.
+    /// </summary>
+    /// <param name="fileName">The filename of the agent that was just installed.</param>
+    private async Task OnSystemAgentInstalledAsync(string fileName)
+    {
+        Snackbar.Add($"System agent '{fileName}' installed successfully.", Severity.Success);
+        await LoadAgentsAsync();
+        StateHasChanged();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
