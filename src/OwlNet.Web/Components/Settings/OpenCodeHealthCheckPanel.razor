@@ -5,15 +5,16 @@
    OpenCode Health Check Panel — Smart Component
    ═══════════════════════════════════════════════════════════════════════════════
    Self-contained panel that checks whether the OpenCode CLI tool is installed
-   on the host machine and allows the user to install it via NPM if missing.
+   on the host machine, allows the user to install it via NPM if missing, and
+   supports checking for and applying updates when already installed.
 
    State machine:
-   ┌──────────┐  success   ┌───────────┐
-   │ Checking  │──────────▶│ Installed  │  (green chip with version)
-   │ (spinner) │           └───────────┘
-   └─────┬────┘
-         │ failure
-         ▼
+   ┌──────────┐  success   ┌───────────┐  click "Check for updates"
+   │ Checking  │──────────▶│ Installed  │─────────────────────────────┐
+   │ (spinner) │           └───────────┘                              │
+   └─────┬────┘                  ▲                                    ▼
+         │ failure               │ success              ┌──────────────────────┐
+         ▼                       │                      │  CheckingForUpdates   │
    ┌──────────────┐  click Install   ┌─────────────┐  npm missing  ┌──────────────┐
    │ NotInstalled  │────────────────▶│ (npm check)  │─────────────▶│ NpmNotFound   │
    │ (red chip +   │                 └──────┬──────┘              │ (error alert)  │
@@ -29,11 +30,35 @@
                                      │ InstallError  │  (error alert + manual guide + retry)
                                      └──────────────┘
 
+   Update sub-machine (entered from Installed / UpToDate / UpdateAvailable):
+
+   ┌──────────────────────┐  npm view ok, same ver  ┌──────────┐
+   │  CheckingForUpdates   │────────────────────────▶│ UpToDate  │  (green chip "(latest)")
+   │  (spinner)            │                         └──────────┘
+   └──────────┬───────────┘
+              │ npm view ok, newer ver
+              ▼
+       ┌─────────────────┐  click Update   ┌──────────┐  success  ┌───────────┐
+       │ UpdateAvailable  │───────────────▶│ Updating  │─────────▶│ Installed  │
+       │ (amber chip +    │                │ (spinner) │          └───────────┘
+       │  Update button)  │                └─────┬─────┘
+       └─────────────────┘                      │ failure
+                                                ▼
+                                         ┌─────────────┐
+                                         │ UpdateError  │  (error alert + manual guide + retry)
+                                         └─────────────┘
+
+   npm view failure (network / timeout):
+   ┌──────────────────────┐  failure  ┌──────────────────┐
+   │  CheckingForUpdates   │─────────▶│ UpdateCheckFailed │  (warning + green chip stays)
+   └──────────────────────┘           └──────────────────┘
+
    Services injected:
    - ICliService  — executes CLI commands on the host OS
    - ISnackbar    — shows toast notifications on success
 
    Spec reference: specs/todo/SPEC-opencode-health-check.md (FR-1 through FR-10, FR-12)
+               and specs/todo/SPEC-opencode-update-management.md
    ═══════════════════════════════════════════════════════════════════════════════ *@
 
 @inject ICliService CliService
@@ -71,14 +96,161 @@
                 </MudStack>
                 break;
 
-            @* ── Installed: green chip showing the detected version ── *@
+            @* ── Installed: green chip showing the detected version + "Check for updates" button ── *@
             case HealthCheckState.Installed:
-                <MudChip T="string"
-                         Color="Color.Success"
-                         Icon="@Icons.Material.Filled.CheckCircle"
-                         Size="Size.Medium">
-                    Installed &mdash; v@(_version)
-                </MudChip>
+                <MudStack Spacing="3">
+                    <MudChip T="string"
+                             Color="Color.Success"
+                             Icon="@Icons.Material.Filled.CheckCircle"
+                             Size="Size.Medium">
+                        Installed &mdash; v@(_version)
+                    </MudChip>
+                    <div>
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Refresh"
+                                   OnClick="@CheckForUpdatesAsync">
+                            Check for updates
+                        </MudButton>
+                    </div>
+                </MudStack>
+                break;
+
+            @* ── CheckingForUpdates: green chip stays visible + spinner while npm view runs ── *@
+            case HealthCheckState.CheckingForUpdates:
+                <MudStack Spacing="3">
+                    <MudChip T="string"
+                             Color="Color.Success"
+                             Icon="@Icons.Material.Filled.CheckCircle"
+                             Size="Size.Medium">
+                        Installed &mdash; v@(_version)
+                    </MudChip>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                        <MudText Typo="Typo.body2">Checking for updates...</MudText>
+                    </MudStack>
+                </MudStack>
+                break;
+
+            @* ── UpToDate: green chip confirming the installed version is the latest ── *@
+            case HealthCheckState.UpToDate:
+                <MudStack Spacing="3">
+                    <MudChip T="string"
+                             Color="Color.Success"
+                             Icon="@Icons.Material.Filled.CheckCircle"
+                             Size="Size.Medium">
+                        Installed &mdash; v@(_version) (latest)
+                    </MudChip>
+                    <div>
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Refresh"
+                                   OnClick="@CheckForUpdatesAsync">
+                            Check for updates
+                        </MudButton>
+                    </div>
+                </MudStack>
+                break;
+
+            @* ── UpdateAvailable: amber chip showing installed vs latest + Update button ── *@
+            case HealthCheckState.UpdateAvailable:
+                <MudStack Spacing="3">
+                    <MudChip T="string"
+                             Color="Color.Warning"
+                             Icon="@Icons.Material.Filled.SystemUpdateAlt"
+                             Size="Size.Medium">
+                        Installed &mdash; v@(_version) &rarr; v@(_latestVersion) available
+                    </MudChip>
+                    <MudStack Row="true" Spacing="2">
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Warning"
+                                   StartIcon="@Icons.Material.Filled.SystemUpdateAlt"
+                                   OnClick="@UpdateAsync">
+                            Update
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Refresh"
+                                   OnClick="@CheckForUpdatesAsync">
+                            Check for updates
+                        </MudButton>
+                    </MudStack>
+                </MudStack>
+                break;
+
+            @* ── Updating: amber chip + spinner + disabled Update button while npm install runs ── *@
+            case HealthCheckState.Updating:
+                <MudStack Spacing="3">
+                    <MudChip T="string"
+                             Color="Color.Warning"
+                             Icon="@Icons.Material.Filled.SystemUpdateAlt"
+                             Size="Size.Medium">
+                        Installed &mdash; v@(_version) &rarr; v@(_latestVersion) available
+                    </MudChip>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                        <MudText Typo="Typo.body2">Updating OpenCode...</MudText>
+                    </MudStack>
+                    <div>
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Warning"
+                                   StartIcon="@Icons.Material.Filled.SystemUpdateAlt"
+                                   Disabled="true">
+                            Update
+                        </MudButton>
+                    </div>
+                </MudStack>
+                break;
+
+            @* ── UpdateCheckFailed: green chip stays + warning alert + "Try Again" button ── *@
+            case HealthCheckState.UpdateCheckFailed:
+                <MudStack Spacing="3">
+                    <MudChip T="string"
+                             Color="Color.Success"
+                             Icon="@Icons.Material.Filled.CheckCircle"
+                             Size="Size.Medium">
+                        Installed &mdash; v@(_version)
+                    </MudChip>
+                    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                        Unable to check for updates. Check your internet connection.
+                    </MudAlert>
+                    @* Try Again button — allows the user to retry the update check *@
+                    <div>
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Refresh"
+                                   OnClick="@CheckForUpdatesAsync">
+                            Try Again
+                        </MudButton>
+                    </div>
+                </MudStack>
+                break;
+
+            @* ── UpdateError: amber chip + error alert + manual instructions + Retry button ── *@
+            case HealthCheckState.UpdateError:
+                <MudStack Spacing="3">
+                    <MudChip T="string"
+                             Color="Color.Warning"
+                             Icon="@Icons.Material.Filled.SystemUpdateAlt"
+                             Size="Size.Medium">
+                        Installed &mdash; v@(_version) &rarr; v@(_latestVersion) available
+                    </MudChip>
+                    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                        @_updateErrorOutput
+                    </MudAlert>
+                    <MudText Typo="Typo.body2">
+                        Open a terminal and run: <code>npm i -g opencode-ai@latest</code>
+                    </MudText>
+                    @* Retry button — allows the user to re-attempt the update *@
+                    <div>
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Warning"
+                                   StartIcon="@Icons.Material.Filled.Refresh"
+                                   OnClick="@UpdateAsync">
+                            Retry
+                        </MudButton>
+                    </div>
+                </MudStack>
                 break;
 
             @* ── NotInstalled: red chip + install button ── *@
@@ -204,7 +376,25 @@
         NpmNotFound,
 
         /// <summary>NPM install failed; error output is available.</summary>
-        InstallError
+        InstallError,
+
+        /// <summary>Running <c>npm view opencode-ai version</c> to fetch the latest published version.</summary>
+        CheckingForUpdates,
+
+        /// <summary>Installed version matches the latest NPM version; no update needed.</summary>
+        UpToDate,
+
+        /// <summary>A newer version is available on NPM; Update button is shown.</summary>
+        UpdateAvailable,
+
+        /// <summary>Running <c>npm i -g opencode-ai@latest</c> to apply the update.</summary>
+        Updating,
+
+        /// <summary><c>npm view</c> failed (network error or timeout); installed chip remains visible.</summary>
+        UpdateCheckFailed,
+
+        /// <summary><c>npm i -g opencode-ai@latest</c> failed; error output is available.</summary>
+        UpdateError
     }
 
     /// <summary>Current state of the health check panel.</summary>
@@ -221,6 +411,18 @@
     /// Displayed in the error alert when state is <see cref="HealthCheckState.InstallError"/>.
     /// </summary>
     private string _errorOutput = string.Empty;
+
+    /// <summary>
+    /// The latest published version of OpenCode from NPM.
+    /// Populated when <c>npm view opencode-ai version</c> succeeds.
+    /// </summary>
+    private string _latestVersion = string.Empty;
+
+    /// <summary>
+    /// Error output from a failed update command.
+    /// Displayed in the error alert when state is <see cref="HealthCheckState.UpdateError"/>.
+    /// </summary>
+    private string _updateErrorOutput = string.Empty;
 
     /// <summary>
     /// Cancellation token source scoped to this component's lifetime.
@@ -332,6 +534,105 @@
                     ? installResult.Output
                     : "Installation failed with no output. Try running the command manually.";
             _state = HealthCheckState.InstallError;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Update Flow — check latest NPM version → compare → apply update
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Handles the "Check for updates" button click. The flow is:
+    /// 1. Transition to <see cref="HealthCheckState.CheckingForUpdates"/> (spinner).
+    /// 2. Run <c>npm view opencode-ai version</c> with a 15-second timeout.
+    /// 3. If the command fails (network error, timeout) → <see cref="HealthCheckState.UpdateCheckFailed"/>;
+    ///    the installed chip remains visible via <c>_version</c>.
+    /// 4. If the command succeeds, compare the trimmed output with <c>_version</c>:
+    ///    - Same → <see cref="HealthCheckState.UpToDate"/>.
+    ///    - Different → store in <c>_latestVersion</c>, transition to
+    ///      <see cref="HealthCheckState.UpdateAvailable"/>.
+    /// </summary>
+    private async Task CheckForUpdatesAsync()
+    {
+        _state = HealthCheckState.CheckingForUpdates;
+        _latestVersion = string.Empty;  // ← FIX 1: reset stale value
+        StateHasChanged();
+
+        var result = await CliService.RunCommandAsync(
+            "npm",
+            "view opencode-ai version",
+            timeoutMs: 15_000,
+            cancellationToken: _cts.Token);
+
+        if (!result.IsSuccess)
+        {
+            // Network error or timeout — keep the installed chip visible, show warning
+            _state = HealthCheckState.UpdateCheckFailed;
+            return;
+        }
+
+        var latestVersion = result.Output.Trim();
+
+        // An empty output from a successful exit code is a version string format mismatch.
+        // Per spec edge case: "Version string format mismatch → Treat as update check failure."
+        if (string.IsNullOrWhiteSpace(latestVersion))  // ← FIX 2: guard for empty output
+        {
+            _state = HealthCheckState.UpdateCheckFailed;
+            return;
+        }
+
+        // Simple string equality — no semver parsing needed for this comparison
+        if (string.Equals(_version.Trim(), latestVersion, StringComparison.Ordinal))
+        {
+            _state = HealthCheckState.UpToDate;
+        }
+        else
+        {
+            _latestVersion = latestVersion;
+            _state = HealthCheckState.UpdateAvailable;
+        }
+    }
+
+    /// <summary>
+    /// Handles the "Update" button click. The flow is:
+    /// 1. Transition to <see cref="HealthCheckState.Updating"/> (spinner + disabled button).
+    /// 2. Run <c>npm i -g opencode-ai@latest</c> with a 120-second timeout.
+    /// 3. On success → re-run <c>opencode --version</c> to refresh <c>_version</c>,
+    ///    then show a success snackbar if the version check also succeeded.
+    /// 4. On failure → store error output in <c>_updateErrorOutput</c> and transition
+    ///    to <see cref="HealthCheckState.UpdateError"/>.
+    /// </summary>
+    private async Task UpdateAsync()
+    {
+        _state = HealthCheckState.Updating;
+        StateHasChanged();
+
+        var updateResult = await CliService.RunCommandAsync(
+            "npm",
+            "i -g opencode-ai@latest",
+            timeoutMs: 120_000,
+            cancellationToken: _cts.Token);
+
+        if (updateResult.IsSuccess)
+        {
+            // Re-verify the installed version after the update completes
+            await CheckOpenCodeVersionAsync();
+
+            // Only show success snackbar if the version check also succeeded
+            if (_state == HealthCheckState.Installed)
+            {
+                Snackbar.Add("OpenCode updated successfully!", Severity.Success);
+            }
+        }
+        else
+        {
+            // Capture the most informative error output available for display
+            _updateErrorOutput = !string.IsNullOrWhiteSpace(updateResult.Error)
+                ? updateResult.Error
+                : !string.IsNullOrWhiteSpace(updateResult.Output)
+                    ? updateResult.Output
+                    : "Update failed with no output. Try running the command manually.";
+            _state = HealthCheckState.UpdateError;
         }
     }
 
