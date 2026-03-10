@@ -1,0 +1,283 @@
+@* ═══════════════════════════════════════════════════════════════════════════════
+   System Agent Editor Page — View, Edit, Save, and Delete a System Agent
+   ═══════════════════════════════════════════════════════════════════════════════
+   A smart page component that loads an existing system agent from the database
+   and presents it in a full-text editor. The user can:
+
+     - View the agent summary (name, display name, type badge, description)
+       in the summary header.
+     - Edit the inline fields (DisplayName, Description, Mode) above the editor.
+     - Edit the full raw Markdown content in a monospace text field.
+     - Save all changes back to the database.
+     - Delete the agent with a confirmation dialog.
+     - Navigate back to /settings with an unsaved-changes guard.
+
+   The summary header updates only after a successful save, not in real-time
+   as the user types, for simplicity and performance (FR-31).
+
+   Route: /settings/system-agents/{AgentName}
+
+   Layout structure:
+   ┌─────────────────────────────────────────────────────────────────┐
+   │ BACK BUTTON ("Back")                                            │
+   ├─────────────────────────────────────────────────────────────────┤
+   │ SUMMARY HEADER                                                  │
+   │  ┌─ DisplayName (h4) ──────────────────────────────────────── │
+   │  ├─ Name (h5, monospace) + Type Badge (MudChip) ────────────── │
+   │  └─ Description (body2, secondary color) ────────────────────── │
+   ├─────────────────────────────────────────────────────────────────┤
+   │ INLINE FIELDS                                                   │
+   │  ┌─ DisplayName field ─────────────────────────────────────── │
+   │  ├─ Mode select ──────────────────────────────────────────── │
+   │  └─ Description field ───────────────────────────────────────── │
+   ├─────────────────────────────────────────────────────────────────┤
+   │ EDITOR                                                          │
+   │  └─ MudTextField (multiline, monospace, full-width, Lines=20) ─ │
+   ├─────────────────────────────────────────────────────────────────┤
+   │ ACTION BUTTONS                                                  │
+   │  ┌─ [Delete] (Outlined, Error, left) ──────────────────────── │
+   │  └─ [Save] (Filled, Primary, right, disabled when clean) ──── │
+   └─────────────────────────────────────────────────────────────────┘
+
+   Spec reference: SPEC-SA2-system-agent-settings (FR-25 to FR-47)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+
+@page "/settings/system-agents/{AgentName}"
+
+@using DispatchR.Abstractions.Send
+@using OwlNet.Application.Common.Models
+@using OwlNet.Application.SystemAgents.Queries.GetSystemAgentByName
+@using OwlNet.Application.SystemAgents.Commands.UpdateSystemAgent
+@using OwlNet.Application.SystemAgents.Commands.DeleteSystemAgent
+
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Page Title — updates the browser tab (FR-27)
+   Format: "{DisplayName} — System Agents — Settings — OwlNet"
+   Falls back to "System Agent — Settings — OwlNet" while loading or when
+   data is unavailable.
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+<PageTitle>@(_agent is not null ? $"{_agent.DisplayName} — System Agents — Settings — OwlNet" : "System Agent — Settings — OwlNet")</PageTitle>
+
+@* ═══════════════════════════════════════════════════════════════════════════════
+   ErrorBoundary — catches rendering exceptions and shows a user-friendly
+   recovery UI instead of crashing the entire page.
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+<ErrorBoundary @ref="_errorBoundary">
+    <ChildContent>
+        @* ═══════════════════════════════════════════════════════════════════════
+           Loading State — skeleton placeholders while agent data is being
+           fetched from the database (FR-47)
+           ═══════════════════════════════════════════════════════════════════════ *@
+        @if (_isLoading)
+        {
+            <MudStack Spacing="4">
+                @* ── Back button skeleton ─────────────────────────────────────── *@
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="140px" Height="36px" />
+                @* ── Summary header skeleton (display name, name + chip, description) ── *@
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="300px" Height="40px" />
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="200px" Height="32px" />
+                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="80px" Height="28px" />
+                </MudStack>
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="400px" Height="20px" />
+                @* ── Inline field skeletons (DisplayName, Mode, Description) ──── *@
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="56px" />
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="56px" />
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="120px" />
+                @* ── Content editor skeleton ──────────────────────────────────── *@
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="400px" />
+                @* ── Action buttons skeleton ──────────────────────────────────── *@
+                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="100px" Height="40px" />
+                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="100px" Height="40px" />
+                </MudStack>
+            </MudStack>
+        }
+        @* ═══════════════════════════════════════════════════════════════════════
+           Agent Not Found State — shown when no system agent with the given
+           Name exists in the database (FR-29)
+           ═══════════════════════════════════════════════════════════════════════ *@
+        else if (_isAgentNotFound)
+        {
+            <MudStack AlignItems="AlignItems.Center"
+                      Justify="Justify.Center"
+                      Spacing="3"
+                      Class="py-16">
+                <MudIcon Icon="@Icons.Material.Filled.SmartToy"
+                         Size="Size.Large"
+                         Color="Color.Default" />
+                <MudText Typo="Typo.h5" Align="Align.Center">
+                    System agent not found
+                </MudText>
+                <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+                    No system agent named "@AgentName" exists.
+                </MudText>
+                @* ── Link back to /settings as required by FR-29 ──────────────── *@
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.ArrowBack"
+                           Href="/settings">
+                    Back to Settings
+                </MudButton>
+            </MudStack>
+        }
+        @* ═══════════════════════════════════════════════════════════════════════
+           Content State — summary header + inline fields + editor + action buttons
+           Shown when agent data has loaded successfully.
+           ═══════════════════════════════════════════════════════════════════════ *@
+        else if (_agent is not null)
+        {
+            @* ── Back Button — navigates to /settings (FR-28, FR-44, FR-45, FR-46)
+               If the editor has unsaved changes, a confirmation dialog is shown
+               before navigating away to prevent accidental data loss. ──────────── *@
+            <MudButton Variant="Variant.Text"
+                       Color="Color.Default"
+                       StartIcon="@Icons.Material.Filled.ArrowBack"
+                       OnClick="@NavigateBackAsync"
+                       Class="mb-2">
+                Back
+            </MudButton>
+
+            @* ═══════════════════════════════════════════════════════════════════
+               Summary Header — display name, name (monospace), type badge,
+               and description (FR-30, FR-31)
+               These values update only after a successful save, not in real-time.
+               ═══════════════════════════════════════════════════════════════════ *@
+            <MudStack Spacing="1" Class="mb-4">
+                @* ── DisplayName — prominent heading (FR-30) ──────────────────── *@
+                <MudText Typo="Typo.h4">@_summaryDisplayName</MudText>
+
+                @* ── Name (monospace, bold) + type badge on the same row (FR-30) ── *@
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudText Typo="Typo.h5"
+                             Style="font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; font-weight: bold;">
+                        @AgentName
+                    </MudText>
+                    <MudChip T="string"
+                             Size="Size.Small"
+                             Color="@GetChipColor(_summaryMode)"
+                             Variant="Variant.Filled">
+                        @GetChipText(_summaryMode)
+                    </MudChip>
+                </MudStack>
+
+                @* ── Description — secondary text below the name (FR-30) ─────── *@
+                @if (!string.IsNullOrWhiteSpace(_summaryDescription))
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        @_summaryDescription
+                    </MudText>
+                }
+            </MudStack>
+
+            @* ═══════════════════════════════════════════════════════════════════
+               Inline Fields — editable DisplayName, Mode, and Description
+               above the content editor (FR-34)
+               These are separate from the Markdown Content and stored as
+               dedicated DB columns. Disabled while saving or deleting.
+               ═══════════════════════════════════════════════════════════════════ *@
+            <MudStack Spacing="3" Class="mb-4">
+                @* ── Display Name field — required, 2–100 chars (FR-34) ─────────── *@
+                <MudTextField @bind-Value="_displayName"
+                              Label="Display Name"
+                              Variant="Variant.Outlined"
+                              Required="true"
+                              RequiredError="Display name is required"
+                              Immediate="true"
+                              Disabled="@(_isSaving || _isDeleting)"
+                              FullWidth="true"
+                              HelperText="Human-readable label shown in the UI (2–100 characters)" />
+
+                @* ── Mode select — "primary", "subagent", or "all" (FR-34) ──────── *@
+                <MudSelect T="string"
+                           @bind-Value="_mode"
+                           Label="Agent Type"
+                           Variant="Variant.Outlined"
+                           Disabled="@(_isSaving || _isDeleting)"
+                           FullWidth="true"
+                           HelperText="Determines how OpenCode uses this agent">
+                    <MudSelectItem Value="@("primary")">Primary</MudSelectItem>
+                    <MudSelectItem Value="@("subagent")">Subagent</MudSelectItem>
+                    <MudSelectItem Value="@("all")">All</MudSelectItem>
+                </MudSelect>
+
+                @* ── Description field — required, 10–500 chars, multiline (FR-34) ── *@
+                <MudTextField @bind-Value="_description"
+                              Label="Description"
+                              Variant="Variant.Outlined"
+                              Lines="3"
+                              Required="true"
+                              RequiredError="Description is required"
+                              Immediate="true"
+                              Disabled="@(_isSaving || _isDeleting)"
+                              FullWidth="true"
+                              HelperText="Short summary of the agent's purpose (10–500 characters)" />
+            </MudStack>
+
+            @* ═══════════════════════════════════════════════════════════════════
+               Content Editor — full raw Markdown content in a monospace text field
+               (FR-32, FR-33)
+               Uses Immediate="true" so _editorContent updates on every keystroke,
+               enabling real-time dirty state detection for the Save button.
+               ═══════════════════════════════════════════════════════════════════ *@
+            <MudTextField @bind-Value="_editorContent"
+                          Label="Agent content"
+                          Variant="Variant.Outlined"
+                          Lines="20"
+                          Style="font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; font-size: 0.875rem;"
+                          Immediate="true"
+                          Disabled="@(_isSaving || _isDeleting)"
+                          FullWidth="true" />
+
+            @* ═══════════════════════════════════════════════════════════════════
+               Action Buttons — Delete (left) and Save (right)
+               (FR-35 to FR-43)
+               Delete is always enabled when not in progress; Save is enabled
+               only when the editor is dirty (FR-33, FR-35).
+               ═══════════════════════════════════════════════════════════════════ *@
+            <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mt-4">
+                 @* ── Delete Button — removes the agent after confirmation (FR-39 to FR-43) ── *@
+                 <MudButton Variant="Variant.Outlined"
+                            Color="Color.Error"
+                            StartIcon="@Icons.Material.Filled.Delete"
+                            Disabled="@(_isDeleting || _isSaving)"
+                            OnClick="@DeleteAsync">
+                    @if (_isDeleting)
+                    {
+                        @* Show spinner while delete is in progress *@
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Delete
+                </MudButton>
+
+                @* ── Save Button — persists all changes to the database (FR-35 to FR-38)
+                   Disabled when the editor is clean (no changes) or a save is in progress. ── *@
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Save"
+                           Disabled="@(!_isDirty || _isSaving)"
+                           OnClick="@SaveAsync">
+                    @if (_isSaving)
+                    {
+                        @* Show spinner while save is in progress *@
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Save
+                </MudButton>
+            </MudStack>
+        }
+    </ChildContent>
+    <ErrorContent>
+        @* ── Error recovery UI — shown when an unhandled rendering exception occurs ── *@
+        <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="3" Class="py-16">
+            <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Size="Size.Large" Color="Color.Error" />
+            <MudText Typo="Typo.h5" Align="Align.Center">Something went wrong</MudText>
+            <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+                An unexpected error occurred. Please try again.
+            </MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@RecoverFromError">
+                Try Again
+            </MudButton>
+        </MudStack>
+    </ErrorContent>
+</ErrorBoundary>
