@@ -34,6 +34,11 @@ public sealed class ApplicationDbContext : IdentityDbContext<ApplicationUser, Id
     public DbSet<Project> Projects => Set<Project>();
 
     /// <summary>
+    /// Gets the set of <see cref="SystemAgent"/> entities representing system-wide agent definitions.
+    /// </summary>
+    public DbSet<SystemAgent> SystemAgents => Set<SystemAgent>();
+
+    /// <summary>
     /// Configures the model by applying Identity table mappings and all
     /// <see cref="IEntityTypeConfiguration{TEntity}"/> implementations from the Infrastructure assembly.
     /// </summary>
