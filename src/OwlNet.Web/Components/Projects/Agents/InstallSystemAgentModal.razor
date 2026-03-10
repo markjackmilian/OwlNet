@@ -1,0 +1,576 @@
+@* ═══════════════════════════════════════════════════════════════════════════════
+   InstallSystemAgentModal — Smart Component
+   ═══════════════════════════════════════════════════════════════════════════════
+   Modal dialog that lets the user pick a system agent from the global catalogue
+   and install it into a project as a .md file inside .opencode/agents/.
+
+   UI states (driven by _viewState):
+   ┌──────────┐  ┌──────────────────────────────────────────────────────────────┐
+   │ Loading  │  │ 3 skeleton rows while the catalogue is being fetched         │
+   ├──────────┤  ├──────────────────────────────────────────────────────────────┤
+   │ Error    │  │ MudAlert + Retry button when the catalogue load fails        │
+   ├──────────┤  ├──────────────────────────────────────────────────────────────┤
+   │ Empty    │  │ "No system agents available" message + link to /settings     │
+   ├──────────┤  ├──────────────────────────────────────────────────────────────┤
+   │ List     │  │ Selectable agent rows; selected row reveals FileName field   │
+   └──────────┘  └──────────────────────────────────────────────────────────────┘
+
+   Install flow:
+     1. User selects an agent → FileName pre-populated with agent.Name
+     2. User optionally edits FileName → inline validation
+     3. User clicks Install → command sent with AllowOverwrite = false
+     4a. Success → MudDialog.Close(Ok(fileName)) — parent handles snackbar + refresh
+     4b. "conflict" error → overwrite confirmation dialog
+         • Confirmed → retry with AllowOverwrite = true
+         • Cancelled → modal stays open, FileName remains editable
+     4c. Other error → MudAlert inline, modal stays open
+
+   Services injected:
+   - IRequestHandler (GetAllSystemAgentsQuery) — catalogue fetch
+   - IRequestHandler (InstallSystemAgentCommand) — installation
+   - IDialogService — overwrite confirmation dialog
+
+   Spec reference: SPEC-SA3-system-agent-install.md (FR-5 to FR-22)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+
+@using DispatchR.Abstractions.Send
+@using OwlNet.Application.Common.Models
+@using OwlNet.Application.SystemAgents.Queries.GetAllSystemAgents
+@using OwlNet.Application.Projects.Commands.InstallSystemAgent
+
+@inject IRequestHandler<GetAllSystemAgentsQuery, ValueTask<Result<IReadOnlyList<SystemAgentDto>>>> GetAllSystemAgentsHandler
+@inject IRequestHandler<InstallSystemAgentCommand, ValueTask<Result>> InstallSystemAgentHandler
+@inject IDialogService DialogService
+
+@implements IDisposable
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Add System Agent</MudText>
+    </TitleContent>
+
+    <DialogContent>
+        @switch (_viewState)
+        {
+            @* ── Loading State ───────────────────────────────────────────────────
+               Skeleton rows shown while the catalogue is being fetched (FR-22). *@
+            case ViewState.Loading:
+                <MudStack Spacing="2">
+                    @for (var i = 0; i < 3; i++)
+                    {
+                        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="56px" />
+                    }
+                </MudStack>
+                break;
+
+            @* ── Error State ─────────────────────────────────────────────────────
+               Shown when the catalogue fetch fails. Retry reloads the list. *@
+            case ViewState.Error:
+                <MudStack AlignItems="AlignItems.Center" Spacing="3" Class="py-4">
+                    <MudAlert Severity="Severity.Error"
+                              Variant="Variant.Outlined"
+                              Dense="true"
+                              Class="w-100">
+                        Failed to load system agents. Please try again.
+                    </MudAlert>
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Error"
+                               StartIcon="@Icons.Material.Filled.Refresh"
+                               OnClick="@LoadAgentsAsync">
+                        Retry
+                    </MudButton>
+                </MudStack>
+                break;
+
+            @* ── Empty State ─────────────────────────────────────────────────────
+               No system agents in the catalogue — direct user to Settings. *@
+            case ViewState.Empty:
+                <MudStack AlignItems="AlignItems.Center" Spacing="3" Class="py-6">
+                    <MudIcon Icon="@Icons.Material.Filled.SmartToy"
+                             Size="Size.Large"
+                             Color="Color.Default" />
+                    <MudText Typo="Typo.body1" Align="Align.Center">
+                        No system agents available. Add some in
+                        <MudLink Href="/settings">Settings</MudLink>
+                        first.
+                    </MudText>
+                </MudStack>
+                break;
+
+            @* ── List State ──────────────────────────────────────────────────────
+               Selectable agent rows + FileName field after selection. *@
+            case ViewState.List:
+                <MudStack Spacing="3">
+
+                    @* Agent catalogue list — single-selection, sorted alphabetically *@
+                    <MudPaper Elevation="0" Outlined="true">
+                        <MudList T="SystemAgentDto"
+                                 Dense="true"
+                                 SelectedValue="@_selectedAgent"
+                                 SelectedValueChanged="@OnAgentSelected">
+                            @foreach (var agent in _agents)
+                            {
+                                @* Each row: monospace name | mode chip | truncated description *@
+                                <MudListItem T="SystemAgentDto"
+                                             Value="@agent"
+                                             @key="agent.Id">
+                                    <ChildContent>
+                                        <MudStack Row="true"
+                                                   AlignItems="AlignItems.Center"
+                                                   Spacing="3"
+                                                   Style="width: 100%;">
+
+                                            @* Agent name — monospace bold, fixed min-width for alignment *@
+                                            <MudStack Spacing="0" Style="min-width: 130px;">
+                                                <MudText Typo="Typo.body2"
+                                                         Style="font-weight: 700; font-family: monospace;">
+                                                    @agent.Name
+                                                </MudText>
+                                                <MudText Typo="Typo.caption"
+                                                         Color="Color.Secondary">
+                                                    @agent.DisplayName
+                                                </MudText>
+                                            </MudStack>
+
+                                            @* Mode chip — color-coded by agent mode *@
+                                            <MudChip T="string"
+                                                     Size="Size.Small"
+                                                     Color="@GetChipColor(agent.Mode)"
+                                                     Variant="Variant.Filled">
+                                                @GetChipText(agent.Mode)
+                                            </MudChip>
+
+                                            @* Description — truncated with ellipsis; full text on hover *@
+                                            <MudTooltip Text="@agent.Description"
+                                                        Disabled="@string.IsNullOrWhiteSpace(agent.Description)">
+                                                <MudText Typo="Typo.body2"
+                                                         Color="Color.Secondary"
+                                                         Style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                                    @(string.IsNullOrWhiteSpace(agent.Description) ? "—" : agent.Description)
+                                                </MudText>
+                                            </MudTooltip>
+
+                                        </MudStack>
+                                    </ChildContent>
+                                </MudListItem>
+                            }
+                        </MudList>
+                    </MudPaper>
+
+                    @* FileName field — only visible after an agent is selected (FR-10 to FR-13) *@
+                    @if (_selectedAgent is not null)
+                    {
+                        <MudTextField T="string"
+                                      @bind-Value="_fileName"
+                                      @bind-Value:after="ValidateFileName"
+                                      Label="File Name"
+                                      Variant="Variant.Outlined"
+                                      Adornment="Adornment.End"
+                                      AdornmentText=".md"
+                                      Immediate="true"
+                                      HelperText="Letters, numbers, and hyphens only."
+                                      Error="@(_fileNameError is not null)"
+                                      ErrorText="@_fileNameError"
+                                      Disabled="@_isInstalling"
+                                      MaxLength="50" />
+                    }
+
+                    @* Inline install error — shown when the command fails for a non-conflict reason *@
+                    @if (_installError is not null)
+                    {
+                        <MudAlert Severity="Severity.Error"
+                                  Variant="Variant.Outlined"
+                                  Dense="true">
+                            @_installError
+                        </MudAlert>
+                    }
+
+                </MudStack>
+                break;
+        }
+    </DialogContent>
+
+    <DialogActions>
+        @* Cancel — always available; closes the modal without any action *@
+        <MudButton Variant="Variant.Text"
+                   OnClick="@Cancel"
+                   Disabled="@_isInstalling">
+            Cancel
+        </MudButton>
+
+        @* Install — enabled only when an agent is selected, FileName is valid, and not installing *@
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Disabled="@IsInstallDisabled"
+                   OnClick="@InstallAsync">
+            @if (_isInstalling)
+            {
+                <MudProgressCircular Size="Size.Small"
+                                     Indeterminate="true"
+                                     Class="mr-2" />
+                @:Installing...
+            }
+            else
+            {
+                @:Install
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Cascading Parameters
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>The MudDialog instance provided by MudBlazor's dialog system.</summary>
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Parameters
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// The ID of the project into which the selected system agent will be installed.
+    /// Passed by the parent page when opening the dialog.
+    /// </summary>
+    [Parameter]
+    public Guid ProjectId { get; set; }
+
+    /// <summary>
+    /// Callback invoked with the installed FileName (without .md) after a successful
+    /// installation. The parent page uses this to show a snackbar and refresh the agent list.
+    /// </summary>
+    [Parameter]
+    public EventCallback<string> OnInstalled { get; set; }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  State
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>Controls which UI state is rendered in the dialog content area.</summary>
+    private ViewState _viewState = ViewState.Loading;
+
+    /// <summary>The full catalogue of system agents, sorted alphabetically by Name.</summary>
+    private IReadOnlyList<SystemAgentDto> _agents = [];
+
+    /// <summary>The agent the user has clicked/selected in the list. Null until a row is clicked.</summary>
+    private SystemAgentDto? _selectedAgent;
+
+    /// <summary>
+    /// The file name the agent will be written as (without .md extension).
+    /// Pre-populated from the selected agent's Name; editable by the user.
+    /// </summary>
+    private string _fileName = string.Empty;
+
+    /// <summary>Inline validation error for the FileName field. Null when the value is valid.</summary>
+    private string? _fileNameError;
+
+    /// <summary>Inline error shown when the install command fails for a non-conflict reason.</summary>
+    private string? _installError;
+
+    /// <summary>True while the InstallSystemAgentCommand is in flight.</summary>
+    private bool _isInstalling;
+
+    /// <summary>Cancellation token source for all async operations in this component.</summary>
+    private readonly CancellationTokenSource _cts = new();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Computed Properties
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Install button is disabled when: no agent selected, FileName is invalid,
+    /// or an install operation is already in progress.
+    /// </summary>
+    private bool IsInstallDisabled =>
+        _viewState != ViewState.List
+        || _selectedAgent is null
+        || !IsFileNameValid()
+        || _isInstalling;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Lifecycle
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>Loads the system agent catalogue when the modal opens.</summary>
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAgentsAsync();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Data Loading
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Fetches all system agents from the catalogue and transitions to the
+    /// appropriate view state (List, Empty, or Error).
+    /// </summary>
+    private async Task LoadAgentsAsync()
+    {
+        _viewState = ViewState.Loading;
+        StateHasChanged();
+
+        var result = await GetAllSystemAgentsHandler.Handle(new GetAllSystemAgentsQuery(), _cts.Token);
+
+        if (result.IsFailure)
+        {
+            _viewState = ViewState.Error;
+            return;
+        }
+
+        _agents = result.Value;
+        _viewState = _agents.Count == 0 ? ViewState.Empty : ViewState.List;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Selection
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Handles a row click in the agent list. Selects the agent and pre-populates
+    /// the FileName field with the agent's Name. Clears any previous install error.
+    /// </summary>
+    /// <param name="agent">The agent the user clicked.</param>
+    private void OnAgentSelected(SystemAgentDto? agent)
+    {
+        _selectedAgent = agent;
+        _fileName = agent?.Name ?? string.Empty;
+        _fileNameError = null;
+        _installError = null;
+
+        // Validate immediately so the Install button reflects the pre-populated value
+        ValidateFileName();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Validation
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Validates the current FileName value against the rules defined in the spec
+    /// (FR-11 to FR-13): required, 2–50 chars, alphanumeric + hyphens only.
+    /// Sets <see cref="_fileNameError"/> to the first failing rule, or null if valid.
+    /// </summary>
+    private void ValidateFileName()
+    {
+        if (string.IsNullOrWhiteSpace(_fileName))
+        {
+            _fileNameError = "File name is required.";
+            return;
+        }
+
+        if (_fileName.Length < 2)
+        {
+            _fileNameError = "File name must be at least 2 characters.";
+            return;
+        }
+
+        if (_fileName.Length > 50)
+        {
+            _fileNameError = "File name must not exceed 50 characters.";
+            return;
+        }
+
+        if (!System.Text.RegularExpressions.Regex.IsMatch(_fileName, @"^[a-zA-Z0-9-]+$"))
+        {
+            _fileNameError = "File name can only contain letters, numbers, and hyphens.";
+            return;
+        }
+
+        _fileNameError = null;
+    }
+
+    /// <summary>Returns true when the FileName passes all validation rules.</summary>
+    private bool IsFileNameValid() => _fileNameError is null;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Installation
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Attempts to install the selected system agent into the project.
+    /// Handles the "conflict" error by showing an overwrite confirmation dialog.
+    /// On success, closes the modal and invokes <see cref="OnInstalled"/>.
+    /// On other errors, shows an inline alert and keeps the modal open.
+    /// </summary>
+    private async Task InstallAsync()
+    {
+        // Re-validate before submitting — guards against stale state
+        ValidateFileName();
+        if (_fileNameError is not null || _selectedAgent is null)
+        {
+            return;
+        }
+
+        _installError = null;
+        _isInstalling = true;
+        StateHasChanged();
+
+        try
+        {
+            var result = await SendInstallCommandAsync(allowOverwrite: false);
+
+            if (result.IsSuccess)
+            {
+                await CloseWithSuccessAsync();
+                return;
+            }
+
+            // "conflict" means a file with this name already exists in the project
+            if (result.Error == "conflict")
+            {
+                await HandleConflictAsync();
+                return;
+            }
+
+            // Any other failure — show inline error, keep modal open
+            _installError = result.Error;
+        }
+        finally
+        {
+            _isInstalling = false;
+        }
+    }
+
+    /// <summary>
+    /// Shows a confirmation dialog when a file with the same name already exists.
+    /// If the user confirms, retries the install with AllowOverwrite = true.
+    /// If the user cancels, the modal stays open with the FileName field editable.
+    /// </summary>
+    private async Task HandleConflictAsync()
+    {
+        _isInstalling = false;
+        StateHasChanged();
+
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "File Already Exists",
+            $"An agent named '{_fileName}' already exists in this project. Do you want to overwrite it?",
+            yesText: "Overwrite",
+            cancelText: "Cancel");
+
+        if (confirmed != true)
+        {
+            // User cancelled — stay in modal, let them edit the FileName
+            return;
+        }
+
+        // User confirmed overwrite — retry with AllowOverwrite = true
+        _isInstalling = true;
+        StateHasChanged();
+
+        try
+        {
+            var result = await SendInstallCommandAsync(allowOverwrite: true);
+
+            if (result.IsSuccess)
+            {
+                await CloseWithSuccessAsync();
+                return;
+            }
+
+            _installError = result.Error;
+        }
+        finally
+        {
+            _isInstalling = false;
+        }
+    }
+
+    /// <summary>
+    /// Sends the <see cref="InstallSystemAgentCommand"/> with the given overwrite flag.
+    /// </summary>
+    /// <param name="allowOverwrite">
+    /// True to overwrite an existing file; false to fail with "conflict" if one exists.
+    /// </param>
+    private async Task<Result> SendInstallCommandAsync(bool allowOverwrite)
+    {
+        var command = new InstallSystemAgentCommand
+        {
+            SystemAgentId = _selectedAgent!.Id,
+            ProjectId = ProjectId,
+            FileName = _fileName,
+            AllowOverwrite = allowOverwrite
+        };
+
+        return await InstallSystemAgentHandler.Handle(command, _cts.Token);
+    }
+
+    /// <summary>
+    /// Closes the dialog with a success result and invokes the <see cref="OnInstalled"/>
+    /// callback so the parent page can show a snackbar and refresh the agent list.
+    /// </summary>
+    private async Task CloseWithSuccessAsync()
+    {
+        await OnInstalled.InvokeAsync(_fileName);
+        MudDialog.Close(DialogResult.Ok(_fileName));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Mode Chip Helpers
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Maps an agent mode string to a MudBlazor chip color.
+    /// Matches the same color scheme used on ProjectAgentsPage (FR-15).
+    /// </summary>
+    private static Color GetChipColor(string mode) => mode.ToLowerInvariant() switch
+    {
+        "primary"  => Color.Primary,
+        "subagent" => Color.Secondary,
+        "all"      => Color.Tertiary,
+        _          => Color.Default
+    };
+
+    /// <summary>
+    /// Maps an agent mode string to a human-readable chip label.
+    /// Unknown or empty modes fall back to "Unknown".
+    /// </summary>
+    private static string GetChipText(string mode) => mode.ToLowerInvariant() switch
+    {
+        "primary"  => "Primary",
+        "subagent" => "Subagent",
+        "all"      => "All",
+        _          => "Unknown"
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Dialog Actions
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>Closes the modal without installing anything.</summary>
+    private void Cancel() => MudDialog.Cancel();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Cleanup
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  View State Enum
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>Controls which content is rendered inside the dialog.</summary>
+    private enum ViewState
+    {
+        /// <summary>Catalogue is being fetched — skeleton rows are shown.</summary>
+        Loading,
+
+        /// <summary>Catalogue fetch failed — error alert + Retry button.</summary>
+        Error,
+
+        /// <summary>Catalogue is empty — "Add some in Settings" message.</summary>
+        Empty,
+
+        /// <summary>Catalogue loaded — selectable agent list + optional FileName field.</summary>
+        List
+    }
+}
