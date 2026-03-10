@@ -1,0 +1,433 @@
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Project Agents Page — Smart Page Component
+   ═══════════════════════════════════════════════════════════════════════════════
+   Displays the list of AI agent definition files (.md) discovered in the
+   project's .opencode/agents/ directory. Each agent shows its name, type
+   badge (derived from the mode frontmatter field), and description.
+
+   This is a "smart" component: it injects services, manages state, and
+   follows the same loading/validation/sync pattern as ProjectDashboard.
+
+   Route: /projects/{ProjectId:guid}/agents
+
+   Layout structure:
+   ┌─────────────────────────────────────────────────────────────────┐
+   │ PAGE HEADER                                                     │
+   │ "Agents" (h4) + [Add Agent] button                             │
+   ├─────────────────────────────────────────────────────────────────┤
+   │ AGENT LIST                                                      │
+   │  ┌─ Agent row: Name (bold) | Type chip | Description | Edit →  │
+   │  ├─ Agent row: ...                                              │
+   │  └─ Agent row: ...                                              │
+   ├─────────────────────────────────────────────────────────────────┤
+   │ OR: EMPTY STATE (icon + heading + subtitle + Add Agent CTA)     │
+   └─────────────────────────────────────────────────────────────────┘
+
+   Spec reference: SPEC-P1-agent-list-page (FR-1 to FR-22)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+
+@page "/projects/{ProjectId:guid}/agents"
+
+@using DispatchR.Abstractions.Send
+@using OwlNet.Application.Common.Models
+@using OwlNet.Application.Projects.Queries.GetProjectById
+@using OwlNet.Application.Projects.Queries.GetProjectAgents
+@using OwlNet.Web.Services
+
+@inject IRequestHandler<GetProjectByIdQuery, ValueTask<Result<ProjectDto>>> GetProjectHandler
+@inject IRequestHandler<GetProjectAgentsQuery, ValueTask<Result<IReadOnlyList<AgentFileDto>>>> GetAgentsHandler
+@inject ActiveProjectService ActiveProjectService
+@inject NavigationManager NavigationManager
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+@implements IDisposable
+
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Page Title — updates the browser tab with the project name when loaded
+   (FR-9: "Agents — {ProjectName} — OwlNet")
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+<PageTitle>@(_project is not null ? $"Agents — {_project.Name} — OwlNet" : "Agents — OwlNet")</PageTitle>
+
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Loading State — skeleton placeholders while project and agent data are fetched
+   (FR-22: loading skeleton on initial load)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+@if (_isLoading)
+{
+    <MudStack Spacing="4">
+        @* ── Page header skeleton ─────────────────────────────────────────── *@
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="200px" Height="40px" />
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="130px" Height="40px" />
+        </MudStack>
+        @* ── List skeleton — 4 placeholder rows ──────────────────────────── *@
+        @for (var i = 0; i < 4; i++)
+        {
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="56px" />
+        }
+    </MudStack>
+}
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Error State — project not found or archived
+   (FR-8: invalid/archived project shows "Project not found" with CTA)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+else if (_isNotFound)
+{
+    <MudStack AlignItems="AlignItems.Center"
+              Justify="Justify.Center"
+              Spacing="3"
+              Class="py-16">
+        <MudIcon Icon="@Icons.Material.Filled.SearchOff"
+                 Size="Size.Large"
+                 Color="Color.Default" />
+        <MudText Typo="Typo.h5" Align="Align.Center">
+            Project not found
+        </MudText>
+        <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+            The project may have been archived or does not exist.
+        </MudText>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.FolderOpen"
+                   OnClick="@OpenProjectSelectorAsync">
+            Select a project
+        </MudButton>
+    </MudStack>
+}
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Content State — page header + agent list (or empty state)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+else if (_project is not null)
+{
+    @* ── Page Header ──────────────────────────────────────────────────────
+       Title and "Add Agent" button, always visible when project is loaded.
+       (FR-20, FR-21: Add Agent action navigates to /agents/new) *@
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h4">Agents</MudText>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="@NavigateToAddAgent">
+            Add Agent
+        </MudButton>
+    </MudStack>
+
+    @* ── Error Alert — shown when agent loading fails ─────────────────────
+       (FR-152: filesystem read errors surface a user-friendly error alert) *@
+    if (_hasError)
+    {
+        <MudAlert Severity="Severity.Error"
+                  Variant="Variant.Outlined"
+                  Class="mb-4"
+                  ShowCloseIcon="false">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <MudText>Failed to load agents. Please try again.</MudText>
+                <MudButton Variant="Variant.Text"
+                           Color="Color.Error"
+                           OnClick="@RetryLoadAgentsAsync">
+                    Retry
+                </MudButton>
+            </MudStack>
+        </MudAlert>
+    }
+    @* ── Empty State — no agents configured yet ───────────────────────────
+       (FR-18, FR-19: centered panel with icon, heading, subtitle, and CTA) *@
+    else if (_agents is not null && _agents.Count == 0)
+    {
+        <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="3" Class="py-16">
+            <MudIcon Icon="@Icons.Material.Filled.SmartToy"
+                     Size="Size.Large"
+                     Color="Color.Default" />
+            <MudText Typo="Typo.h5" Align="Align.Center">
+                No agents configured yet
+            </MudText>
+            <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+                Create your first agent to extend the capabilities of this project.
+            </MudText>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="@NavigateToAddAgent">
+                Add Agent
+            </MudButton>
+        </MudStack>
+    }
+    @* ── Agent List — clickable rows with name, type badge, description ───
+       (FR-14, FR-15, FR-16, FR-17: sorted alphabetically, clickable rows) *@
+    else if (_agents is not null)
+    {
+        <MudPaper Elevation="1">
+            <MudList T="string" Dense="true">
+                @foreach (var agent in _agents)
+                {
+                    <MudListItem T="string"
+                                 OnClick="@(() => NavigateToAgent(agent.FileName))"
+                                 @key="agent.FileName">
+                        <ChildContent>
+                            <MudStack Row="true"
+                                       AlignItems="AlignItems.Center"
+                                       Spacing="3"
+                                       Style="width: 100%;">
+                                @* Agent name — bold monospace for code-like appearance *@
+                                <MudText Typo="Typo.body1"
+                                         Style="font-weight: 600; font-family: monospace; min-width: 140px;">
+                                    @agent.FileName
+                                </MudText>
+
+                                @* Type badge — color-coded chip based on mode frontmatter
+                                   (FR-15: Primary → Color.Primary, Subagent → Color.Secondary,
+                                    All → Color.Tertiary, Unknown → Color.Default) *@
+                                <MudChip T="string"
+                                         Size="Size.Small"
+                                         Color="@GetChipColor(agent.Mode)"
+                                         Variant="Variant.Filled">
+                                    @GetChipText(agent.Mode)
+                                </MudChip>
+
+                                @* Description — truncated with ellipsis, full text on hover *@
+                                <MudTooltip Text="@agent.Description"
+                                            Disabled="@string.IsNullOrWhiteSpace(agent.Description)">
+                                    <MudText Typo="Typo.body2"
+                                             Color="Color.Secondary"
+                                             Style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                        @(string.IsNullOrWhiteSpace(agent.Description) ? "—" : agent.Description)
+                                    </MudText>
+                                </MudTooltip>
+
+                                @* Edit action — navigates to the agent editor page.
+                                   Wrapped in a <span> with stopPropagation to prevent
+                                   the click from bubbling up to the parent MudListItem's
+                                   OnClick handler, which would cause double navigation.
+                                   (FR-14: actions column with edit button) *@
+                                <span @onclick="@(() => NavigateToAgent(agent.FileName))"
+                                      @onclick:stopPropagation="true">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                                   Size="Size.Small"
+                                                   aria-label="@($"Edit {agent.FileName}")" />
+                                </span>
+                            </MudStack>
+                        </ChildContent>
+                    </MudListItem>
+                }
+            </MudList>
+        </MudPaper>
+    }
+}
+
+@code {
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Parameters
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>The project ID extracted from the URL route segment.</summary>
+    [Parameter]
+    public Guid ProjectId { get; set; }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  State
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>The loaded project data, null until fetch completes.</summary>
+    private ProjectDto? _project;
+
+    /// <summary>The list of agent files discovered in the project's agents directory.</summary>
+    private IReadOnlyList<AgentFileDto>? _agents;
+
+    /// <summary>True while the initial project and agent data is being fetched.</summary>
+    private bool _isLoading = true;
+
+    /// <summary>True when the project was not found or is archived.</summary>
+    private bool _isNotFound;
+
+    /// <summary>True when agent loading fails due to a filesystem or service error.</summary>
+    private bool _hasError;
+
+    /// <summary>Tracks the last loaded ProjectId to skip redundant loads when the parameter hasn't changed.</summary>
+    private Guid _lastLoadedProjectId;
+
+    /// <summary>Cancellation token source for all async operations in this component.</summary>
+    private readonly CancellationTokenSource _cts = new();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Lifecycle
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Loads the project and agents when the component initializes or when the
+    /// ProjectId parameter changes (e.g., navigating between projects).
+    /// Uses OnParametersSetAsync because the route parameter may change without
+    /// the component being re-created (same page, different ID).
+    /// </summary>
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ProjectId == _lastLoadedProjectId)
+        {
+            return;
+        }
+
+        _lastLoadedProjectId = ProjectId;
+        await LoadProjectAsync();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Data Loading
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Fetches the project by ID and, if valid, loads the agent list.
+    /// Sets the project as active in the topbar context if needed (FR-7).
+    /// </summary>
+    private async Task LoadProjectAsync()
+    {
+        _isLoading = true;
+        _isNotFound = false;
+        _hasError = false;
+        _project = null;
+        _agents = null;
+        StateHasChanged();
+
+        var query = new GetProjectByIdQuery { Id = ProjectId };
+        var result = await GetProjectHandler.Handle(query, _cts.Token);
+
+        if (result.IsFailure || result.Value.IsArchived)
+        {
+            // Project not found or archived — show error state (FR-8)
+            _isNotFound = true;
+            _isLoading = false;
+            return;
+        }
+
+        _project = result.Value;
+
+        // FR-7: If the user navigated directly (bookmark, shared link), sync
+        // the active project context so the topbar shows the correct project.
+        if (ActiveProjectService.ActiveProject is null
+            || ActiveProjectService.ActiveProject.Id != _project.Id)
+        {
+            await ActiveProjectService.SetActiveProjectAsync(_project);
+        }
+
+        // Load agents after project is validated and synced
+        await LoadAgentsAsync();
+
+        _isLoading = false;
+    }
+
+    /// <summary>
+    /// Fetches the agent definition files for the current project.
+    /// On failure, sets the error state and shows a snackbar notification.
+    /// </summary>
+    private async Task LoadAgentsAsync()
+    {
+        _hasError = false;
+
+        var query = new GetProjectAgentsQuery { ProjectId = _project!.Id };
+        var result = await GetAgentsHandler.Handle(query, _cts.Token);
+
+        if (result.IsSuccess)
+        {
+            // FR-16: Agents are already sorted alphabetically by the service layer
+            _agents = result.Value;
+        }
+        else
+        {
+            _hasError = true;
+            Snackbar.Add("Failed to load agents. Please try again.", Severity.Error);
+        }
+    }
+
+    /// <summary>
+    /// Retries loading agents after a previous failure.
+    /// Called from the error alert's Retry button.
+    /// </summary>
+    private async Task RetryLoadAgentsAsync()
+    {
+        await LoadAgentsAsync();
+        StateHasChanged();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Navigation
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Navigates to the agent creation wizard (FR-21).
+    /// </summary>
+    private void NavigateToAddAgent()
+    {
+        NavigationManager.NavigateTo($"/projects/{ProjectId}/agents/new");
+    }
+
+    /// <summary>
+    /// Navigates to the agent editor page for the specified agent (FR-17).
+    /// </summary>
+    /// <param name="agentName">The agent filename (without .md extension).</param>
+    private void NavigateToAgent(string agentName)
+    {
+        NavigationManager.NavigateTo($"/projects/{ProjectId}/agents/{agentName}");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Type Badge Helpers (FR-15)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Returns the MudBlazor chip color for the given agent mode value.
+    /// Primary → Color.Primary, Subagent → Color.Secondary,
+    /// All → Color.Tertiary, anything else → Color.Default.
+    /// </summary>
+    private static Color GetChipColor(string mode) => mode.ToLowerInvariant() switch
+    {
+        "primary" => Color.Primary,
+        "subagent" => Color.Secondary,
+        "all" => Color.Tertiary,
+        _ => Color.Default
+    };
+
+    /// <summary>
+    /// Returns the display text for the given agent mode value.
+    /// Maps known modes to title-cased labels; unknown/empty modes show "Unknown".
+    /// </summary>
+    private static string GetChipText(string mode) => mode.ToLowerInvariant() switch
+    {
+        "primary" => "Primary",
+        "subagent" => "Subagent",
+        "all" => "All",
+        _ => "Unknown"
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Error State Actions
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Opens the project selector modal so the user can pick a different project.
+    /// Used as the CTA on the "Project not found" error state (FR-8).
+    /// </summary>
+    private async Task OpenProjectSelectorAsync()
+    {
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true,
+            CloseOnEscapeKey = true,
+            NoHeader = false
+        };
+
+        await DialogService.ShowAsync<ProjectSelectorModal>(
+            "Select a Project",
+            options);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Cleanup
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

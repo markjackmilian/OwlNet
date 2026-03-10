@@ -7,54 +7,39 @@ Type[] types;
 try { types = asm.GetTypes(); }
 catch (ReflectionTypeLoadException ex) { types = ex.Types.Where(t => t != null).ToArray()!; }
 
-// Check MudAvatarGroup
-var avatarGroup = types.FirstOrDefault(t => t.Name == "MudAvatarGroup");
-if (avatarGroup != null)
+// Check ChartOptions and IChartOptions
+var chartOptions = types.FirstOrDefault(t => t.Name == "ChartOptions");
+if (chartOptions != null)
 {
-    Console.WriteLine("--- MudAvatarGroup ---");
-    var props = avatarGroup.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly);
-    foreach (var p in props)
+    Console.WriteLine("=== ChartOptions ===");
+    Console.WriteLine($"  FullName: {chartOptions.FullName}");
+    Console.WriteLine($"  IsInterface: {chartOptions.IsInterface}");
+    foreach (var p in chartOptions.GetProperties(BindingFlags.Public | BindingFlags.Instance))
     {
-        var paramAttr = p.GetCustomAttributes().Any(a => a.GetType().Name == "ParameterAttribute") ? "[Parameter]" : "";
-        Console.WriteLine($"  {paramAttr} {p.Name} : {p.PropertyType}");
+        Console.WriteLine($"  {p.Name} : {p.PropertyType.Name}");
     }
 }
 
-// Check MudTabs
-var tabs = types.FirstOrDefault(t => t.Name == "MudTabs");
-if (tabs != null)
+var iChartOptions = types.FirstOrDefault(t => t.Name == "IChartOptions");
+if (iChartOptions != null)
 {
-    Console.WriteLine("\n--- MudTabs ---");
-    var props = tabs.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly);
-    foreach (var p in props)
+    Console.WriteLine("\n=== IChartOptions ===");
+    Console.WriteLine($"  FullName: {iChartOptions.FullName}");
+    foreach (var p in iChartOptions.GetProperties(BindingFlags.Public | BindingFlags.Instance))
     {
-        var paramAttr = p.GetCustomAttributes().Any(a => a.GetType().Name == "ParameterAttribute") ? "[Parameter]" : "";
-        Console.WriteLine($"  {paramAttr} {p.Name} : {p.PropertyType}");
+        Console.WriteLine($"  {p.Name} : {p.PropertyType.Name}");
     }
 }
 
-// Check MudTabPanel
-var tabPanel = types.FirstOrDefault(t => t.Name == "MudTabPanel");
-if (tabPanel != null)
+// Find all types implementing IChartOptions
+var implementations = types.Where(t => !t.IsInterface && !t.IsAbstract && 
+    t.GetInterfaces().Any(i => i.Name == "IChartOptions")).ToArray();
+Console.WriteLine("\n=== Types implementing IChartOptions ===");
+foreach (var t in implementations)
 {
-    Console.WriteLine("\n--- MudTabPanel ---");
-    var props = tabPanel.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly);
-    foreach (var p in props)
+    Console.WriteLine($"\n  --- {t.FullName} ---");
+    foreach (var p in t.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
     {
-        var paramAttr = p.GetCustomAttributes().Any(a => a.GetType().Name == "ParameterAttribute") ? "[Parameter]" : "";
-        Console.WriteLine($"  {paramAttr} {p.Name} : {p.PropertyType}");
-    }
-}
-
-// Check MudChip
-var chip = types.FirstOrDefault(t => t.Name == "MudChip`1");
-if (chip != null)
-{
-    Console.WriteLine("\n--- MudChip<T> ---");
-    var props = chip.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly);
-    foreach (var p in props)
-    {
-        var paramAttr = p.GetCustomAttributes().Any(a => a.GetType().Name == "ParameterAttribute") ? "[Parameter]" : "";
-        Console.WriteLine($"  {paramAttr} {p.Name} : {p.PropertyType}");
+        Console.WriteLine($"    {p.Name} : {p.PropertyType.Name}");
     }
 }

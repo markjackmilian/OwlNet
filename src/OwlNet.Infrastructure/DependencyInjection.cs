@@ -62,6 +62,7 @@ public static class DependencyInjection
         services.AddSingleton<ICliService, CliService>();
         services.AddSingleton<IEncryptionService, EncryptionService>();
         services.AddSingleton<IFileSystem, FileSystemService>();
+        services.AddSingleton<IAgentFileService, AgentFileService>();
 
         services.AddHttpClient<ILlmProviderService, LlmProviderService>(client =>
         {

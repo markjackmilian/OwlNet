@@ -12,7 +12,7 @@
    Nav structure:
      Dashboard  → /projects/{projectId}
      Board      → /projects/{projectId}/board
-     Settings   → /projects/{projectId}/settings *@
+     Agents     → /projects/{projectId}/agents *@
 @using OwlNet.Web.Services
 @inject ActiveProjectService ActiveProjectService
 
@@ -35,12 +35,13 @@
         Board
     </MudNavLink>
 
-    @* Settings — project-specific settings page.
-       Uses NavLinkMatch.All (exact match) for precise highlighting. *@
-    <MudNavLink Href="@($"/projects/{ActiveProjectService.ActiveProject!.Id}/settings")"
-                Match="NavLinkMatch.All"
-                Icon="@Icons.Material.Filled.Settings">
-        Settings
+    @* Agents — AI agent definitions for the active project.
+       Uses NavLinkMatch.Prefix so the item stays highlighted on sub-routes
+       like /agents/new and /agents/{agentName}. *@
+    <MudNavLink Href="@($"/projects/{ActiveProjectService.ActiveProject!.Id}/agents")"
+                Match="NavLinkMatch.Prefix"
+                Icon="@Icons.Material.Filled.SmartToy">
+        Agents
     </MudNavLink>
 
 </MudNavMenu>
