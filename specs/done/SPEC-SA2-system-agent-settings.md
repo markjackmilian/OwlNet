@@ -1,6 +1,6 @@
 # SPEC: System Agent Settings — Catalogue Management UI
 
-> **Status:** Todo
+> **Status:** Done
 > **Created:** 2026-03-10
 > **Author:** owl-planner + user
 > **Priority:** High (SA2 — depends on SA1)

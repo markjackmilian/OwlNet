@@ -1,0 +1,393 @@
+@using DispatchR.Abstractions.Send
+@using OwlNet.Application.Common.Models
+@using OwlNet.Application.SystemAgents.Queries.GetAllSystemAgents
+
+@* ═══════════════════════════════════════════════════════════════════════════════
+   System Agents Panel — Smart Component
+   ═══════════════════════════════════════════════════════════════════════════════
+   Self-contained panel that displays the installation-wide catalogue of system
+   agent definitions. The user can browse all agents, see their type badges and
+   descriptions, navigate to an agent's editor, or create a new agent.
+
+   UI states:
+   ┌──────────┐  success   ┌─────────────────────────────────────────────────┐
+   │ Loading   │──────────▶│ Agent list (Name + Type badge + Description)    │
+   │ (skeleton)│           │  ┌─ Each row: name | chip | description | edit  │
+   └──────────┘           │  └─ Empty state when no agents exist            │
+         │ failure         └─────────────────────────────────────────────────┘
+         ▼
+   ┌──────────────────────────────────────────────────────────────────────────┐
+   │ Error state: MudAlert with error message + Retry button                  │
+   └──────────────────────────────────────────────────────────────────────────┘
+
+   Services injected:
+   - IRequestHandler<GetAllSystemAgentsQuery, ...> — fetches all system agents
+   - NavigationManager — programmatic navigation to agent editor / new agent
+   - ISnackbar — toast notifications (reserved for future mutations)
+
+   Spec reference: SPEC-SA2-system-agent-settings.md (FR-1 to FR-9)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+
+@inject IRequestHandler<GetAllSystemAgentsQuery, ValueTask<Result<IReadOnlyList<SystemAgentDto>>>> GetAllSystemAgentsHandler
+@inject NavigationManager NavigationManager
+@inject ISnackbar Snackbar
+
+@implements IDisposable
+
+@* ── FR-1: Outlined MudCard panel ──────────────────────────────────────────── *@
+<MudCard Outlined="true">
+
+    @* ── Card Header ──────────────────────────────────────────────────────────
+       FR-2: "System Agents" title + subtitle.
+       FR-5: "Add System Agent" button always visible in CardHeaderActions. *@
+    <MudCardHeader>
+        <CardHeaderAvatar>
+            <MudAvatar Color="Color.Primary" Variant="Variant.Filled" Rounded="true">
+                <MudIcon Icon="@Icons.Material.Filled.SmartToy" />
+            </MudAvatar>
+        </CardHeaderAvatar>
+        <CardHeaderContent>
+            @* FR-2: Panel title *@
+            <MudText Typo="Typo.h6">System Agents</MudText>
+            @* FR-2: Panel subtitle *@
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Manage the installation-wide catalogue of reusable agent definitions.
+            </MudText>
+        </CardHeaderContent>
+        <CardHeaderActions>
+            @* FR-5 + FR-6: "Add System Agent" button — always visible regardless of
+               loading state. Navigates to the new-agent form at /settings/system-agents/new. *@
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="@NavigateToNewAgent"
+                       aria-label="Add a new system agent">
+                Add System Agent
+            </MudButton>
+        </CardHeaderActions>
+    </MudCardHeader>
+
+    @* ── Card Content — loading skeleton, error alert, empty state, or agent list ── *@
+    <MudCardContent>
+
+        @* ── FR-8: Loading State ──────────────────────────────────────────────
+           Show skeleton rows while the agent list is being fetched.
+           Three rows mirror a typical catalogue size and give a realistic
+           preview of the content layout (name + chip + description). *@
+        @if (_isLoading)
+        {
+            <MudStack Spacing="0">
+                @for (var i = 0; i < 3; i++)
+                {
+                    @* Each skeleton row mirrors the real row layout:
+                       a wide rectangle for the name, a narrow one for the chip,
+                       and a full-width line for the description. *@
+                    <MudStack Row="true"
+                              AlignItems="AlignItems.Center"
+                              Spacing="2"
+                              Class="py-3">
+                        @* Name placeholder — monospace bold, roughly 160px wide *@
+                        <MudSkeleton SkeletonType="SkeletonType.Rectangle"
+                                     Width="160px"
+                                     Height="20px" />
+                        @* Type chip placeholder *@
+                        <MudSkeleton SkeletonType="SkeletonType.Rectangle"
+                                     Width="72px"
+                                     Height="24px" />
+                        @* Description placeholder — fills remaining space *@
+                        <MudSkeleton SkeletonType="SkeletonType.Text"
+                                     Width="100%"
+                                     Height="20px" />
+                    </MudStack>
+                    @if (i < 2)
+                    {
+                        <MudDivider />
+                    }
+                }
+            </MudStack>
+        }
+
+        @* ── FR-9: Error State ────────────────────────────────────────────────
+           Shown when the query fails (e.g., database unreachable).
+           Displays the error message and a Retry button to re-attempt loading. *@
+        else if (_errorMessage is not null)
+        {
+            <MudAlert Severity="Severity.Error"
+                      Variant="Variant.Outlined"
+                      ShowCloseIcon="false">
+                <MudStack Spacing="2">
+                    <MudText Typo="Typo.body2">
+                        Failed to load system agents: @_errorMessage
+                    </MudText>
+                    <div>
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Error"
+                                   StartIcon="@Icons.Material.Filled.Refresh"
+                                   OnClick="@LoadAsync"
+                                   aria-label="Retry loading system agents">
+                            Retry
+                        </MudButton>
+                    </div>
+                </MudStack>
+            </MudAlert>
+        }
+
+        @* ── FR-7: Empty State ────────────────────────────────────────────────
+           Shown when the catalogue has no agents yet. Provides a centred
+           icon, explanatory text, and the Add button so the user can act
+           immediately without scrolling back to the header. *@
+        else if (_agents.Count == 0)
+        {
+            <MudStack AlignItems="AlignItems.Center"
+                      Justify="Justify.Center"
+                      Spacing="3"
+                      Class="py-8">
+                <MudIcon Icon="@Icons.Material.Filled.SmartToy"
+                         Size="Size.Large"
+                         Color="Color.Default" />
+                <MudText Typo="Typo.body1"
+                         Align="Align.Center"
+                         Color="Color.Secondary">
+                    No system agents defined yet.
+                </MudText>
+                @* Repeat the Add button in the empty state so the user has a
+                   clear call-to-action without needing to look at the header. *@
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="@NavigateToNewAgent">
+                    Add System Agent
+                </MudButton>
+            </MudStack>
+        }
+
+        @* ── FR-3 + FR-4: Agent List ──────────────────────────────────────────
+           Sorted alphabetically by Name (FR-4 — the query already returns
+           agents in ascending name order, so no client-side sort is needed).
+           Each row shows: Name (monospace bold) | Type badge | Description
+           (truncated with ellipsis + tooltip) | Edit icon button. *@
+        else
+        {
+            <MudStack Spacing="0">
+                @for (var i = 0; i < _agents.Count; i++)
+                {
+                    @* Capture loop variable for the lambda closure *@
+                    var agent = _agents[i];
+
+                    @* ── Agent Row ─────────────────────────────────────────────
+                       Row layout (left → right):
+                         1. Name — monospace bold, fixed min-width so names align
+                         2. Type chip — colour-coded by Mode value
+                         3. Description — truncated, full text on hover tooltip
+                         4. Edit icon button — navigates to the agent editor *@
+                    <MudStack Row="true"
+                              AlignItems="AlignItems.Center"
+                              Spacing="2"
+                              Class="py-2">
+
+                        @* FR-3: Name — monospace bold to distinguish it as an
+                           identifier (used as the agent filename without .md). *@
+                        <MudText Typo="Typo.body2"
+                                 Style="font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; font-weight: 700; min-width: 160px; flex-shrink: 0;">
+                            @agent.Name
+                        </MudText>
+
+                        @* FR-3: Display Name — human-readable label shown alongside
+                           the technical Name identifier. *@
+                        <MudText Typo="Typo.body2"
+                                 Style="min-width: 140px; flex-shrink: 0;">
+                            @agent.DisplayName
+                        </MudText>
+
+                        @* FR-3: Type badge — MudChip colour derived from Mode value.
+                           Chip is non-interactive (no click handler) — purely informational. *@
+                        <MudChip T="string"
+                                 Size="Size.Small"
+                                 Color="@GetChipColor(agent.Mode)"
+                                 Variant="Variant.Filled"
+                                 Style="flex-shrink: 0;">
+                            @GetChipText(agent.Mode)
+                        </MudChip>
+
+                        @* FR-3: Description — truncated to a single line with ellipsis.
+                           MudTooltip shows the full description text on hover so no
+                           information is permanently hidden from the user. *@
+                        <MudTooltip Text="@agent.Description"
+                                    Placement="Placement.Top"
+                                    Arrow="true">
+                            <MudText Typo="Typo.body2"
+                                     Color="Color.Secondary"
+                                     Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0;">
+                                @agent.Description
+                            </MudText>
+                        </MudTooltip>
+
+                        @* FR-3: Edit action — icon button navigates to the agent editor.
+                           Uses the agent Name (not ID) in the URL, matching the route
+                           convention used by the system-agent editor page. *@
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                       Size="Size.Small"
+                                       Color="Color.Default"
+                                       OnClick="@(() => NavigateToEditAgent(agent.Name))"
+                                       aria-label="@($"Edit agent {agent.Name}")"
+                                       Style="flex-shrink: 0;" />
+                    </MudStack>
+
+                    @* Divider between rows — omit after the last item *@
+                    @if (i < _agents.Count - 1)
+                    {
+                        <MudDivider />
+                    }
+                }
+            </MudStack>
+        }
+
+    </MudCardContent>
+</MudCard>
+
+@code {
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  State — agent list, loading flag, and error message
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// The loaded list of system agents, sorted alphabetically by Name.
+    /// Empty until the first successful load; remains empty on error.
+    /// </summary>
+    private IReadOnlyList<SystemAgentDto> _agents = [];
+
+    /// <summary>True while the agent list is being fetched from the database (FR-8).</summary>
+    private bool _isLoading = true;
+
+    /// <summary>
+    /// Holds the error message when loading fails; <c>null</c> when there is no error.
+    /// Drives the error state UI (FR-9).
+    /// </summary>
+    private string? _errorMessage;
+
+    /// <summary>
+    /// Cancellation token source scoped to this component's lifetime.
+    /// Cancelled in <see cref="Dispose"/> to abort any in-flight handler calls
+    /// if the user navigates away from the Settings page.
+    /// </summary>
+    private readonly CancellationTokenSource _cts = new();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Lifecycle — load agent catalogue on initialization
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// On first load, fetches all system agents from the database.
+    /// </summary>
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Data Loading — fetches all system agents with error handling
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Loads all system agents via <see cref="GetAllSystemAgentsHandler"/>.
+    /// Manages the loading and error states so the UI reflects the current status.
+    /// Called from <see cref="OnInitializedAsync"/> and from the Retry button (FR-9).
+    /// </summary>
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        var hadError = _errorMessage is not null;
+        _errorMessage = null;
+
+        // Trigger re-render only on the Retry path (when coming from an error state)
+        // to avoid a redundant render on the initial load path.
+        if (hadError)
+        {
+            StateHasChanged();
+        }
+
+        var result = await GetAllSystemAgentsHandler.Handle(new GetAllSystemAgentsQuery(), _cts.Token);
+
+        if (result.IsSuccess)
+        {
+            // FR-4: The query already returns agents sorted alphabetically by Name,
+            // so no client-side ordering is needed here.
+            _agents = result.Value;
+        }
+        else
+        {
+            _errorMessage = result.Error;
+        }
+
+        _isLoading = false;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Navigation — routes to the agent editor or new-agent form
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Navigates to the new system agent creation form (FR-6).
+    /// Route: /settings/system-agents/new
+    /// </summary>
+    private void NavigateToNewAgent()
+    {
+        NavigationManager.NavigateTo("/settings/system-agents/new");
+    }
+
+    /// <summary>
+    /// Navigates to the editor for an existing system agent (FR-3 edit action).
+    /// Route: /settings/system-agents/{agentName}
+    /// </summary>
+    /// <param name="agentName">The stable Name identifier of the agent to edit.</param>
+    private void NavigateToEditAgent(string agentName)
+    {
+        NavigationManager.NavigateTo($"/settings/system-agents/{agentName}");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Type Badge Helpers — maps Mode values to chip colours and display text
+    //  Same logic as AgentEditorPage.razor.cs — kept in sync intentionally.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Returns the MudBlazor chip colour for the given agent mode value (FR-3).
+    /// Primary → Color.Primary, Subagent → Color.Secondary,
+    /// All → Color.Tertiary, anything else → Color.Default.
+    /// </summary>
+    /// <param name="mode">The raw Mode string from <see cref="SystemAgentDto"/>.</param>
+    private static Color GetChipColor(string mode) => mode.ToLowerInvariant() switch
+    {
+        "primary"  => Color.Primary,
+        "subagent" => Color.Secondary,
+        "all"      => Color.Tertiary,
+        _          => Color.Default
+    };
+
+    /// <summary>
+    /// Returns the display text for the given agent mode value (FR-3).
+    /// Maps known modes to title-cased labels; unknown/empty modes show "Unknown".
+    /// </summary>
+    /// <param name="mode">The raw Mode string from <see cref="SystemAgentDto"/>.</param>
+    private static string GetChipText(string mode) => mode.ToLowerInvariant() switch
+    {
+        "primary"  => "Primary",
+        "subagent" => "Subagent",
+        "all"      => "All",
+        _          => "Unknown"
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Cleanup — cancel in-flight operations on dispose
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Cancels any in-flight handler calls when the component is disposed
+    /// (e.g., user navigates away from the Settings page).
+    /// </summary>
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

@@ -8,8 +8,8 @@
    ═══════════════════════════════════════════════════════════════════════════════
    Container page that loads all application settings from the database and
    displays configuration sections as MudBlazor cards. Each section is a
-   placeholder for a dedicated panel component (OpenCode Health Check, LLM
-   Provider) that will be implemented in future specs.
+   dedicated panel component: OpenCode Server, OpenCode Health Check, Git
+   Health Check, LLM Provider Configuration, and System Agents.
 
    Data flow:
    1. OnInitializedAsync calls LoadSettingsAsync()
@@ -42,7 +42,7 @@
     <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-4" />
     <MudStack Spacing="4">
         @* Skeleton card placeholders — one per expected section *@
-        @for (var i = 0; i < 2; i++)
+        @for (var i = 0; i < 3; i++)
         {
             <MudCard Outlined="true">
                 <MudCardHeader>
@@ -111,6 +111,11 @@ else
            Panel component handling OpenRouter API key and model ID
            configuration, connection verification, and encrypted storage. *@
         <LlmProviderConfigPanel />
+
+        @* ── Card: System Agents ─────────────────────────────────────────
+           Panel component for managing the system-wide agent catalogue:
+           listing, creating, editing, and deleting system agents. *@
+        <SystemAgentsPanel />
 
     </MudStack>
 }
