@@ -44,6 +44,16 @@ public sealed class ApplicationDbContext : IdentityDbContext<ApplicationUser, Id
     public DbSet<BoardStatus> BoardStatuses => Set<BoardStatus>();
 
     /// <summary>
+    /// Gets the set of <see cref="Card"/> entities representing Kanban board cards.
+    /// </summary>
+    public DbSet<Card> Cards => Set<Card>();
+
+    /// <summary>
+    /// Gets the set of <see cref="CardStatusHistory"/> entities representing card status transitions.
+    /// </summary>
+    public DbSet<CardStatusHistory> CardStatusHistories => Set<CardStatusHistory>();
+
+    /// <summary>
     /// Configures the model by applying Identity table mappings and all
     /// <see cref="IEntityTypeConfiguration{TEntity}"/> implementations from the Infrastructure assembly.
     /// </summary>
