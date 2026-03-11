@@ -4,8 +4,8 @@ using OwlNet.Application.Common.Models;
 namespace OwlNet.Application.BoardStatuses.Commands.DeleteBoardStatus;
 
 /// <summary>
-/// Command to delete a board status. Deletion is rejected if any cards
-/// currently use this status (card entity check to be added in SPEC-WF2).
+/// Command to delete a board status. Deletion is rejected if any cards currently
+/// use this status, or if any workflow triggers reference it as a from/to status.
 /// </summary>
 public sealed record DeleteBoardStatusCommand
     : IRequest<DeleteBoardStatusCommand, ValueTask<Result>>

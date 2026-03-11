@@ -23,10 +23,20 @@ namespace OwlNet.Tests.Application.BoardStatuses;
 public sealed class BoardStatusHandlerTests
 {
     private readonly IBoardStatusRepository _repository;
+    private readonly ICardRepository _cardRepository;
+    private readonly IWorkflowTriggerRepository _workflowTriggerRepository;
 
     public BoardStatusHandlerTests()
     {
         _repository = Substitute.For<IBoardStatusRepository>();
+        _cardRepository = Substitute.For<ICardRepository>();
+        _workflowTriggerRepository = Substitute.For<IWorkflowTriggerRepository>();
+
+        // Safe defaults: no cards in any status, no triggers referencing any status.
+        _cardRepository.ExistsWithStatusAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(new ValueTask<bool>(false));
+        _workflowTriggerRepository.ExistsWithStatusIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
     }
 
     // ──────────────────────────────────────────────
@@ -518,6 +528,8 @@ public sealed class BoardStatusHandlerTests
 
         var sut = new DeleteBoardStatusCommandHandler(
             _repository,
+            _cardRepository,
+            _workflowTriggerRepository,
             NullLogger<DeleteBoardStatusCommandHandler>.Instance);
 
         // Act
@@ -541,6 +553,8 @@ public sealed class BoardStatusHandlerTests
 
         var sut = new DeleteBoardStatusCommandHandler(
             _repository,
+            _cardRepository,
+            _workflowTriggerRepository,
             NullLogger<DeleteBoardStatusCommandHandler>.Instance);
 
         // Act
@@ -566,6 +580,8 @@ public sealed class BoardStatusHandlerTests
 
         var sut = new DeleteBoardStatusCommandHandler(
             _repository,
+            _cardRepository,
+            _workflowTriggerRepository,
             NullLogger<DeleteBoardStatusCommandHandler>.Instance);
 
         // Act
@@ -589,6 +605,124 @@ public sealed class BoardStatusHandlerTests
 
         var sut = new DeleteBoardStatusCommandHandler(
             _repository,
+            _cardRepository,
+            _workflowTriggerRepository,
+            NullLogger<DeleteBoardStatusCommandHandler>.Instance);
+
+        // Act
+        await sut.Handle(command, CancellationToken.None);
+
+        // Assert
+        _repository.DidNotReceive().Remove(Arg.Any<BoardStatus>());
+        await _repository.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    // ──────────────────────────────────────────────
+    // DeleteBoardStatusCommand — Card Guard
+    // ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task DeleteBoardStatus_StatusHasCards_ReturnsFailure()
+    {
+        // Arrange
+        var status = BoardStatus.CreateGlobalDefault("In Progress", 1);
+        var command = new DeleteBoardStatusCommand { Id = status.Id };
+
+        _repository.GetEntityByIdAsync(status.Id, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<BoardStatus?>(status));
+        _cardRepository.ExistsWithStatusAsync(status.Id, Arg.Any<CancellationToken>())
+            .Returns(new ValueTask<bool>(true));
+
+        var sut = new DeleteBoardStatusCommandHandler(
+            _repository,
+            _cardRepository,
+            _workflowTriggerRepository,
+            NullLogger<DeleteBoardStatusCommandHandler>.Instance);
+
+        // Act
+        var result = await sut.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.ShouldSatisfyAllConditions(
+            () => result.IsFailure.ShouldBeTrue(),
+            () => result.Error.ShouldBe("Cannot delete status — cards are currently in this status. Move them first.")
+        );
+    }
+
+    [Fact]
+    public async Task DeleteBoardStatus_StatusHasCards_DoesNotRemoveOrSave()
+    {
+        // Arrange
+        var status = BoardStatus.CreateGlobalDefault("In Progress", 1);
+        var command = new DeleteBoardStatusCommand { Id = status.Id };
+
+        _repository.GetEntityByIdAsync(status.Id, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<BoardStatus?>(status));
+        _cardRepository.ExistsWithStatusAsync(status.Id, Arg.Any<CancellationToken>())
+            .Returns(new ValueTask<bool>(true));
+
+        var sut = new DeleteBoardStatusCommandHandler(
+            _repository,
+            _cardRepository,
+            _workflowTriggerRepository,
+            NullLogger<DeleteBoardStatusCommandHandler>.Instance);
+
+        // Act
+        await sut.Handle(command, CancellationToken.None);
+
+        // Assert
+        _repository.DidNotReceive().Remove(Arg.Any<BoardStatus>());
+        await _repository.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    // ──────────────────────────────────────────────
+    // DeleteBoardStatusCommand — Trigger Guard (SPEC-WF3)
+    // ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task DeleteBoardStatus_StatusReferencedByTrigger_ReturnsFailure()
+    {
+        // Arrange
+        var status = BoardStatus.CreateGlobalDefault("Done", 2);
+        var command = new DeleteBoardStatusCommand { Id = status.Id };
+
+        _repository.GetEntityByIdAsync(status.Id, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<BoardStatus?>(status));
+        _workflowTriggerRepository.ExistsWithStatusIdAsync(status.Id, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(true));
+
+        var sut = new DeleteBoardStatusCommandHandler(
+            _repository,
+            _cardRepository,
+            _workflowTriggerRepository,
+            NullLogger<DeleteBoardStatusCommandHandler>.Instance);
+
+        // Act
+        var result = await sut.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.ShouldSatisfyAllConditions(
+            () => result.IsFailure.ShouldBeTrue(),
+            () => result.Error.ShouldBe("Cannot delete status — it is referenced by one or more workflow triggers. Update or delete the triggers first.")
+        );
+    }
+
+    [Fact]
+    public async Task DeleteBoardStatus_StatusReferencedByTrigger_DoesNotRemoveOrSave()
+    {
+        // Arrange
+        var status = BoardStatus.CreateGlobalDefault("Done", 2);
+        var command = new DeleteBoardStatusCommand { Id = status.Id };
+
+        _repository.GetEntityByIdAsync(status.Id, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<BoardStatus?>(status));
+        _workflowTriggerRepository.ExistsWithStatusIdAsync(status.Id, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(true));
+
+        var sut = new DeleteBoardStatusCommandHandler(
+            _repository,
+            _cardRepository,
+            _workflowTriggerRepository,
             NullLogger<DeleteBoardStatusCommandHandler>.Instance);
 
         // Act

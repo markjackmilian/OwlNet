@@ -1,6 +1,6 @@
 # SPEC: Workflow Trigger Entity
 
-> **Status:** Todo
+> **Status:** Done
 > **Created:** 2026-03-10
 > **Author:** owl-planner + user
 > **Priority:** High

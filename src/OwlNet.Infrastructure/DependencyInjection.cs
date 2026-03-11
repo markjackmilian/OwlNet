@@ -61,6 +61,7 @@ public static class DependencyInjection
         services.AddScoped<IBoardStatusRepository, BoardStatusRepository>();
         services.AddScoped<ICardRepository, CardRepository>();
         services.AddScoped<ISystemAgentRepository, SystemAgentRepository>();
+        services.AddScoped<IWorkflowTriggerRepository, WorkflowTriggerRepository>();
         services.AddScoped<BoardStatusSeeder>();
         services.AddScoped<IAppSettingService, AppSettingService>();
         services.AddSingleton<ICliService, CliService>();
