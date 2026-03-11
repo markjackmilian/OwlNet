@@ -12,6 +12,7 @@
    Nav structure:
      Dashboard  → /projects/{projectId}
      Board      → /projects/{projectId}/board
+     Workflow   → /projects/{projectId}/workflow
      Agents     → /projects/{projectId}/agents *@
 @using OwlNet.Web.Services
 @inject ActiveProjectService ActiveProjectService
@@ -33,6 +34,15 @@
                 Match="NavLinkMatch.All"
                 Icon="@Icons.Material.Filled.ViewKanban">
         Board
+    </MudNavLink>
+
+    @* Workflow — automation triggers for the active project.
+       Uses NavLinkMatch.Prefix so the item stays highlighted on sub-routes
+       like /workflow/new and /workflow/{triggerId}. *@
+    <MudNavLink Href="@($"/projects/{ActiveProjectService.ActiveProject!.Id}/workflow")"
+                Match="NavLinkMatch.Prefix"
+                Icon="@Icons.Material.Filled.AccountTree">
+        Workflow
     </MudNavLink>
 
     @* Agents — AI agent definitions for the active project.

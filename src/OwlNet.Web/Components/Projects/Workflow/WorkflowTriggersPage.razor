@@ -1,0 +1,304 @@
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Workflow Triggers Page — Smart Page Component
+   ═══════════════════════════════════════════════════════════════════════════════
+   Displays the list of workflow triggers configured for the current project.
+   Each trigger row shows the trigger name, status transition, agent count,
+   enabled/disabled badge, and quick actions (Edit, Delete, Toggle).
+
+   A warning icon is shown when a trigger references a BoardStatus that no
+   longer exists in the project (stale reference detection via the status
+   name lookup dictionary built at load time).
+
+   The list supports client-side filtering by enabled/disabled state — no
+   server round-trip is needed when the user changes the filter.
+
+   This is a "smart" component: it injects services, manages state, and
+   follows the same loading/validation/sync pattern as ProjectAgentsPage
+   and Board.razor.
+
+   Route: /projects/{ProjectId:guid}/workflow
+
+   Layout structure:
+   ┌─────────────────────────────────────────────────────────────────┐
+   │ PAGE HEADER                                                     │
+   │ "Workflow" (h4) + Filter select + [Add Trigger] button         │
+   ├─────────────────────────────────────────────────────────────────┤
+   │ TRIGGER LIST                                                    │
+   │  ┌─ Row: Name (bold) | Transition | Agents | Badge | Actions ─ │
+   │  ├─ Row: ...                                                    │
+   │  └─ Row: ...                                                    │
+   ├─────────────────────────────────────────────────────────────────┤
+   │ OR: EMPTY STATE (icon + heading + subtitle + Add Trigger CTA)  │
+   └─────────────────────────────────────────────────────────────────┘
+
+   Spec reference: SPEC-WF4-workflow-trigger-ui (FR-4 to FR-9, FR-21 to FR-25)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+
+@page "/projects/{ProjectId:guid}/workflow"
+
+@using DispatchR.Abstractions.Send
+@using OwlNet.Application.Common.Models
+@using OwlNet.Application.Projects.Queries.GetProjectById
+@using OwlNet.Application.WorkflowTriggers.Queries.GetWorkflowTriggersByProject
+@using OwlNet.Application.WorkflowTriggers.Commands.DeleteWorkflowTrigger
+@using OwlNet.Application.WorkflowTriggers.Commands.UpdateWorkflowTrigger
+@using OwlNet.Application.BoardStatuses.Queries.GetProjectStatuses
+@using OwlNet.Web.Services
+@using OwlNet.Web.Components.Projects
+
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Page Title — updates the browser tab with the project name when loaded
+   (FR-10: "Workflow — {ProjectName} — OwlNet")
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+<PageTitle>@(_project is not null ? $"Workflow — {_project.Name} — OwlNet" : "Workflow — OwlNet")</PageTitle>
+
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Loading State — skeleton placeholders while project, trigger, and status
+   data are being fetched (FR-23: loading skeleton on initial load)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+@if (_isLoading)
+{
+    <MudStack Spacing="4">
+        @* ── Page header skeleton (title + filter + button) ───────────────── *@
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="180px" Height="40px" />
+            <MudStack Row="true" Spacing="2">
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="140px" Height="40px" />
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="130px" Height="40px" />
+            </MudStack>
+        </MudStack>
+        @* ── List skeleton — 4 placeholder rows ──────────────────────────── *@
+        @for (var i = 0; i < 4; i++)
+        {
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="64px" />
+        }
+    </MudStack>
+}
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Error State — project not found or archived
+   (FR-3: invalid/archived project shows "Project not found" with CTA)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+else if (_isNotFound)
+{
+    <MudStack AlignItems="AlignItems.Center"
+              Justify="Justify.Center"
+              Spacing="3"
+              Class="py-16">
+        <MudIcon Icon="@Icons.Material.Filled.SearchOff"
+                 Size="Size.Large"
+                 Color="Color.Default" />
+        <MudText Typo="Typo.h5" Align="Align.Center">
+            Project not found
+        </MudText>
+        <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+            The project may have been archived or does not exist.
+        </MudText>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.FolderOpen"
+                   OnClick="@OpenProjectSelectorAsync">
+            Select a project
+        </MudButton>
+    </MudStack>
+}
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Content State — page header + trigger list (or empty state)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+else if (_project is not null)
+{
+    @* ── Page Header ──────────────────────────────────────────────────────
+       Title, client-side filter select, and "Add Trigger" action button.
+       The filter is placed in the header row for quick access (FR-6). *@
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h4">Workflow</MudText>
+
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+            @* ── Filter select — client-side, no server round-trip (FR-6) ── *@
+            <MudSelect T="string"
+                       Value="@_filterValue"
+                       ValueChanged="@OnFilterChanged"
+                       Label="Filter"
+                       Variant="Variant.Outlined"
+                       Dense="true"
+                       Style="min-width: 140px;"
+                       AnchorOrigin="Origin.BottomLeft">
+                <MudSelectItem Value="@("all")">All</MudSelectItem>
+                <MudSelectItem Value="@("enabled")">Enabled</MudSelectItem>
+                <MudSelectItem Value="@("disabled")">Disabled</MudSelectItem>
+            </MudSelect>
+
+            @* ── Add Trigger button — navigates to the creation form (FR-11) ── *@
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="@NavigateToAddTrigger">
+                Add Trigger
+            </MudButton>
+        </MudStack>
+    </MudStack>
+
+    @* ── Empty State — no triggers configured yet (FR-7) ─────────────────
+       Shown when the project has no triggers at all (regardless of filter).
+       Uses _allTriggers (not FilteredTriggers) so the empty state appears
+       even when a filter is active but there are simply no triggers. *@
+    @if (_allTriggers.Count == 0)
+    {
+        <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="3" Class="py-16">
+            <MudIcon Icon="@Icons.Material.Filled.AccountTree"
+                     Size="Size.Large"
+                     Color="Color.Default" />
+            <MudText Typo="Typo.h5" Align="Align.Center">
+                No workflow triggers configured
+            </MudText>
+            <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+                Create your first trigger to automate agent actions on card transitions.
+            </MudText>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="@NavigateToAddTrigger">
+                Add Trigger
+            </MudButton>
+        </MudStack>
+    }
+    @* ── Filter Empty State — triggers exist but none match the active filter ── *@
+    else if (!FilteredTriggers.Any())
+    {
+        <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="2" Class="py-12">
+            <MudIcon Icon="@Icons.Material.Filled.FilterAlt"
+                     Size="Size.Large"
+                     Color="Color.Default" />
+            <MudText Typo="Typo.h6" Align="Align.Center">
+                No triggers match the current filter
+            </MudText>
+            <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary">
+                Try changing the filter to "All" to see all triggers.
+            </MudText>
+        </MudStack>
+    }
+    @* ── Trigger List — one row per trigger (FR-4, FR-5, FR-8) ───────────
+       Each row shows: name, transition, agent count, enabled badge,
+       optional stale-status warning, and quick action buttons. *@
+    else
+    {
+        <MudPaper Elevation="1">
+            <MudList T="string" Dense="false">
+                @foreach (var trigger in FilteredTriggers)
+                {
+                    @* Use @key to help Blazor's diffing algorithm correctly
+                       identify rows when the list changes after delete/toggle. *@
+                    <MudListItem T="string" @key="trigger.Id" Dense="false">
+                        <ChildContent>
+                            <MudStack Row="true"
+                                      AlignItems="AlignItems.Center"
+                                      Spacing="3"
+                                      Style="width: 100%;">
+
+                                @* ── Trigger name — bold, primary text ──────────────────── *@
+                                <MudText Typo="Typo.body1"
+                                         Style="font-weight: 600; min-width: 160px; flex-shrink: 0;">
+                                    @trigger.Name
+                                </MudText>
+
+                                @* ── Status transition label: "{From} → {To}" (FR-5) ──────
+                                   Resolves status IDs to names via the pre-built dictionary.
+                                   Falls back to the raw GUID string if the status was deleted. *@
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Style="flex: 1; min-width: 0;">
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary"
+                                             Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                        @(GetStatusName(trigger.FromStatusId) ?? trigger.FromStatusId.ToString("N")[..8])
+                                        →
+                                        @(GetStatusName(trigger.ToStatusId) ?? trigger.ToStatusId.ToString("N")[..8])
+                                    </MudText>
+
+                                    @* ── Stale status warning icon (FR-22) ──────────────────
+                                       Shown when FromStatusId or ToStatusId no longer exists
+                                       in the project's board statuses. *@
+                                    @if (HasStaleStatusReference(trigger))
+                                    {
+                                        <MudTooltip Text="Status no longer exists">
+                                            <MudIcon Icon="@Icons.Material.Filled.Warning"
+                                                     Color="Color.Warning"
+                                                     Size="Size.Small" />
+                                        </MudTooltip>
+                                    }
+                                </MudStack>
+
+                                @* ── Agent count — "N agent(s)" (FR-5) ──────────────────── *@
+                                <MudText Typo="Typo.body2"
+                                         Color="Color.Secondary"
+                                         Style="white-space: nowrap; flex-shrink: 0;">
+                                    @trigger.TriggerAgents.Count agent@(trigger.TriggerAgents.Count == 1 ? "" : "s")
+                                </MudText>
+
+                                @* ── Enabled/Disabled badge (FR-5) ───────────────────────
+                                   Green chip for enabled, default (grey) for disabled.
+                                   Disabled triggers appear visually muted via the chip color. *@
+                                <MudChip T="string"
+                                         Size="Size.Small"
+                                         Color="@(trigger.IsEnabled ? Color.Success : Color.Default)"
+                                         Variant="Variant.Filled"
+                                         Style="flex-shrink: 0;">
+                                    @(trigger.IsEnabled ? "Enabled" : "Disabled")
+                                </MudChip>
+
+                                @* ── Quick Action Buttons (FR-8) ─────────────────────────
+                                   Edit: navigates to the trigger edit form.
+                                   Toggle: enables/disables the trigger inline.
+                                   Delete: shows confirmation dialog then deletes.
+                                   Wrapped in a span with stopPropagation to prevent
+                                   the click from bubbling up to the MudListItem. *@
+                                <span @onclick:stopPropagation="true"
+                                      style="display: flex; align-items: center; gap: 4px; flex-shrink: 0;">
+
+                                    @* Edit button — navigates to the edit form *@
+                                    <MudTooltip Text="Edit trigger">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                                       Size="Size.Small"
+                                                       aria-label="@($"Edit trigger {trigger.Name}")"
+                                                       OnClick="@(() => NavigateToEditTrigger(trigger.Id))" />
+                                    </MudTooltip>
+
+                                    @* Toggle button — enables or disables the trigger.
+                                       Shows a spinner while the update is in progress. *@
+                                    <MudTooltip Text="@(trigger.IsEnabled ? "Disable trigger" : "Enable trigger")">
+                                        <MudIconButton Icon="@(trigger.IsEnabled ? Icons.Material.Filled.ToggleOn : Icons.Material.Filled.ToggleOff)"
+                                                       Size="Size.Small"
+                                                       Color="@(trigger.IsEnabled ? Color.Success : Color.Default)"
+                                                       Disabled="@(_togglingIds.Contains(trigger.Id))"
+                                                       aria-label="@(trigger.IsEnabled ? $"Disable trigger {trigger.Name}" : $"Enable trigger {trigger.Name}")"
+                                                       OnClick="@(() => ToggleTriggerAsync(trigger))">
+                                            @if (_togglingIds.Contains(trigger.Id))
+                                            {
+                                                @* Spinner overlay while toggle is in progress *@
+                                                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                            }
+                                        </MudIconButton>
+                                    </MudTooltip>
+
+                                    @* Delete button — shows confirmation dialog before deleting.
+                                       Shows a spinner while the delete is in progress. *@
+                                    <MudTooltip Text="Delete trigger">
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                       Size="Size.Small"
+                                                       Color="Color.Error"
+                                                       Disabled="@(_deletingIds.Contains(trigger.Id))"
+                                                       aria-label="@($"Delete trigger {trigger.Name}")"
+                                                       OnClick="@(() => DeleteTriggerAsync(trigger))">
+                                            @if (_deletingIds.Contains(trigger.Id))
+                                            {
+                                                @* Spinner overlay while delete is in progress *@
+                                                <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                                            }
+                                        </MudIconButton>
+                                    </MudTooltip>
+                                </span>
+
+                            </MudStack>
+                        </ChildContent>
+                    </MudListItem>
+                }
+            </MudList>
+        </MudPaper>
+    }
+}

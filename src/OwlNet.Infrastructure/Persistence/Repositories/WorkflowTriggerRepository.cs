@@ -48,8 +48,10 @@ public sealed class WorkflowTriggerRepository : IWorkflowTriggerRepository
 
         var triggers = await query
             .Include(t => t.TriggerAgents)
-            .OrderBy(t => t.CreatedAt)
             .ToListAsync(cancellationToken);
+
+        // Order in memory — SQLite does not support ORDER BY on DateTimeOffset columns.
+        triggers = [.. triggers.OrderBy(t => t.CreatedAt)];
 
         return triggers
             .Select(t => new WorkflowTriggerDto(
@@ -87,8 +89,10 @@ public sealed class WorkflowTriggerRepository : IWorkflowTriggerRepository
                      && t.FromStatusId == fromStatusId
                      && t.ToStatusId == toStatusId)
             .Include(t => t.TriggerAgents)
-            .OrderBy(t => t.CreatedAt)
             .ToListAsync(cancellationToken);
+
+        // Order in memory — SQLite does not support ORDER BY on DateTimeOffset columns.
+        triggers = [.. triggers.OrderBy(t => t.CreatedAt)];
 
         return triggers
             .Select(t => new WorkflowTriggerDto(

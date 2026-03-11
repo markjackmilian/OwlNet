@@ -1,0 +1,480 @@
+@* ═══════════════════════════════════════════════════════════════════════════════
+   WorkflowTriggerFormPage — Create / Edit Workflow Trigger
+   ═══════════════════════════════════════════════════════════════════════════════
+   A smart page component that handles both creating and editing workflow triggers.
+
+   Create mode  → route: /projects/{ProjectId:guid}/workflow/new
+   Edit mode    → route: /projects/{ProjectId:guid}/workflow/{TriggerId:guid}
+
+   The mode is determined by TriggerId: Guid.Empty = create, non-empty = edit.
+
+   Form fields:
+     - Name (text, required, max 150 chars)
+     - From Status (dropdown, required)
+     - To Status (dropdown, required, excludes selected From Status)
+     - Prompt (multiline, required, max 10000 chars) + "Improve Prompt" button
+     - Suggested improvement preview (accept / discard)
+     - Enabled toggle (edit mode only)
+     - Agent checklist (at least one required)
+     - Agent order list (WorkflowTriggerAgentOrderList, shown when ≥1 agent selected)
+
+   Layout structure:
+   ┌─────────────────────────────────────────────────────────────────┐
+   │ HEADER: "← Back" | "New Trigger" / "Edit Trigger"             │
+   ├─────────────────────────────────────────────────────────────────┤
+   │ MudPaper (form container)                                       │
+   │  ┌─ Name field ──────────────────────────────────────────────── │
+   │  ├─ From Status | To Status (side by side, MudGrid)            │
+   │  ├─ Prompt (multiline) + [Improve Prompt] button               │
+   │  ├─ Suggested improvement preview (if visible)                 │
+   │  ├─ Enabled toggle (always shown, default on for new)          │
+   │  ├─ Agents section header                                      │
+   │  ├─ Agent checklist (or empty state)                           │
+   │  ├─ Agent order section (if agents selected)                   │
+   │  └─ Actions: [Cancel] [Save]                                   │
+   └─────────────────────────────────────────────────────────────────┘
+
+   Spec reference: SPEC-WF4-workflow-trigger-ui (FR-10 to FR-20)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+
+@page "/projects/{ProjectId:guid}/workflow/new"
+@page "/projects/{ProjectId:guid}/workflow/{TriggerId:guid}"
+
+@using DispatchR.Abstractions.Send
+@using OwlNet.Application.Common.Models
+@using OwlNet.Application.Common.Interfaces
+@using OwlNet.Application.Projects.Queries.GetProjectById
+@using OwlNet.Application.Projects.Queries.GetProjectAgents
+@using OwlNet.Application.BoardStatuses.Queries.GetProjectStatuses
+@using OwlNet.Application.WorkflowTriggers.Commands.CreateWorkflowTrigger
+@using OwlNet.Application.WorkflowTriggers.Commands.UpdateWorkflowTrigger
+@using OwlNet.Application.WorkflowTriggers.Queries.GetWorkflowTriggersByProject
+@using OwlNet.Web.Services
+
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Page Title — updates the browser tab with the project name and mode
+   Create: "New Trigger — {ProjectName} — OwlNet"
+   Edit:   "Edit Trigger — {ProjectName} — OwlNet"
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+<PageTitle>
+    @if (_project is not null)
+    {
+        @(IsCreateMode ? $"New Trigger — {_project.Name} — OwlNet" : $"Edit Trigger — {_project.Name} — OwlNet")
+    }
+    else
+    {
+        @("Trigger — OwlNet")
+    }
+</PageTitle>
+
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Loading State — skeleton placeholders while data is being fetched
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+@if (_isLoading)
+{
+    <MudStack Spacing="4">
+        @* ── Header skeleton (back button + title) ───────────────────────── *@
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="80px" Height="36px" />
+            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="200px" Height="40px" />
+        </MudStack>
+        @* ── Form skeleton ────────────────────────────────────────────────── *@
+        <MudPaper Elevation="1" Class="pa-6">
+            <MudStack Spacing="4">
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="56px" />
+                <MudGrid>
+                    <MudItem xs="12" sm="6">
+                        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="56px" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="56px" />
+                    </MudItem>
+                </MudGrid>
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="160px" />
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="48px" />
+                @for (var i = 0; i < 3; i++)
+                {
+                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="40px" />
+                }
+                <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="100px" Height="40px" />
+                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="100px" Height="40px" />
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    </MudStack>
+}
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Error State — project not found or archived
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+else if (_isNotFound)
+{
+    <MudStack AlignItems="AlignItems.Center"
+              Justify="Justify.Center"
+              Spacing="3"
+              Class="py-16">
+        <MudIcon Icon="@Icons.Material.Filled.SearchOff"
+                 Size="Size.Large"
+                 Color="Color.Default" />
+        <MudText Typo="Typo.h5" Align="Align.Center">
+            Project not found
+        </MudText>
+        <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+            The project may have been archived or does not exist.
+        </MudText>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.FolderOpen"
+                   OnClick="@(() => NavigationManager.NavigateTo("/"))">
+            Select a project
+        </MudButton>
+    </MudStack>
+}
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Content State — page header + form
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+else if (_project is not null)
+{
+    @* ── Page Header ──────────────────────────────────────────────────────
+       Back button (with unsaved-changes guard) and page title. *@
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-4">
+        <MudButton Variant="Variant.Text"
+                   Color="Color.Default"
+                   StartIcon="@Icons.Material.Filled.ArrowBack"
+                   OnClick="@NavigateBackAsync">
+            Back
+        </MudButton>
+        <MudText Typo="Typo.h4">
+            @(IsCreateMode ? "New Trigger" : "Edit Trigger")
+        </MudText>
+    </MudStack>
+
+    @* ── Form Container ───────────────────────────────────────────────────
+       All form fields are grouped in a single MudPaper for visual separation. *@
+    <MudPaper Elevation="1" Class="pa-6">
+        <MudStack Spacing="5">
+
+            @* ═══════════════════════════════════════════════════════════════
+               NAME FIELD
+               ═══════════════════════════════════════════════════════════════ *@
+            <MudStack Spacing="1">
+                <MudTextField @bind-Value="_name"
+                              Label="Name"
+                              Variant="Variant.Outlined"
+                              Immediate="true"
+                              MaxLength="150"
+                              FullWidth="true"
+                              aria-label="Trigger name"
+                              @oninput="@(_ => MarkDirty())" />
+                @if (_validationErrors.TryGetValue("name", out var nameError))
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Error">@nameError</MudText>
+                }
+            </MudStack>
+
+            @* ═══════════════════════════════════════════════════════════════
+               FROM STATUS / TO STATUS (side by side on sm+)
+               ═══════════════════════════════════════════════════════════════ *@
+            @if (_statuses.Count == 0)
+            {
+                @* No statuses configured — show info alert (FR-edge: no statuses) *@
+                <MudAlert Severity="Severity.Info" Dense="true">
+                    Configure board statuses first.
+                </MudAlert>
+            }
+            else
+            {
+                <MudGrid Spacing="3">
+                    @* ── From Status dropdown ──────────────────────────────── *@
+                    <MudItem xs="12" sm="6">
+                        <MudStack Spacing="1">
+                            <MudSelect T="Guid"
+                                       Value="_fromStatusId"
+                                       ValueChanged="@OnFromStatusChanged"
+                                       Label="From Status"
+                                       Variant="Variant.Outlined"
+                                       FullWidth="true"
+                                       AnchorOrigin="Origin.BottomLeft"
+                                       aria-label="From status">
+                                @foreach (var status in _statuses)
+                                {
+                                    <MudSelectItem Value="@status.Id">@status.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                            @if (_validationErrors.TryGetValue("fromStatus", out var fromError))
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Error">@fromError</MudText>
+                            }
+                        </MudStack>
+                    </MudItem>
+
+                    @* ── To Status dropdown (excludes selected From Status) ── *@
+                    <MudItem xs="12" sm="6">
+                        <MudStack Spacing="1">
+                            <MudSelect T="Guid"
+                                       Value="_toStatusId"
+                                       ValueChanged="@OnToStatusChanged"
+                                       Label="To Status"
+                                       Variant="Variant.Outlined"
+                                       FullWidth="true"
+                                       AnchorOrigin="Origin.BottomLeft"
+                                       aria-label="To status">
+                                @foreach (var status in ToStatusOptions)
+                                {
+                                    <MudSelectItem Value="@status.Id">@status.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                            @if (_validationErrors.TryGetValue("toStatus", out var toError))
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Error">@toError</MudText>
+                            }
+                            @* Hint when only one status remains after From selection *@
+                            @if (_fromStatusId != Guid.Empty && ToStatusOptions.Count() <= 1)
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    At least two statuses are needed for a workflow trigger.
+                                </MudText>
+                            }
+                        </MudStack>
+                    </MudItem>
+                </MudGrid>
+            }
+
+            @* ═══════════════════════════════════════════════════════════════
+               PROMPT FIELD + IMPROVE PROMPT BUTTON
+               ═══════════════════════════════════════════════════════════════ *@
+            <MudStack Spacing="1">
+                <MudStack Row="true" AlignItems="AlignItems.End" Spacing="2">
+                    @* ── Prompt textarea ──────────────────────────────────── *@
+                    <MudTextField @bind-Value="_prompt"
+                                  Label="Prompt"
+                                  Variant="Variant.Outlined"
+                                  Lines="6"
+                                  MaxLength="10000"
+                                  FullWidth="true"
+                                  Immediate="true"
+                                  Style="flex: 1;"
+                                  aria-label="Trigger prompt"
+                                  @oninput="@(_ => MarkDirty())" />
+
+                    @* ── Improve Prompt button (FR-15 to FR-20) ───────────────
+                       Enabled only when: prompt ≥ 10 chars, LLM configured, not already improving.
+                       Wrapped in a MudTooltip that explains why it's disabled when LLM is not configured. *@
+                    <MudTooltip Text="@(!_isLlmConfigured ? "Configure an LLM provider in Settings to use this feature." : "Improve prompt with AI")"
+                                Disabled="@(_isLlmConfigured && _prompt.Length >= 10)">
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Secondary"
+                                   StartIcon="@Icons.Material.Filled.AutoAwesome"
+                                   Disabled="@(_prompt.Length < 10 || !_isLlmConfigured || _isImprovingPrompt)"
+                                   OnClick="@ImprovePromptAsync"
+                                   Style="white-space: nowrap; align-self: flex-end; margin-bottom: 2px;">
+                            @if (_isImprovingPrompt)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            }
+                            Improve Prompt
+                        </MudButton>
+                    </MudTooltip>
+                </MudStack>
+
+                @if (_validationErrors.TryGetValue("prompt", out var promptError))
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Error">@promptError</MudText>
+                }
+            </MudStack>
+
+            @* ═══════════════════════════════════════════════════════════════
+               SUGGESTED IMPROVEMENT PREVIEW (FR-17, FR-18)
+               Shown only after a successful "Improve Prompt" LLM call.
+               The user can accept (replace prompt) or discard (dismiss).
+               ═══════════════════════════════════════════════════════════════ *@
+            @if (_showPromptSuggestion)
+            {
+                <MudPaper Elevation="0"
+                          Class="pa-4"
+                          Style="border: 1px solid var(--mud-palette-warning); border-radius: 4px;">
+                    <MudStack Spacing="3">
+                        <MudText Typo="Typo.subtitle2" Style="font-weight: 700;">
+                            Suggested improvement
+                        </MudText>
+                        <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">
+                            @_suggestedPrompt
+                        </MudText>
+                        <MudStack Row="true" Spacing="2">
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Primary"
+                                       Size="Size.Small"
+                                       OnClick="@AcceptSuggestedPrompt">
+                                Accept
+                            </MudButton>
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Default"
+                                       Size="Size.Small"
+                                       OnClick="@DiscardSuggestedPrompt">
+                                Discard
+                            </MudButton>
+                        </MudStack>
+                    </MudStack>
+                </MudPaper>
+            }
+
+            @* ═══════════════════════════════════════════════════════════════
+               ENABLED TOGGLE
+               Always shown (default on for new triggers, pre-populated for edit).
+               ═══════════════════════════════════════════════════════════════ *@
+            <MudStack Spacing="0">
+                <MudSwitch Value="_isEnabled"
+                           ValueChanged="@((bool v) => { _isEnabled = v; MarkDirty(); })"
+                           Label="@(_isEnabled ? "Enabled" : "Disabled")"
+                           Color="Color.Success" />
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    Disabled triggers are not evaluated on card status transitions.
+                </MudText>
+            </MudStack>
+
+            @* ═══════════════════════════════════════════════════════════════
+               AGENTS SECTION
+               ═══════════════════════════════════════════════════════════════ *@
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">
+                    Agents
+                </MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    Select one or more agents to invoke when this trigger fires.
+                </MudText>
+
+                @if (_validationErrors.TryGetValue("agents", out var agentsError))
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Error">@agentsError</MudText>
+                }
+
+                @* ── No agents available — empty state with link to Agents page ── *@
+                @if (_availableAgents.Count == 0 && _staleAgentNames.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true">
+                        No agents available. Create agents first from the
+                        <MudLink Href="@($"/projects/{ProjectId}/agents")">Agents page</MudLink>.
+                    </MudAlert>
+                }
+                else
+                {
+                    @* ── Agent checklist ──────────────────────────────────────────
+                       Shows all available agents as checkboxes.
+                       In edit mode, stale agents (no longer on filesystem) are also
+                       shown as checked with a warning icon. *@
+                    <MudPaper Elevation="0"
+                              Class="pa-3"
+                              Style="border: 1px solid var(--mud-palette-lines-default); border-radius: 4px;">
+                        <MudStack Spacing="1">
+                            @* ── Available agents from the filesystem ─────────────── *@
+                            @foreach (var agent in _availableAgents)
+                            {
+                                var agentName = agent.FileName;
+                                var isChecked = _selectedAgentNames.Contains(agentName);
+
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" @key="agentName">
+                                    <MudCheckBox T="bool"
+                                                 Value="@isChecked"
+                                                 ValueChanged="@((bool v) => OnAgentCheckChanged(agentName, v))"
+                                                 Dense="true"
+                                                 aria-label="@($"Select agent {agentName}")" />
+                                    <MudStack Spacing="0" Style="flex: 1; min-width: 0;">
+                                        <MudText Typo="Typo.body2"
+                                                 Style="font-weight: 700; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;">
+                                            @agentName
+                                        </MudText>
+                                        @if (!string.IsNullOrWhiteSpace(agent.Description))
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                @agent.Description
+                                            </MudText>
+                                        }
+                                    </MudStack>
+                                </MudStack>
+                            }
+
+                            @* ── Stale agents (edit mode only) ────────────────────────
+                               Agents referenced by the trigger that no longer exist on
+                               the filesystem. Shown as checked with a warning icon. *@
+                            @foreach (var staleName in _staleAgentNames)
+                            {
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" @key="@($"stale-{staleName}")">
+                                    <MudCheckBox T="bool"
+                                                 Value="true"
+                                                 ValueChanged="@((bool v) => OnAgentCheckChanged(staleName, v))"
+                                                 Dense="true"
+                                                 aria-label="@($"Select agent {staleName}")" />
+                                    <MudStack Spacing="0" Style="flex: 1; min-width: 0;">
+                                        <MudText Typo="Typo.body2"
+                                                 Style="font-weight: 700; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;">
+                                            @staleName
+                                        </MudText>
+                                    </MudStack>
+                                    @* Warning icon for stale agent (FR-21) *@
+                                    <MudTooltip Text="@($"Agent '{staleName}' not found in project")">
+                                        <MudIcon Icon="@Icons.Material.Filled.Warning"
+                                                 Color="Color.Warning"
+                                                 Size="Size.Small" />
+                                    </MudTooltip>
+                                </MudStack>
+                            }
+                        </MudStack>
+                    </MudPaper>
+                }
+            </MudStack>
+
+            @* ═══════════════════════════════════════════════════════════════
+               AGENT ORDER SECTION
+               Shown only when at least one agent is selected.
+               Uses the WorkflowTriggerAgentOrderList dumb component.
+               ═══════════════════════════════════════════════════════════════ *@
+            @if (_orderedAgentNames.Count > 0)
+            {
+                <MudStack Spacing="2">
+                    <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">
+                        Agent Execution Order
+                    </MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Use the ▲/▼ buttons to set the order in which agents are invoked.
+                    </MudText>
+
+                    <MudPaper Elevation="0"
+                              Class="pa-2"
+                              Style="border: 1px solid var(--mud-palette-lines-default); border-radius: 4px;">
+                        <WorkflowTriggerAgentOrderList AgentNames="@_orderedAgentNames"
+                                                       AgentNamesChanged="@OnAgentOrderChanged"
+                                                       AvailableAgents="@_availableAgents"
+                                                       StaleAgentNames="@_staleAgentNames" />
+                    </MudPaper>
+                </MudStack>
+            }
+
+            @* ═══════════════════════════════════════════════════════════════
+               ACTION BUTTONS — Cancel (left) and Save (right)
+               ═══════════════════════════════════════════════════════════════ *@
+            <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2" Class="mt-2">
+                @* ── Cancel button — navigates back with unsaved-changes guard ── *@
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Default"
+                           OnClick="@NavigateBackAsync"
+                           Disabled="@_isSaving">
+                    Cancel
+                </MudButton>
+
+                @* ── Save button — validates and dispatches create/update command ── *@
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Save"
+                           Disabled="@_isSaving"
+                           OnClick="@SaveAsync">
+                    @if (_isSaving)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Save
+                </MudButton>
+            </MudStack>
+
+        </MudStack>
+    </MudPaper>
+}
