@@ -125,6 +125,18 @@ try
     Log.Information("Database migrations applied successfully");
 
     // -----------------------------------------------------------------------
+    // Seed Global Default Board Statuses
+    // -----------------------------------------------------------------------
+    // Ensures the five default board statuses (Backlog, ToEvaluate, Develop,
+    // Review, Done) exist for new installations. Idempotent — skips if they
+    // already exist.
+    using (var seedScope = app.Services.CreateScope())
+    {
+        var seeder = seedScope.ServiceProvider.GetRequiredService<BoardStatusSeeder>();
+        await seeder.SeedAsync();
+    }
+
+    // -----------------------------------------------------------------------
     // HTTP Request Pipeline
     // -----------------------------------------------------------------------
     if (app.Environment.IsDevelopment())

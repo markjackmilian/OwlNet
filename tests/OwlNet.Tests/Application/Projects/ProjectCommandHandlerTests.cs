@@ -26,12 +26,20 @@ public sealed class ProjectCommandHandlerTests
     private const string DefaultPath = @"C:\Projects\TestProject";
 
     private readonly IProjectRepository _repository;
+    private readonly IBoardStatusRepository _boardStatusRepository;
     private readonly IFileSystem _fileSystem;
 
     public ProjectCommandHandlerTests()
     {
         _repository = Substitute.For<IProjectRepository>();
+        _boardStatusRepository = Substitute.For<IBoardStatusRepository>();
         _fileSystem = Substitute.For<IFileSystem>();
+
+        // Default: no global statuses to copy (overridden in specific tests)
+        _boardStatusRepository.GetGlobalDefaultsAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(new List<BoardStatusDto>()));
+        _boardStatusRepository.AddRangeAsync(Arg.Any<IEnumerable<BoardStatus>>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
     }
 
     // ──────────────────────────────────────────────
@@ -56,6 +64,7 @@ public sealed class ProjectCommandHandlerTests
 
         var sut = new CreateProjectCommandHandler(
             _repository,
+            _boardStatusRepository,
             _fileSystem,
             NullLogger<CreateProjectCommandHandler>.Instance);
 
@@ -87,6 +96,7 @@ public sealed class ProjectCommandHandlerTests
 
         var sut = new CreateProjectCommandHandler(
             _repository,
+            _boardStatusRepository,
             _fileSystem,
             NullLogger<CreateProjectCommandHandler>.Instance);
 
@@ -118,6 +128,7 @@ public sealed class ProjectCommandHandlerTests
 
         var sut = new CreateProjectCommandHandler(
             _repository,
+            _boardStatusRepository,
             _fileSystem,
             NullLogger<CreateProjectCommandHandler>.Instance);
 
@@ -150,6 +161,7 @@ public sealed class ProjectCommandHandlerTests
 
         var sut = new CreateProjectCommandHandler(
             _repository,
+            _boardStatusRepository,
             _fileSystem,
             NullLogger<CreateProjectCommandHandler>.Instance);
 
@@ -174,6 +186,7 @@ public sealed class ProjectCommandHandlerTests
 
         var sut = new CreateProjectCommandHandler(
             _repository,
+            _boardStatusRepository,
             _fileSystem,
             NullLogger<CreateProjectCommandHandler>.Instance);
 
@@ -202,6 +215,7 @@ public sealed class ProjectCommandHandlerTests
 
         var sut = new CreateProjectCommandHandler(
             _repository,
+            _boardStatusRepository,
             _fileSystem,
             NullLogger<CreateProjectCommandHandler>.Instance);
 
@@ -228,6 +242,7 @@ public sealed class ProjectCommandHandlerTests
 
         var sut = new CreateProjectCommandHandler(
             _repository,
+            _boardStatusRepository,
             _fileSystem,
             NullLogger<CreateProjectCommandHandler>.Instance);
 
@@ -252,6 +267,7 @@ public sealed class ProjectCommandHandlerTests
 
         var sut = new CreateProjectCommandHandler(
             _repository,
+            _boardStatusRepository,
             _fileSystem,
             NullLogger<CreateProjectCommandHandler>.Instance);
 
@@ -280,6 +296,7 @@ public sealed class ProjectCommandHandlerTests
 
         var sut = new CreateProjectCommandHandler(
             _repository,
+            _boardStatusRepository,
             _fileSystem,
             NullLogger<CreateProjectCommandHandler>.Instance);
 
@@ -307,6 +324,7 @@ public sealed class ProjectCommandHandlerTests
 
         var sut = new CreateProjectCommandHandler(
             _repository,
+            _boardStatusRepository,
             _fileSystem,
             NullLogger<CreateProjectCommandHandler>.Instance);
 
@@ -340,6 +358,7 @@ public sealed class ProjectCommandHandlerTests
 
         var sut = new CreateProjectCommandHandler(
             _repository,
+            _boardStatusRepository,
             _fileSystem,
             NullLogger<CreateProjectCommandHandler>.Instance);
 
@@ -370,6 +389,7 @@ public sealed class ProjectCommandHandlerTests
 
         var sut = new CreateProjectCommandHandler(
             _repository,
+            _boardStatusRepository,
             _fileSystem,
             NullLogger<CreateProjectCommandHandler>.Instance);
 
@@ -378,6 +398,146 @@ public sealed class ProjectCommandHandlerTests
 
         // Assert
         _fileSystem.Received(1).DirectoryExists(@"C:\Projects\Test");
+    }
+
+    // ──────────────────────────────────────────────
+    // CreateProjectCommand — Board Status Copying
+    // ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task CreateProject_WithGlobalDefaults_CopiesStatusesToProject()
+    {
+        // Arrange
+        var command = new CreateProjectCommand { Name = "New Project", Path = DefaultPath, Description = "Test" };
+
+        _repository.ExistsWithNameAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _repository.ExistsWithPathAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _fileSystem.DirectoryExists(Arg.Any<string>()).Returns(true);
+        _repository.AddAsync(Arg.Any<Project>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        _repository.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var globalDefaults = new List<BoardStatusDto>
+        {
+            new(Guid.NewGuid(), "Backlog", 0, true, null),
+            new(Guid.NewGuid(), "Develop", 1, true, null),
+            new(Guid.NewGuid(), "Done", 2, true, null)
+        };
+        _boardStatusRepository.GetGlobalDefaultsAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(globalDefaults));
+        _boardStatusRepository.AddRangeAsync(Arg.Any<IEnumerable<BoardStatus>>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var sut = new CreateProjectCommandHandler(
+            _repository,
+            _boardStatusRepository,
+            _fileSystem,
+            NullLogger<CreateProjectCommandHandler>.Instance);
+
+        // Act
+        var result = await sut.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+
+        await _boardStatusRepository.Received(1).AddRangeAsync(
+            Arg.Is<IEnumerable<BoardStatus>>(statuses =>
+                statuses.Count() == 3),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CreateProject_WithGlobalDefaults_CopiedStatusesHaveCorrectProperties()
+    {
+        // Arrange
+        var command = new CreateProjectCommand { Name = "New Project", Path = DefaultPath, Description = "Test" };
+
+        _repository.ExistsWithNameAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _repository.ExistsWithPathAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _fileSystem.DirectoryExists(Arg.Any<string>()).Returns(true);
+        _repository.AddAsync(Arg.Any<Project>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        _repository.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var globalDefaults = new List<BoardStatusDto>
+        {
+            new(Guid.NewGuid(), "Backlog", 0, true, null),
+            new(Guid.NewGuid(), "Develop", 1, true, null),
+            new(Guid.NewGuid(), "Done", 2, true, null)
+        };
+        _boardStatusRepository.GetGlobalDefaultsAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(globalDefaults));
+
+        List<BoardStatus>? capturedStatuses = null;
+        _boardStatusRepository.AddRangeAsync(Arg.Any<IEnumerable<BoardStatus>>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask)
+            .AndDoes(callInfo => capturedStatuses = callInfo.Arg<IEnumerable<BoardStatus>>().ToList());
+
+        var sut = new CreateProjectCommandHandler(
+            _repository,
+            _boardStatusRepository,
+            _fileSystem,
+            NullLogger<CreateProjectCommandHandler>.Instance);
+
+        // Act
+        var result = await sut.Handle(command, CancellationToken.None);
+
+        // Assert
+        capturedStatuses.ShouldNotBeNull();
+        capturedStatuses.Count.ShouldBe(3);
+
+        capturedStatuses.ShouldSatisfyAllConditions(
+            () => capturedStatuses[0].Name.ShouldBe("Backlog"),
+            () => capturedStatuses[0].SortOrder.ShouldBe(0),
+            () => capturedStatuses[0].IsDefault.ShouldBeTrue(),
+            () => capturedStatuses[0].ProjectId.ShouldBe(result.Value),
+            () => capturedStatuses[1].Name.ShouldBe("Develop"),
+            () => capturedStatuses[1].SortOrder.ShouldBe(1),
+            () => capturedStatuses[1].IsDefault.ShouldBeTrue(),
+            () => capturedStatuses[1].ProjectId.ShouldBe(result.Value),
+            () => capturedStatuses[2].Name.ShouldBe("Done"),
+            () => capturedStatuses[2].SortOrder.ShouldBe(2),
+            () => capturedStatuses[2].IsDefault.ShouldBeTrue(),
+            () => capturedStatuses[2].ProjectId.ShouldBe(result.Value)
+        );
+    }
+
+    [Fact]
+    public async Task CreateProject_NoGlobalDefaults_CallsAddRangeWithEmptyCollection()
+    {
+        // Arrange — _boardStatusRepository already returns empty list by default in constructor
+        var command = new CreateProjectCommand { Name = "New Project", Path = DefaultPath, Description = "Test" };
+
+        _repository.ExistsWithNameAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _repository.ExistsWithPathAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _fileSystem.DirectoryExists(Arg.Any<string>()).Returns(true);
+        _repository.AddAsync(Arg.Any<Project>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        _repository.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var sut = new CreateProjectCommandHandler(
+            _repository,
+            _boardStatusRepository,
+            _fileSystem,
+            NullLogger<CreateProjectCommandHandler>.Instance);
+
+        // Act
+        var result = await sut.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.IsSuccess.ShouldBeTrue();
+        await _boardStatusRepository.Received(1).AddRangeAsync(
+            Arg.Is<IEnumerable<BoardStatus>>(statuses => !statuses.Any()),
+            Arg.Any<CancellationToken>());
     }
 
     // ──────────────────────────────────────────────

@@ -39,6 +39,11 @@ public sealed class ApplicationDbContext : IdentityDbContext<ApplicationUser, Id
     public DbSet<SystemAgent> SystemAgents => Set<SystemAgent>();
 
     /// <summary>
+    /// Gets the set of <see cref="BoardStatus"/> entities representing board column statuses.
+    /// </summary>
+    public DbSet<BoardStatus> BoardStatuses => Set<BoardStatus>();
+
+    /// <summary>
     /// Configures the model by applying Identity table mappings and all
     /// <see cref="IEntityTypeConfiguration{TEntity}"/> implementations from the Infrastructure assembly.
     /// </summary>
