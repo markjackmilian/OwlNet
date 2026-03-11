@@ -1,0 +1,172 @@
+@* ═══════════════════════════════════════════════════════════════════════════════
+   WorkflowTriggerAgentOrderList — Dumb Component for Agent Execution Order
+   ═══════════════════════════════════════════════════════════════════════════════
+   Displays the ordered list of selected agents and allows the user to reorder
+   them using ▲/▼ arrow buttons. Each row shows:
+     - 1-based position number (bold)
+     - Agent name (bold, monospace)
+     - Agent description (grey, if available)
+     - Warning icon if the agent no longer exists on the filesystem
+
+   This is a pure presentational (dumb) component: it receives data via
+   [Parameter] properties and notifies the parent of order changes via
+   EventCallback. It has no service dependencies.
+
+   Spec reference: SPEC-WF4-workflow-trigger-ui (FR-10, FR-53)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+
+@using OwlNet.Application.Common.Models
+
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Agent Order List — one row per selected agent
+   Rendered only when AgentNames is non-empty (caller is responsible for guard).
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+<MudList T="string" Dense="true">
+    @for (var i = 0; i < AgentNames.Count; i++)
+    {
+        @* Capture loop variable for use in lambdas — avoids closure-over-loop-variable bug *@
+        var index = i;
+        var agentName = AgentNames[i];
+
+        @* Look up the agent's description from the available agents list.
+           Returns null if the agent is stale (no longer on the filesystem). *@
+        var description = AvailableAgents.FirstOrDefault(a => a.FileName == agentName)?.Description;
+        var isStale = StaleAgentNames.Contains(agentName);
+
+        <MudListItem T="string" @key="agentName" Dense="true">
+            <ChildContent>
+                <MudStack Row="true"
+                          AlignItems="AlignItems.Center"
+                          Spacing="2"
+                          Style="width: 100%;">
+
+                    @* ── Position number — 1-based, bold ──────────────────────────── *@
+                    <MudText Typo="Typo.body2"
+                             Style="font-weight: 700; min-width: 24px; text-align: right; flex-shrink: 0;">
+                        @(index + 1).
+                    </MudText>
+
+                    @* ── Agent name + description ──────────────────────────────────── *@
+                    <MudStack Spacing="0" Style="flex: 1; min-width: 0;">
+                        <MudText Typo="Typo.body2"
+                                 Style="font-weight: 700; font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;">
+                            @agentName
+                        </MudText>
+                        @if (!string.IsNullOrWhiteSpace(description))
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @description
+                            </MudText>
+                        }
+                    </MudStack>
+
+                    @* ── Stale agent warning icon (FR-21) ─────────────────────────────
+                       Shown when the agent name is in StaleAgentNames, meaning the
+                       agent file no longer exists in the project's .opencode/agents/. *@
+                    @if (isStale)
+                    {
+                        <MudTooltip Text="@($"Agent '{agentName}' not found in project")">
+                            <MudIcon Icon="@Icons.Material.Filled.Warning"
+                                     Color="Color.Warning"
+                                     Size="Size.Small" />
+                        </MudTooltip>
+                    }
+
+                    @* ── Reorder buttons — ▲ and ▼ ────────────────────────────────────
+                       ▲ is disabled for the first item; ▼ is disabled for the last.
+                       Clicking swaps the item with its neighbour and notifies the parent. *@
+                    <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward"
+                                   Size="Size.Small"
+                                   Disabled="@(index == 0)"
+                                   aria-label="@($"Move {agentName} up")"
+                                   OnClick="@(() => MoveUpAsync(index))" />
+
+                    <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward"
+                                   Size="Size.Small"
+                                   Disabled="@(index == AgentNames.Count - 1)"
+                                   aria-label="@($"Move {agentName} down")"
+                                   OnClick="@(() => MoveDownAsync(index))" />
+
+                </MudStack>
+            </ChildContent>
+        </MudListItem>
+    }
+</MudList>
+
+@code {
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Parameters
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// The ordered list of selected agent names to display.
+    /// Each name corresponds to an agent file name (without the .md extension).
+    /// </summary>
+    [Parameter]
+    public List<string> AgentNames { get; set; } = [];
+
+    /// <summary>
+    /// Callback invoked when the user reorders agents via the ▲/▼ buttons.
+    /// The parent should update its own state with the new ordered list.
+    /// </summary>
+    [Parameter]
+    public EventCallback<List<string>> AgentNamesChanged { get; set; }
+
+    /// <summary>
+    /// The full list of agents available in the project, used to look up
+    /// each agent's description for display in the order list.
+    /// </summary>
+    [Parameter]
+    public IReadOnlyList<AgentFileDto> AvailableAgents { get; set; } = [];
+
+    /// <summary>
+    /// The set of agent names that are referenced in the trigger but no longer
+    /// exist on the filesystem. These agents receive a warning icon (FR-21).
+    /// </summary>
+    [Parameter]
+    public HashSet<string> StaleAgentNames { get; set; } = [];
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Reorder Logic
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Moves the agent at <paramref name="index"/> one position up (towards index 0)
+    /// by swapping it with the agent at <c>index - 1</c>.
+    /// Notifies the parent with the updated list via <see cref="AgentNamesChanged"/>.
+    /// </summary>
+    /// <param name="index">The zero-based index of the agent to move up.</param>
+    private async Task MoveUpAsync(int index)
+    {
+        if (index <= 0 || index >= AgentNames.Count)
+        {
+            return;
+        }
+
+        // Create a new list to avoid mutating the parameter directly
+        var newList = new List<string>(AgentNames);
+        (newList[index - 1], newList[index]) = (newList[index], newList[index - 1]);
+
+        await AgentNamesChanged.InvokeAsync(newList);
+    }
+
+    /// <summary>
+    /// Moves the agent at <paramref name="index"/> one position down (towards the end)
+    /// by swapping it with the agent at <c>index + 1</c>.
+    /// Notifies the parent with the updated list via <see cref="AgentNamesChanged"/>.
+    /// </summary>
+    /// <param name="index">The zero-based index of the agent to move down.</param>
+    private async Task MoveDownAsync(int index)
+    {
+        if (index < 0 || index >= AgentNames.Count - 1)
+        {
+            return;
+        }
+
+        // Create a new list to avoid mutating the parameter directly
+        var newList = new List<string>(AgentNames);
+        (newList[index], newList[index + 1]) = (newList[index + 1], newList[index]);
+
+        await AgentNamesChanged.InvokeAsync(newList);
+    }
+}
