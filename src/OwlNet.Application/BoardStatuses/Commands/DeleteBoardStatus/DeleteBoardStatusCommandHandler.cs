@@ -7,24 +7,33 @@ namespace OwlNet.Application.BoardStatuses.Commands.DeleteBoardStatus;
 
 /// <summary>
 /// Handles the <see cref="DeleteBoardStatusCommand"/> by removing the board status
-/// from the data store. Rejects deletion when the status is still in use by cards.
+/// from the data store. Rejects deletion when the status is still in use by cards
+/// or referenced by one or more workflow triggers.
 /// </summary>
 public sealed class DeleteBoardStatusCommandHandler
     : IRequestHandler<DeleteBoardStatusCommand, ValueTask<Result>>
 {
     private readonly IBoardStatusRepository _boardStatusRepository;
+    private readonly ICardRepository _cardRepository;
+    private readonly IWorkflowTriggerRepository _workflowTriggerRepository;
     private readonly ILogger<DeleteBoardStatusCommandHandler> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DeleteBoardStatusCommandHandler"/> class.
     /// </summary>
     /// <param name="boardStatusRepository">The board status repository.</param>
+    /// <param name="cardRepository">The card repository, used to guard against deleting a status that is still in use by cards.</param>
+    /// <param name="workflowTriggerRepository">The workflow trigger repository, used to guard against deleting a status referenced by triggers.</param>
     /// <param name="logger">The logger instance.</param>
     public DeleteBoardStatusCommandHandler(
         IBoardStatusRepository boardStatusRepository,
+        ICardRepository cardRepository,
+        IWorkflowTriggerRepository workflowTriggerRepository,
         ILogger<DeleteBoardStatusCommandHandler> logger)
     {
         _boardStatusRepository = boardStatusRepository;
+        _cardRepository = cardRepository;
+        _workflowTriggerRepository = workflowTriggerRepository;
         _logger = logger;
     }
 
@@ -43,9 +52,21 @@ public sealed class DeleteBoardStatusCommandHandler
             return Result.Failure("Board status not found.");
         }
 
-        // TODO: SPEC-WF2 — When the Card entity is implemented, check if any cards
-        // are assigned to this status. If so, reject deletion with:
-        // return Result.Failure("Cannot delete status — cards are currently in this status. Move them first.");
+        if (await _cardRepository.ExistsWithStatusAsync(request.Id, cancellationToken))
+        {
+            _logger.LogWarning(
+                "Cannot delete board status {BoardStatusId} — cards are currently in this status",
+                request.Id);
+            return Result.Failure("Cannot delete status — cards are currently in this status. Move them first.");
+        }
+
+        if (await _workflowTriggerRepository.ExistsWithStatusIdAsync(request.Id, cancellationToken))
+        {
+            _logger.LogWarning(
+                "Cannot delete board status {BoardStatusId} — it is referenced by one or more workflow triggers",
+                request.Id);
+            return Result.Failure("Cannot delete status — it is referenced by one or more workflow triggers. Update or delete the triggers first.");
+        }
 
         _boardStatusRepository.Remove(status);
         await _boardStatusRepository.SaveChangesAsync(cancellationToken);

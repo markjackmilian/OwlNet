@@ -54,6 +54,16 @@ public sealed class ApplicationDbContext : IdentityDbContext<ApplicationUser, Id
     public DbSet<CardStatusHistory> CardStatusHistories => Set<CardStatusHistory>();
 
     /// <summary>
+    /// Gets the set of <see cref="WorkflowTrigger"/> entities representing workflow automation triggers.
+    /// </summary>
+    public DbSet<WorkflowTrigger> WorkflowTriggers => Set<WorkflowTrigger>();
+
+    /// <summary>
+    /// Gets the set of <see cref="WorkflowTriggerAgent"/> entities representing the ordered agent associations for workflow triggers.
+    /// </summary>
+    public DbSet<WorkflowTriggerAgent> WorkflowTriggerAgents => Set<WorkflowTriggerAgent>();
+
+    /// <summary>
     /// Configures the model by applying Identity table mappings and all
     /// <see cref="IEntityTypeConfiguration{TEntity}"/> implementations from the Infrastructure assembly.
     /// </summary>
