@@ -8,12 +8,14 @@ namespace OwlNet.Application.Projects.Commands.CreateProject;
 
 /// <summary>
 /// Handles the <see cref="CreateProjectCommand"/> by creating a new project entity
-/// and persisting it to the data store.
+/// and persisting it to the data store. Automatically copies global default board
+/// statuses into the new project as project-level statuses.
 /// </summary>
 public sealed class CreateProjectCommandHandler
     : IRequestHandler<CreateProjectCommand, ValueTask<Result<Guid>>>
 {
     private readonly IProjectRepository _projectRepository;
+    private readonly IBoardStatusRepository _boardStatusRepository;
     private readonly IFileSystem _fileSystem;
     private readonly ILogger<CreateProjectCommandHandler> _logger;
 
@@ -21,14 +23,17 @@ public sealed class CreateProjectCommandHandler
     /// Initializes a new instance of the <see cref="CreateProjectCommandHandler"/> class.
     /// </summary>
     /// <param name="projectRepository">The project repository.</param>
+    /// <param name="boardStatusRepository">The board status repository for copying global defaults.</param>
     /// <param name="fileSystem">The filesystem abstraction for directory checks.</param>
     /// <param name="logger">The logger instance.</param>
     public CreateProjectCommandHandler(
         IProjectRepository projectRepository,
+        IBoardStatusRepository boardStatusRepository,
         IFileSystem fileSystem,
         ILogger<CreateProjectCommandHandler> logger)
     {
         _projectRepository = projectRepository;
+        _boardStatusRepository = boardStatusRepository;
         _fileSystem = fileSystem;
         _logger = logger;
     }
@@ -58,9 +63,19 @@ public sealed class CreateProjectCommandHandler
         var project = Project.Create(request.Name, request.Path, request.Description);
 
         await _projectRepository.AddAsync(project, cancellationToken);
+
+        var globalDefaults = await _boardStatusRepository.GetGlobalDefaultsAsync(cancellationToken);
+        var projectStatuses = globalDefaults
+            .Select(dto => BoardStatus.CreateForProject(dto.Name, dto.SortOrder, project.Id, isDefault: true))
+            .ToList();
+
+        await _boardStatusRepository.AddRangeAsync(projectStatuses, cancellationToken);
+
         await _projectRepository.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Project {ProjectId} created with name {ProjectName} at path {ProjectPath}", project.Id, project.Name, project.Path);
+        _logger.LogInformation(
+            "Project {ProjectId} created with name {ProjectName} at path {ProjectPath}. Copied {StatusCount} default board statuses",
+            project.Id, project.Name, project.Path, projectStatuses.Count);
 
         return Result<Guid>.Success(project.Id);
     }

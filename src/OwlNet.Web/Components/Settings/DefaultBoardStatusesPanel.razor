@@ -1,0 +1,670 @@
+@using DispatchR.Abstractions.Send
+@using OwlNet.Application.Common.Models
+@using OwlNet.Application.BoardStatuses.Queries.GetGlobalDefaultStatuses
+@using OwlNet.Application.BoardStatuses.Commands.AddBoardStatus
+@using OwlNet.Application.BoardStatuses.Commands.RenameBoardStatus
+@using OwlNet.Application.BoardStatuses.Commands.DeleteBoardStatus
+@using OwlNet.Application.BoardStatuses.Commands.ReorderBoardStatuses
+
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Default Board Statuses Panel — Smart Component
+   ═══════════════════════════════════════════════════════════════════════════════
+   Self-contained panel that manages the global default board column statuses.
+   These statuses serve as templates — when a new project is created, the
+   current set of global defaults is copied into the project.
+
+   UI states:
+   ┌──────────┐  success   ┌─────────────────────────────────────────────────┐
+   │ Loading   │──────────▶│ Status list (drag-reorder + inline edit/delete) │
+   │ (skeleton)│           │  ┌─ Each row: drag | name (or edit field) | ✎ ✕│
+   └──────────┘           │  ├─ Add row: text field + add button            │
+                           │  └─ Empty state when no statuses exist         │
+                           └─────────────────────────────────────────────────┘
+         │ failure
+         ▼
+   ┌──────────────────────────────────────────────────────────────────────────┐
+   │ Error state: MudAlert with error message + Retry button                  │
+   └──────────────────────────────────────────────────────────────────────────┘
+
+   Services injected:
+   - IRequestHandler<GetGlobalDefaultStatusesQuery, ...> — fetches global defaults
+   - IRequestHandler<AddBoardStatusCommand, ...> — adds a new global default status
+   - IRequestHandler<RenameBoardStatusCommand, ...> — renames a status
+   - IRequestHandler<DeleteBoardStatusCommand, ...> — deletes a status
+   - IRequestHandler<ReorderBoardStatusesCommand, ...> — persists new sort order
+   - IDialogService — confirmation dialogs for destructive actions
+   - ISnackbar — toast notifications for operation feedback
+
+   Spec reference: SPEC-WF1-board-status-management.md (FR-2, FR-6–FR-11)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+
+@inject IRequestHandler<GetGlobalDefaultStatusesQuery, ValueTask<List<BoardStatusDto>>> GetGlobalDefaultsHandler
+@inject IRequestHandler<AddBoardStatusCommand, ValueTask<Result<Guid>>> AddBoardStatusHandler
+@inject IRequestHandler<RenameBoardStatusCommand, ValueTask<Result>> RenameBoardStatusHandler
+@inject IRequestHandler<DeleteBoardStatusCommand, ValueTask<Result>> DeleteBoardStatusHandler
+@inject IRequestHandler<ReorderBoardStatusesCommand, ValueTask<Result>> ReorderBoardStatusesHandler
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+@implements IDisposable
+
+@* ── FR-10: Outlined MudCard panel ─────────────────────────────────────────── *@
+<MudCard Outlined="true">
+
+    @* ── Card Header ──────────────────────────────────────────────────────────
+       FR-10: "Default Board Statuses" title + subtitle.
+       No header actions — the add row is inline at the bottom of the list. *@
+    <MudCardHeader>
+        <CardHeaderAvatar>
+            <MudAvatar Color="Color.Primary" Variant="Variant.Filled" Rounded="true">
+                <MudIcon Icon="@Icons.Material.Filled.ViewColumn" />
+            </MudAvatar>
+        </CardHeaderAvatar>
+        <CardHeaderContent>
+            @* FR-10: Panel title *@
+            <MudText Typo="Typo.h6">Default Board Statuses</MudText>
+            @* FR-10: Panel subtitle *@
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Manage the default board column statuses applied to new projects.
+            </MudText>
+        </CardHeaderContent>
+    </MudCardHeader>
+
+    @* ── Card Content — loading skeleton, error alert, empty state, or status list ── *@
+    <MudCardContent>
+
+        @* ── Loading State ────────────────────────────────────────────────────
+           Show skeleton rows while the status list is being fetched.
+           Three rows mirror a typical default set and give a realistic
+           preview of the content layout (drag handle + name + actions). *@
+        @if (_isLoading)
+        {
+            <MudStack Spacing="0">
+                @for (var i = 0; i < 3; i++)
+                {
+                    @* Each skeleton row mirrors the real row layout:
+                       a small square for the drag handle, a wide rectangle
+                       for the name, and two small squares for action buttons. *@
+                    <MudStack Row="true"
+                              AlignItems="AlignItems.Center"
+                              Spacing="2"
+                              Class="py-3">
+                        @* Drag handle placeholder *@
+                        <MudSkeleton SkeletonType="SkeletonType.Rectangle"
+                                     Width="24px"
+                                     Height="24px" />
+                        @* Status name placeholder — fills remaining space *@
+                        <MudSkeleton SkeletonType="SkeletonType.Text"
+                                     Width="100%"
+                                     Height="20px" />
+                        @* Edit button placeholder *@
+                        <MudSkeleton SkeletonType="SkeletonType.Rectangle"
+                                     Width="28px"
+                                     Height="28px" />
+                        @* Delete button placeholder *@
+                        <MudSkeleton SkeletonType="SkeletonType.Rectangle"
+                                     Width="28px"
+                                     Height="28px" />
+                    </MudStack>
+                    @if (i < 2)
+                    {
+                        <MudDivider />
+                    }
+                }
+            </MudStack>
+        }
+
+        @* ── Error State ──────────────────────────────────────────────────────
+           Shown when the query fails (e.g., database unreachable).
+           Displays the error message and a Retry button to re-attempt loading. *@
+        else if (_errorMessage is not null)
+        {
+            <MudAlert Severity="Severity.Error"
+                      Variant="Variant.Outlined"
+                      ShowCloseIcon="false">
+                <MudStack Spacing="2">
+                    <MudText Typo="Typo.body2">
+                        Failed to load default statuses: @_errorMessage
+                    </MudText>
+                    <div>
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Error"
+                                   StartIcon="@Icons.Material.Filled.Refresh"
+                                   OnClick="@LoadAsync"
+                                   aria-label="Retry loading default statuses">
+                            Retry
+                        </MudButton>
+                    </div>
+                </MudStack>
+            </MudAlert>
+        }
+
+        @* ── Empty State ──────────────────────────────────────────────────────
+           Shown when no global default statuses exist. Provides a centred
+           icon, explanatory text, and the inline add row so the user can
+           create the first status immediately. *@
+        else if (_statuses.Count == 0)
+        {
+            <MudStack AlignItems="AlignItems.Center"
+                      Justify="Justify.Center"
+                      Spacing="3"
+                      Class="py-8">
+                <MudIcon Icon="@Icons.Material.Filled.ViewColumn"
+                         Size="Size.Large"
+                         Color="Color.Default" />
+                <MudText Typo="Typo.body1"
+                         Align="Align.Center"
+                         Color="Color.Secondary">
+                    No default statuses defined yet.
+                </MudText>
+
+                @* Inline add row in empty state — same as the one below the list,
+                   so the user has a clear call-to-action without needing to scroll. *@
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudTextField @bind-Value="_newStatusName"
+                                  Placeholder="New status name..."
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  Immediate="true"
+                                  Disabled="@_isSaving"
+                                  OnKeyUp="@OnAddKeyUpAsync"
+                                  aria-label="New status name" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Add"
+                                   Color="Color.Primary"
+                                   Disabled="@(string.IsNullOrWhiteSpace(_newStatusName) || _isSaving)"
+                                   OnClick="@AddStatusAsync"
+                                   aria-label="Add new default status" />
+                </MudStack>
+            </MudStack>
+        }
+
+        @* ── FR-6–FR-9: Status List with Drag-and-Drop ───────────────────────
+           MudDropContainer enables drag-and-drop reordering (FR-9).
+           Each status row shows: drag handle | name (or inline edit) | edit | delete.
+           The add row sits below the drop container for appending new statuses. *@
+        else
+        {
+            <MudDropContainer T="BoardStatusDto"
+                              @ref="_dropContainer"
+                              Items="_statuses"
+                              ItemsSelector="@((item, zone) => true)"
+                              ItemDropped="OnStatusDroppedAsync"
+                              Class="d-flex flex-column">
+                <ChildContent>
+                    <MudDropZone T="BoardStatusDto"
+                                 Identifier="statuses"
+                                 AllowReorder="true"
+                                 Class="d-flex flex-column gap-0" />
+                </ChildContent>
+
+                @* ── Item Renderer ────────────────────────────────────────────
+                   Each status row renders either a read-only name or an inline
+                   edit text field, depending on whether _editingStatusId matches. *@
+                <ItemRenderer>
+                    @{
+                        var status = context;
+                        var isEditing = _editingStatusId == status.Id;
+                    }
+
+                    <MudStack Row="true"
+                              AlignItems="AlignItems.Center"
+                              Spacing="2"
+                              Class="py-2">
+
+                        @* FR-9: Drag handle — visual indicator that the row is draggable.
+                           The actual drag behavior is provided by MudDropContainer. *@
+                        <MudIcon Icon="@Icons.Material.Filled.DragIndicator"
+                                 Size="Size.Small"
+                                 Color="Color.Default"
+                                 Style="cursor: grab; flex-shrink: 0;" />
+
+                        @* FR-7: Status name — inline edit mode or read-only display *@
+                        @if (isEditing)
+                        {
+                            @* Inline rename text field — shown when the user clicks Edit.
+                               Pressing Enter or blurring the field commits the rename. *@
+                            <MudTextField @bind-Value="_editingStatusName"
+                                          Variant="Variant.Outlined"
+                                          Margin="Margin.Dense"
+                                          Immediate="true"
+                                          Disabled="@_isSaving"
+                                          OnKeyUp="@OnRenameKeyUpAsync"
+                                          OnBlur="@CommitRenameAsync"
+                                          Style="flex: 1; min-width: 0;"
+                                          aria-label="@($"Rename status {status.Name}")"
+                                          AutoFocus="true" />
+                        }
+                        else
+                        {
+                            @* Read-only status name — fills available horizontal space *@
+                            <MudText Typo="Typo.body2"
+                                     Style="flex: 1; min-width: 0;">
+                                @status.Name
+                            </MudText>
+                        }
+
+                        @* FR-7: Edit button — toggles inline rename mode.
+                           Hidden when already editing (the text field replaces it). *@
+                        @if (!isEditing)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                           Size="Size.Small"
+                                           Color="Color.Default"
+                                           Disabled="@_isSaving"
+                                           OnClick="@(() => StartEditing(status))"
+                                           aria-label="@($"Rename status {status.Name}")"
+                                           Style="flex-shrink: 0;" />
+                        }
+                        else
+                        {
+                            @* Confirm rename button — visible during inline edit *@
+                            <MudIconButton Icon="@Icons.Material.Filled.Check"
+                                           Size="Size.Small"
+                                           Color="Color.Success"
+                                           Disabled="@_isSaving"
+                                           OnClick="@CommitRenameAsync"
+                                           aria-label="Confirm rename"
+                                           Style="flex-shrink: 0;" />
+                        }
+
+                        @* FR-8: Delete button — removes the status after confirmation *@
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                       Size="Size.Small"
+                                       Color="Color.Error"
+                                       Disabled="@_isSaving"
+                                       OnClick="@(() => DeleteStatusAsync(status))"
+                                       aria-label="@($"Delete status {status.Name}")"
+                                       Style="flex-shrink: 0;" />
+                    </MudStack>
+                </ItemRenderer>
+            </MudDropContainer>
+
+            @* ── FR-6: Add New Status Row ─────────────────────────────────────
+               Always visible below the status list. Text field + add button.
+               Pressing Enter in the text field also triggers the add action. *@
+            <MudDivider Class="my-1" />
+            <MudStack Row="true"
+                      AlignItems="AlignItems.Center"
+                      Spacing="2"
+                      Class="py-2">
+                <MudTextField @bind-Value="_newStatusName"
+                              Placeholder="New status name..."
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              Immediate="true"
+                              Disabled="@_isSaving"
+                              OnKeyUp="@OnAddKeyUpAsync"
+                              aria-label="New status name"
+                              Style="flex: 1; min-width: 0;" />
+                <MudIconButton Icon="@Icons.Material.Filled.Add"
+                               Color="Color.Primary"
+                               Disabled="@(string.IsNullOrWhiteSpace(_newStatusName) || _isSaving)"
+                               OnClick="@AddStatusAsync"
+                               aria-label="Add new default status" />
+            </MudStack>
+        }
+
+    </MudCardContent>
+</MudCard>
+
+@code {
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  State — status list, loading flag, error message, and editing state
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// The loaded list of global default board statuses, ordered by SortOrder.
+    /// Empty until the first successful load; remains empty on error.
+    /// Must be a mutable <see cref="List{T}"/> because MudDropContainer mutates
+    /// the collection during drag-and-drop reordering.
+    /// </summary>
+    private List<BoardStatusDto> _statuses = [];
+
+    /// <summary>True while the status list is being fetched from the database.</summary>
+    private bool _isLoading = true;
+
+    /// <summary>
+    /// Holds the error message when loading fails; <c>null</c> when there is no error.
+    /// Drives the error state UI.
+    /// </summary>
+    private string? _errorMessage;
+
+    /// <summary>The name entered in the "add new status" text field.</summary>
+    private string _newStatusName = string.Empty;
+
+    /// <summary>
+    /// The ID of the status currently being renamed inline, or <c>null</c> if
+    /// no status is in edit mode. Only one status can be edited at a time.
+    /// </summary>
+    private Guid? _editingStatusId;
+
+    /// <summary>
+    /// The current text in the inline rename text field. Populated from the
+    /// status's existing name when edit mode is entered.
+    /// </summary>
+    private string _editingStatusName = string.Empty;
+
+    /// <summary>
+    /// True while any mutation (add, rename, delete, reorder) is in progress.
+    /// Used to disable all interactive controls and prevent double-submit.
+    /// </summary>
+    private bool _isSaving;
+
+    /// <summary>
+    /// Reference to the MudDropContainer so we can call <c>Refresh()</c> after
+    /// the status list is reloaded to force the container to re-evaluate items.
+    /// </summary>
+    private MudDropContainer<BoardStatusDto>? _dropContainer;
+
+    /// <summary>
+    /// Cancellation token source scoped to this component's lifetime.
+    /// Cancelled in <see cref="Dispose"/> to abort any in-flight handler calls
+    /// if the user navigates away from the Settings page.
+    /// </summary>
+    private readonly CancellationTokenSource _cts = new();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Lifecycle — load statuses on initialization
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// On first load, fetches all global default board statuses from the database.
+    /// </summary>
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Data Loading — fetches global default statuses with error handling
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Loads all global default board statuses via <see cref="GetGlobalDefaultsHandler"/>.
+    /// Manages the loading and error states so the UI reflects the current status.
+    /// Called from <see cref="OnInitializedAsync"/> and from the Retry button.
+    /// </summary>
+    private async Task LoadAsync()
+    {
+        _isLoading = true;
+        var hadError = _errorMessage is not null;
+        _errorMessage = null;
+
+        // Trigger re-render only on the Retry path (when coming from an error state)
+        // to avoid a redundant render on the initial load path.
+        if (hadError)
+        {
+            StateHasChanged();
+        }
+
+        try
+        {
+            _statuses = await GetGlobalDefaultsHandler.Handle(
+                new GetGlobalDefaultStatusesQuery(), _cts.Token);
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+
+        _isLoading = false;
+
+        // After reloading, refresh the drop container so it picks up the new items,
+        // then notify Blazor that state has changed so the DOM is updated.
+        _dropContainer?.Refresh();
+        StateHasChanged();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  FR-6: Add Status — creates a new global default status
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Adds a new global default board status with the name from <see cref="_newStatusName"/>.
+    /// On success: reloads the list and shows a success snackbar.
+    /// On failure: shows an error snackbar with the validation/error message.
+    /// </summary>
+    private async Task AddStatusAsync()
+    {
+        var name = _newStatusName.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
+
+        _isSaving = true;
+
+        var command = new AddBoardStatusCommand { Name = name, ProjectId = null };
+        var result = await AddBoardStatusHandler.Handle(command, _cts.Token);
+
+        // Re-enable controls before reloading so the UI is responsive as soon as
+        // the mutation completes, rather than waiting for the full reload round-trip.
+        _isSaving = false;
+
+        if (result.IsSuccess)
+        {
+            _newStatusName = string.Empty;
+            Snackbar.Add($"Status '{name}' added.", Severity.Success);
+            await LoadAsync();
+        }
+        else
+        {
+            Snackbar.Add(result.Error, Severity.Error);
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Handles keyboard events on the add-status text field.
+    /// Pressing Enter triggers <see cref="AddStatusAsync"/>.
+    /// </summary>
+    private async Task OnAddKeyUpAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await AddStatusAsync();
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  FR-7: Inline Rename — edit a status name in place
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Enters inline edit mode for the specified status. Populates the edit
+    /// text field with the current name and sets <see cref="_editingStatusId"/>
+    /// so the renderer switches to the text field view.
+    /// </summary>
+    /// <param name="status">The status to start editing.</param>
+    private void StartEditing(BoardStatusDto status)
+    {
+        _editingStatusId = status.Id;
+        _editingStatusName = status.Name;
+    }
+
+    /// <summary>
+    /// Commits the inline rename by calling <see cref="RenameBoardStatusHandler"/>.
+    /// On success: reloads the list and shows a success snackbar.
+    /// On failure: shows an error snackbar and reverts to read-only mode.
+    /// If the name hasn't changed, simply exits edit mode without a server call.
+    /// </summary>
+    private async Task CommitRenameAsync()
+    {
+        if (_editingStatusId is null)
+        {
+            return;
+        }
+
+        var newName = _editingStatusName.Trim();
+        var statusId = _editingStatusId.Value;
+
+        // Find the original status to compare names
+        var original = _statuses.Find(s => s.Id == statusId);
+
+        // If the name hasn't changed (or is blank), just exit edit mode
+        if (original is null
+            || string.IsNullOrWhiteSpace(newName)
+            || string.Equals(original.Name, newName, StringComparison.Ordinal))
+        {
+            _editingStatusId = null;
+            _editingStatusName = string.Empty;
+            return;
+        }
+
+        _isSaving = true;
+
+        var command = new RenameBoardStatusCommand { Id = statusId, NewName = newName };
+        var result = await RenameBoardStatusHandler.Handle(command, _cts.Token);
+
+        // Always exit edit mode after the operation completes
+        _editingStatusId = null;
+        _editingStatusName = string.Empty;
+
+        // Re-enable controls before reloading so the UI is responsive as soon as
+        // the mutation completes, rather than waiting for the full reload round-trip.
+        _isSaving = false;
+
+        if (result.IsSuccess)
+        {
+            Snackbar.Add($"Status renamed to '{newName}'.", Severity.Success);
+            await LoadAsync();
+        }
+        else
+        {
+            Snackbar.Add(result.Error, Severity.Error);
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
+    /// Handles keyboard events on the inline rename text field.
+    /// Enter commits the rename; Escape cancels edit mode.
+    /// </summary>
+    private async Task OnRenameKeyUpAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await CommitRenameAsync();
+        }
+        else if (e.Key == "Escape")
+        {
+            _editingStatusId = null;
+            _editingStatusName = string.Empty;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  FR-8: Delete Status — removes a status after confirmation
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Deletes a global default board status after user confirmation.
+    /// Uses <see cref="IDialogService.ShowMessageBoxAsync"/> for a lightweight
+    /// confirmation dialog. On success: reloads the list and shows a success
+    /// snackbar. On failure: shows an error snackbar with the error message.
+    /// </summary>
+    /// <param name="status">The status to delete.</param>
+    private async Task DeleteStatusAsync(BoardStatusDto status)
+    {
+        // Show a confirmation dialog before deleting
+        var confirmed = await DialogService.ShowMessageBoxAsync(
+            "Delete Status",
+            $"Are you sure you want to delete the status '{status.Name}'? This action cannot be undone.",
+            yesText: "Delete",
+            cancelText: "Cancel");
+
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        _isSaving = true;
+
+        var command = new DeleteBoardStatusCommand { Id = status.Id };
+        var result = await DeleteBoardStatusHandler.Handle(command, _cts.Token);
+
+        // Re-enable controls before reloading so the UI is responsive as soon as
+        // the mutation completes, rather than waiting for the full reload round-trip.
+        _isSaving = false;
+
+        if (result.IsSuccess)
+        {
+            Snackbar.Add($"Status '{status.Name}' deleted.", Severity.Success);
+            await LoadAsync();
+        }
+        else
+        {
+            Snackbar.Add(result.Error, Severity.Error);
+            StateHasChanged();
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  FR-9: Reorder — persists new sort order after drag-and-drop
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Handles the <see cref="MudDropContainer{T}.ItemDropped"/> event.
+    /// Updates the local list order based on the drop position, then persists
+    /// the new sort order via <see cref="ReorderBoardStatusesHandler"/>.
+    /// Auto-saves on each drop for immediate feedback (FR-9).
+    /// </summary>
+    /// <param name="info">
+    /// Drop event info containing the dragged item and its new index position.
+    /// </param>
+    private async Task OnStatusDroppedAsync(MudItemDropInfo<BoardStatusDto> info)
+    {
+        if (info.Item is null)
+        {
+            return;
+        }
+
+        // Apply the reorder locally: remove from old position, insert at new position.
+        // MudDropContainer provides the IndexInZone for the target position.
+        _statuses.Remove(info.Item);
+        _statuses.Insert(info.IndexInZone, info.Item);
+
+        _isSaving = true;
+
+        // Build the ordered ID list from the new local order
+        var orderedIds = _statuses.Select(s => s.Id).ToList();
+        var command = new ReorderBoardStatusesCommand
+        {
+            ProjectId = null,
+            OrderedStatusIds = orderedIds
+        };
+
+        var result = await ReorderBoardStatusesHandler.Handle(command, _cts.Token);
+
+        // Re-enable controls before reloading so the UI is responsive as soon as
+        // the mutation completes, rather than waiting for the full reload round-trip.
+        _isSaving = false;
+
+        if (result.IsSuccess)
+        {
+            Snackbar.Add("Status order updated.", Severity.Success);
+            // Reload to get the authoritative sort order from the server
+            await LoadAsync();
+        }
+        else
+        {
+            Snackbar.Add(result.Error, Severity.Error);
+            // Reload to revert to the server's sort order on failure
+            await LoadAsync();
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Cleanup — cancel in-flight operations on dispose
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Cancels any in-flight handler calls when the component is disposed
+    /// (e.g., user navigates away from the Settings page).
+    /// </summary>
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

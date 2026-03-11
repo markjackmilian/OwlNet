@@ -58,7 +58,9 @@ public static class DependencyInjection
             .AddDefaultTokenProviders();
 
         services.AddScoped<IProjectRepository, ProjectRepository>();
+        services.AddScoped<IBoardStatusRepository, BoardStatusRepository>();
         services.AddScoped<ISystemAgentRepository, SystemAgentRepository>();
+        services.AddScoped<BoardStatusSeeder>();
         services.AddScoped<IAppSettingService, AppSettingService>();
         services.AddSingleton<ICliService, CliService>();
         services.AddSingleton<IEncryptionService, EncryptionService>();
