@@ -1,6 +1,6 @@
 # SPEC: Board Wiring — Real Data
 
-> **Status:** Todo
+> **Status:** Done
 > **Created:** 2026-03-12
 > **Author:** owl-planner + user
 > **Priority:** High

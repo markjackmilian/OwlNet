@@ -2,18 +2,20 @@
    KanbanCard — Presentational (Dumb) Component
    ═══════════════════════════════════════════════════════════════════════════════
    Renders a single card on the project Kanban board. Displays the card's
-   priority badge, title (max 2 lines), and Markdown-rendered description
-   (clamped to 3 lines).
+   priority badge, sequential card number, title (max 2 lines), Markdown-rendered
+   description (clamped to 3 lines), and tag chips (first 3 + overflow indicator).
 
    This is a pure presentational component: it receives data via parameters
    and communicates user interactions via EventCallback. No data fetching or
    business logic — only rendering and event forwarding.
 
-   Used inside the ItemRenderer of MudDropContainer in the parent Board page.
+   Used inside the ItemRenderer of MudDropContainer in KanbanBoard.
 
-   Spec reference: SPEC-project-board-page (FR-9, FR-13, FR-14, FR-15, FR-20)
+   Spec reference: SPEC-C4-board-wiring
    ═══════════════════════════════════════════════════════════════════════════════ *@
 
+@using OwlNet.Application.Common.Models
+@using OwlNet.Domain.Enums
 @using OwlNet.Web.Services
 
 @inject IMarkdownService MarkdownService
@@ -25,25 +27,53 @@
 <div class="board-card" @onclick="HandleClick">
 
     @* ── Priority Badge ─────────────────────────────────────────────────────────
-       Colored pill indicating the card's priority level (FR-9, FR-15).
+       Colored pill indicating the card's priority level.
        CSS class suffix determines the badge color (critical/high/medium/low). *@
     <span class="board-card-priority @GetPriorityClass(Card.Priority)">
         @GetPriorityLabel(Card.Priority)
     </span>
 
+    @* ── Card Number ─────────────────────────────────────────────────────────────
+       Small muted label showing the sequential card number scoped to the project
+       (e.g., "#42"). Helps users reference cards in conversations and commits. *@
+    <span class="board-card-number">#@Card.Number</span>
+
     @* ── Title ──────────────────────────────────────────────────────────────────
-       Bold card title, clamped to 2 lines with ellipsis via CSS (FR-9). *@
+       Bold card title, clamped to 2 lines with ellipsis via CSS. *@
     <MudText Typo="Typo.subtitle1" Class="board-card-title">
         @Card.Title
     </MudText>
 
     @* ── Description ────────────────────────────────────────────────────────────
-       Markdown rendered to HTML, visually clamped to 3 lines (FR-9, FR-18, FR-19).
+       Markdown rendered to HTML, visually clamped to 3 lines.
        Uses MarkupString to inject the sanitized HTML from IMarkdownService.
        The ::deep selector in scoped CSS resets inner HTML element margins. *@
     <div class="board-card-description">
         @((MarkupString)RenderedDescription)
     </div>
+
+    @* ── Tags ────────────────────────────────────────────────────────────────────
+       Colored tag chips below the description. Shows first 3 tags; if there are
+       more, a "+N more" overflow indicator is appended. Tags use their stored
+       Color value (hex) or a neutral fallback if no color is set. *@
+    @if (Card.Tags.Count > 0)
+    {
+        <div class="board-card-tags">
+            @foreach (var tag in Card.Tags.Take(3))
+            {
+                <span class="board-card-tag"
+                      style="background-color: @(tag.Color ?? "#E5E7EB"); color: #1F2937;">
+                    @tag.Name
+                </span>
+            }
+            @if (Card.Tags.Count > 3)
+            {
+                <span class="board-card-tag board-card-tag--more">
+                    +@(Card.Tags.Count - 3) more
+                </span>
+            }
+        </div>
+    }
 
 </div>
 
@@ -53,18 +83,18 @@
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// The board card data to display. Contains the card's title, description,
-    /// priority level, and current board status. Required by the parent component.
+    /// The card data to display. Contains the card's number, title, description,
+    /// priority level, current status ID, and associated tags.
     /// </summary>
     [Parameter, EditorRequired]
-    public BoardCardItem Card { get; set; } = null!;
+    public CardDto Card { get; set; } = null!;
 
     /// <summary>
-    /// Callback raised when the user clicks anywhere on the card (FR-14).
+    /// Callback raised when the user clicks anywhere on the card.
     /// The parent component handles this to open a card detail dialog.
     /// </summary>
     [Parameter]
-    public EventCallback<BoardCardItem> OnCardClicked { get; set; }
+    public EventCallback<CardDto> OnCardClicked { get; set; }
 
     // ═══════════════════════════════════════════════════════════════════════════
     //  Computed Properties
@@ -87,7 +117,7 @@
     /// <summary>
     /// Handles the card click event by forwarding it to the parent via
     /// <see cref="OnCardClicked"/>. The parent decides what to do (e.g.,
-    /// open a detail dialog per FR-14).
+    /// open a detail dialog).
     /// </summary>
     private async Task HandleClick()
     {
@@ -101,7 +131,7 @@
     /// <summary>
     /// Maps a <see cref="CardPriority"/> value to its corresponding CSS class
     /// for the priority badge color. Each priority has a distinct pastel
-    /// background with dark text for readability (FR-15).
+    /// background with dark text for readability.
     /// </summary>
     /// <param name="priority">The card's priority level.</param>
     /// <returns>The CSS class name for the priority badge color variant.</returns>
@@ -116,7 +146,7 @@
 
     /// <summary>
     /// Maps a <see cref="CardPriority"/> value to its human-readable display
-    /// label shown inside the priority badge pill (FR-15).
+    /// label shown inside the priority badge pill.
     /// </summary>
     /// <param name="priority">The card's priority level.</param>
     /// <returns>The display text for the priority badge.</returns>

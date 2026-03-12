@@ -1,17 +1,19 @@
 @* ═══════════════════════════════════════════════════════════════════════════════
    CardDetailDialog — Card Detail Modal (Placeholder)
    ═══════════════════════════════════════════════════════════════════════════════
-   Displays a card's priority, full Markdown description (un-clamped), and a
-   "Coming soon" placeholder message. Opened when the user clicks a card on
-   the Kanban board (FR-14).
+   Displays a card's number, priority, full Markdown description (un-clamped),
+   and a "Coming soon" placeholder message. Opened when the user clicks a card
+   on the Kanban board.
 
    This is a temporary placeholder dialog. The full card detail view with
    editing, comments, assignments, and activity history will be implemented
-   in a future spec.
+   in SPEC-C6.
 
-   Spec reference: SPEC-project-board-page (FR-14)
+   Spec reference: SPEC-C4-board-wiring (placeholder), SPEC-C6 (full implementation)
    ═══════════════════════════════════════════════════════════════════════════════ *@
 
+@using OwlNet.Application.Common.Models
+@using OwlNet.Domain.Enums
 @using OwlNet.Web.Services
 
 @inject IMarkdownService MarkdownService
@@ -20,8 +22,15 @@
     <DialogContent>
         <MudStack Spacing="3">
 
+            @* ── Card Number ──────────────────────────────────────────────────
+               Small muted caption showing the sequential card number (e.g., "#42").
+               Displayed at the top so users can reference the card easily. *@
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                #@Card.Number
+            </MudText>
+
             @* ── Priority Badge ───────────────────────────────────────────────
-               Colored chip showing the card's priority level (FR-15). *@
+               Colored chip showing the card's priority level. *@
             <MudChip T="string"
                      Size="Size.Small"
                      Color="@GetPriorityColor(Card.Priority)"
@@ -63,11 +72,11 @@
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// The board card whose details are displayed in this dialog.
-    /// Contains the title, description (Markdown), priority, and status.
+    /// The card whose details are displayed in this dialog.
+    /// Contains the number, title, description (Markdown), priority, and status.
     /// </summary>
-    [Parameter]
-    public BoardCardItem Card { get; set; } = null!;
+    [Parameter, EditorRequired]
+    public CardDto Card { get; set; } = null!;
 
     // ═══════════════════════════════════════════════════════════════════════════
     //  Helpers
@@ -76,7 +85,7 @@
     /// <summary>
     /// Maps a <see cref="CardPriority"/> to a MudBlazor <see cref="Color"/>
     /// for the priority chip. Each priority level has a distinct color to
-    /// provide clear visual differentiation (FR-15).
+    /// provide clear visual differentiation.
     /// </summary>
     /// <param name="priority">The card's priority level.</param>
     /// <returns>The MudBlazor color for the priority chip.</returns>

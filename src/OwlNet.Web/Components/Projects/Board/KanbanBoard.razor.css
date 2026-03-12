@@ -1,19 +1,19 @@
 /* ═══════════════════════════════════════════════════════════════════════════════
    KanbanBoard.razor scoped styles — Project Board Layout
    ═══════════════════════════════════════════════════════════════════════════════
-   Styles for the five-column Kanban board layout, column headers, and drop
-   zones. Uses the "board-" prefix to distinguish from the Home page's
-   "kanban-" prefix.
+   Styles for the dynamic Kanban board layout, column headers, and drop zones.
+   Uses the "board-" prefix to distinguish from the Home page's "kanban-" prefix.
 
-   Column header colors use distinct hues to visually differentiate each
-   workflow stage. Drop zones provide visual feedback during drag operations.
+   Column header colors are now applied via inline style (background-color) from
+   a deterministic palette in KanbanBoard.razor — the static CSS modifier classes
+   have been removed. Drop zones provide visual feedback during drag operations.
 
-   Spec reference: SPEC-project-board-page (FR-5 through FR-8, FR-13, FR-20 through FR-24)
+   Spec reference: SPEC-C4-board-wiring
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 
 /* ── Drop Container ────────────────────────────────────────────────────────── */
-/* Full-width wrapper for the MudDropContainer (FR-24). */
+/* Full-width wrapper for the MudDropContainer. */
 
 .board-drop-container {
     width: 100%;
@@ -21,9 +21,9 @@
 
 
 /* ── Board Layout ──────────────────────────────────────────────────────────── */
-/* Horizontal flex layout for the five columns (FR-5, FR-8).
+/* Horizontal flex layout for the dynamic columns.
    Columns distribute equally with overflow-x for narrow viewports.
-   min-height prevents visual collapse when columns are empty (FR-21). */
+   min-height prevents visual collapse when columns are empty. */
 
 .board-layout {
     display: flex;
@@ -37,7 +37,7 @@
 
 /* ── Column ────────────────────────────────────────────────────────────────── */
 /* Each column takes equal flex space with a minimum width to prevent
-   content from being squished on narrow viewports (FR-8). */
+   content from being squished on narrow viewports. */
 
 .board-column {
     flex: 1 1 0;
@@ -49,9 +49,9 @@
 
 
 /* ── Column Header ─────────────────────────────────────────────────────────── */
-/* Colored bar with count badge, title, and add button (FR-6).
-   Same visual pattern as the Home page Kanban headers: rounded corners,
-   white text, and a semi-transparent count badge. */
+/* Colored bar with count badge, title, and add button.
+   Background color is applied via inline style from the deterministic palette
+   in KanbanBoard.razor — no static modifier classes needed. */
 
 .board-column-header {
     display: flex;
@@ -85,7 +85,7 @@
     color: #ffffff;
 }
 
-/* Add button — semi-transparent white, brightens on hover (FR-23) */
+/* Add button — semi-transparent white, brightens on hover */
 ::deep .board-column-add {
     color: rgba(255, 255, 255, 0.7) !important;
 }
@@ -96,38 +96,8 @@
 }
 
 
-/* ── Column Header Colors ──────────────────────────────────────────────────── */
-/* Five distinct colors, one per workflow stage (FR-6). Each color is chosen
-   to be visually distinct and convey the stage's meaning:
-   - Backlog: gray/slate — items not yet scheduled
-   - Evaluate: violet — triage/estimation
-   - Develop: blue — active development
-   - Review: amber — awaiting review
-   - Done: emerald — completed */
-
-.board-column-header--backlog {
-    background-color: #6B7280;
-}
-
-.board-column-header--evaluate {
-    background-color: #8B5CF6;
-}
-
-.board-column-header--develop {
-    background-color: #3B82F6;
-}
-
-.board-column-header--review {
-    background-color: #F59E0B;
-}
-
-.board-column-header--done {
-    background-color: #10B981;
-}
-
-
 /* ── Drop Zone ─────────────────────────────────────────────────────────────── */
-/* The area where cards are rendered and can be dropped (FR-7, FR-12, FR-13).
+/* The area where cards are rendered and can be dropped.
    Uses ::deep because MudDropZone renders its own wrapper element that
    scoped CSS cannot reach without the combinator. */
 
@@ -142,14 +112,14 @@
 }
 
 /* Drag-over highlight — subtle background change when a card hovers
-   over the drop zone (FR-13). MudBlazor adds .mud-drop-zone-drag
-   automatically during drag operations. */
+   over the drop zone. MudBlazor adds .mud-drop-zone-drag automatically
+   during drag operations. */
 ::deep .board-dropzone.mud-drop-zone-drag {
     background-color: var(--mud-palette-background);
     opacity: 0.7;
 }
 
-/* Empty column placeholder — dashed border hint when a column has no cards (FR-22).
+/* Empty column placeholder — dashed border hint when a column has no cards.
    Shown via :empty pseudo-class when MudDropZone renders no child items.
    Note: MudDropZone may render internal elements even when empty, so we also
    target the scenario where the zone has minimal height. */
@@ -162,7 +132,7 @@
 
 /* ── Responsive ────────────────────────────────────────────────────────────── */
 /* On narrow viewports (< 960px), columns scroll horizontally instead of
-   wrapping. Touch scrolling is enabled for mobile devices (FR-8). */
+   wrapping. Touch scrolling is enabled for mobile devices. */
 
 @media (max-width: 960px) {
     .board-layout {

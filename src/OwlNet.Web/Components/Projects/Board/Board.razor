@@ -2,16 +2,16 @@
    Board — Smart Page (Container Component)
    ═══════════════════════════════════════════════════════════════════════════════
    The project Kanban board page. Handles routing, project validation, active
-   project sync, and mock data initialization. Delegates all board rendering
-   to the KanbanBoard presentational component.
+   project sync, and real data loading from the Application layer. Delegates
+   all board rendering to the KanbanBoard presentational component.
 
-   Displays five columns (Backlog, To Evaluate, Develop, Review, Done) with
-   drag-and-drop card movement. Cards are populated from static mock data
-   that resets on page refresh.
+   Columns are rendered dynamically from GetProjectStatusesQuery. Cards are
+   loaded from GetCardsByProjectQuery. Drag-and-drop status changes are
+   persisted via ChangeCardStatusCommand with optimistic UI updates.
 
    Route: /projects/{ProjectId:guid}/board
 
-   Spec reference: SPEC-project-board-page (FR-1 through FR-4, FR-25)
+   Spec reference: SPEC-C4-board-wiring
    ═══════════════════════════════════════════════════════════════════════════════ *@
 
 @page "/projects/{ProjectId:guid}/board"
@@ -19,11 +19,23 @@
 @using DispatchR.Abstractions.Send
 @using OwlNet.Application.Common.Models
 @using OwlNet.Application.Projects.Queries.GetProjectById
+@using OwlNet.Application.BoardStatuses.Queries.GetProjectStatuses
+@using OwlNet.Application.Cards.Queries.GetCardsByProject
+@using OwlNet.Application.Cards.Commands.ChangeCardStatus
+@using OwlNet.Application.WorkflowTriggers.Queries.GetWorkflowTriggersByTransition
+@using OwlNet.Domain.Enums
 @using OwlNet.Web.Services
 
 @inject IRequestHandler<GetProjectByIdQuery, ValueTask<Result<ProjectDto>>> GetProjectHandler
+@inject IRequestHandler<GetProjectStatusesQuery, ValueTask<List<BoardStatusDto>>> GetStatusesHandler
+@inject IRequestHandler<GetCardsByProjectQuery, ValueTask<List<CardDto>>> GetCardsHandler
+@inject IRequestHandler<ChangeCardStatusCommand, ValueTask<Result>> ChangeCardStatusHandler
+@inject IRequestHandler<GetWorkflowTriggersByTransitionQuery, ValueTask<List<WorkflowTriggerDto>>> GetTriggersHandler
 @inject ActiveProjectService ActiveProjectService
 @inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager NavigationManager
+@inject ILogger<Board> Logger
 
 @implements IDisposable
 
@@ -33,9 +45,8 @@
 <PageTitle>@(_project is not null ? $"Board — {_project.Name} — OwlNet" : "Board — OwlNet")</PageTitle>
 
 @* ═══════════════════════════════════════════════════════════════════════════════
-   Loading State — skeleton mimicking the five-column board layout (FR-25).
-   Each column shows a header placeholder and three card-shaped rectangles
-   so the skeleton feels like a natural preview of the real board.
+   Loading State — skeleton mimicking the board column layout.
+   Always shows 5 skeleton columns since we don't know the real count yet.
    ═══════════════════════════════════════════════════════════════════════════════ *@
 @if (_isLoading)
 {
@@ -54,8 +65,6 @@
 }
 @* ═══════════════════════════════════════════════════════════════════════════════
    Error State — project not found or archived
-   (FR-20: invalid/archived project shows "Project not found" consistent with
-   dashboard behavior)
    ═══════════════════════════════════════════════════════════════════════════════ *@
 else if (_isNotFound)
 {
@@ -81,12 +90,42 @@ else if (_isNotFound)
     </MudStack>
 }
 @* ═══════════════════════════════════════════════════════════════════════════════
-   Board Content — KanbanBoard presentational component (FR-5 through FR-14).
-   Renders the five-column drag-and-drop board with mock card data.
+   Empty State — project loaded but has no board statuses configured.
+   Directs the user to Settings to add statuses before using the board.
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+else if (_hasNoStatuses)
+{
+    <MudStack AlignItems="AlignItems.Center"
+              Justify="Justify.Center"
+              Spacing="3"
+              Class="py-16">
+        <MudIcon Icon="@Icons.Material.Filled.ViewColumn"
+                 Size="Size.Large"
+                 Color="Color.Default" />
+        <MudText Typo="Typo.h5" Align="Align.Center">
+            No board statuses configured
+        </MudText>
+        <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+            Go to Settings to add statuses.
+        </MudText>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Settings"
+                   Href="@($"/projects/{ProjectId}/settings")">
+            Go to Settings
+        </MudButton>
+    </MudStack>
+}
+@* ═══════════════════════════════════════════════════════════════════════════════
+   Board Content — KanbanBoard presentational component.
+   Passes real statuses and cards; wires status-change and refresh callbacks.
    ═══════════════════════════════════════════════════════════════════════════════ *@
 else if (_project is not null)
 {
-    <KanbanBoard Cards="_cards" />
+    <KanbanBoard Statuses="_statuses"
+                 Cards="_cards"
+                 ProjectId="ProjectId"
+                 OnCardStatusChanged="HandleCardStatusChangedAsync" />
 }
 
 @code {
@@ -105,14 +144,29 @@ else if (_project is not null)
     /// <summary>The loaded project data, null until fetch completes.</summary>
     private ProjectDto? _project;
 
-    /// <summary>The list of board cards populated from mock data after project load.</summary>
-    private List<BoardCardItem> _cards = [];
+    /// <summary>
+    /// The board statuses (columns) for this project, ordered by SortOrder.
+    /// Populated by GetProjectStatusesQuery after the project is confirmed valid.
+    /// </summary>
+    private List<BoardStatusDto> _statuses = [];
 
-    /// <summary>True while the initial project data is being fetched.</summary>
+    /// <summary>
+    /// The cards for this project. CardDto is immutable — optimistic updates
+    /// replace items in the list using the record `with` expression.
+    /// </summary>
+    private List<CardDto> _cards = [];
+
+    /// <summary>True while the initial project and board data is being fetched.</summary>
     private bool _isLoading = true;
 
     /// <summary>True when the project was not found or is archived.</summary>
     private bool _isNotFound;
+
+    /// <summary>
+    /// True when the project loaded successfully but has zero board statuses.
+    /// Triggers the "No board statuses configured" empty state.
+    /// </summary>
+    private bool _hasNoStatuses;
 
     /// <summary>Tracks the last loaded ProjectId to skip redundant loads when the parameter hasn't changed.</summary>
     private Guid _lastLoadedProjectId;
@@ -125,8 +179,8 @@ else if (_project is not null)
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Loads the project when the component initializes or when the ProjectId
-    /// parameter changes (e.g., navigating between projects).
+    /// Loads the project and board data when the component initializes or when
+    /// the ProjectId parameter changes (e.g., navigating between projects).
     /// Uses OnParametersSetAsync because the route parameter may change without
     /// the component being re-created (same page, different ID).
     /// </summary>
@@ -146,14 +200,17 @@ else if (_project is not null)
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Fetches the project by ID and updates the component state.
-    /// Sets the project as active in the topbar context if needed (FR-21).
+    /// Fetches the project by ID, then loads statuses and cards if the project
+    /// is valid. Sets the project as active in the topbar context if needed.
     /// </summary>
     private async Task LoadProjectAsync()
     {
         _isLoading = true;
         _isNotFound = false;
+        _hasNoStatuses = false;
         _project = null;
+        _statuses = [];
+        _cards = [];
         StateHasChanged();
 
         var query = new GetProjectByIdQuery { Id = ProjectId };
@@ -161,27 +218,143 @@ else if (_project is not null)
 
         if (result.IsFailure || result.Value.IsArchived)
         {
-            // Project not found or archived — show error state (FR-20)
+            // Project not found or archived — show error state
             _isNotFound = true;
             _isLoading = false;
             return;
         }
 
         _project = result.Value;
-        _isLoading = false;
 
-        // Populate the board with mock card data (FR-16, FR-17).
-        // CreateCards() returns a fresh list each time so drag-and-drop
-        // mutations do not persist across page refreshes.
-        _cards = BoardMockData.CreateCards();
-
-        // FR-21: If the user navigated directly (bookmark, shared link), sync
-        // the active project context so the topbar shows the correct project.
+        // Sync the active project context so the topbar shows the correct project
+        // when the user navigates directly via bookmark or shared link.
         if (ActiveProjectService.ActiveProject is null
             || ActiveProjectService.ActiveProject.Id != _project.Id)
         {
             await ActiveProjectService.SetActiveProjectAsync(_project);
         }
+
+        await LoadBoardDataAsync();
+
+        _isLoading = false;
+    }
+
+    /// <summary>
+    /// Loads board statuses and cards for the current project.
+    /// If the project has no statuses, sets <see cref="_hasNoStatuses"/> and returns early.
+    /// Called after the project is confirmed valid, and also by <see cref="RefreshBoardAsync"/>.
+    /// </summary>
+    private async Task LoadBoardDataAsync()
+    {
+        _statuses = await GetStatusesHandler.Handle(
+            new GetProjectStatusesQuery { ProjectId = ProjectId },
+            _cts.Token);
+
+        // No statuses means the board cannot be rendered — show the empty state
+        // directing the user to Settings to configure columns first.
+        if (_statuses.Count == 0)
+        {
+            _hasNoStatuses = true;
+            return;
+        }
+
+        _hasNoStatuses = false;
+
+        _cards = await GetCardsHandler.Handle(
+            new GetCardsByProjectQuery { ProjectId = ProjectId },
+            _cts.Token);
+    }
+
+    /// <summary>
+    /// Re-loads board statuses and cards without a full page reload.
+    /// Called as a callback from KanbanBoard after card creation, update, or deletion
+    /// (SPEC-C5/C6 integration point).
+    /// </summary>
+    public async Task RefreshBoardAsync()
+    {
+        await LoadBoardDataAsync();
+        StateHasChanged();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Drag-and-Drop Handler
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Handles a card being dropped into a different column.
+    /// Applies an optimistic UI update immediately, then persists the change via
+    /// ChangeCardStatusCommand. Reverts on failure and shows a snackbar error.
+    /// After a successful change, silently queries for matching workflow triggers
+    /// (SPEC-C8 will wire the execution — for now the result is discarded).
+    /// </summary>
+    /// <param name="args">
+    /// A tuple containing the card that was moved and the target status ID.
+    /// </param>
+    private async Task HandleCardStatusChangedAsync((CardDto Card, Guid NewStatusId) args)
+    {
+        var (card, newStatusId) = args;
+        var previousStatusId = card.StatusId;
+
+        // Same column drop — no-op, nothing to persist
+        if (previousStatusId == newStatusId)
+        {
+            return;
+        }
+
+        // ── Optimistic Update ────────────────────────────────────────────────
+        // Move the card in the UI immediately so the user sees instant feedback.
+        // CardDto is immutable, so we replace the item in the list using `with`.
+        var index = _cards.FindIndex(c => c.Id == card.Id);
+        if (index >= 0)
+        {
+            _cards[index] = _cards[index] with { StatusId = newStatusId };
+            StateHasChanged();
+        }
+
+        // ── Persist the Status Change ────────────────────────────────────────
+        var command = new ChangeCardStatusCommand
+        {
+            CardId = card.Id,
+            NewStatusId = newStatusId,
+            ChangedBy = "user",
+            ChangeSource = ChangeSource.Manual
+        };
+
+        var result = await ChangeCardStatusHandler.Handle(command, _cts.Token);
+
+        if (result.IsFailure)
+        {
+            // ── Revert Optimistic Update ─────────────────────────────────────
+            // The server rejected the change — restore the card to its original column.
+            if (index >= 0)
+            {
+                _cards[index] = _cards[index] with { StatusId = previousStatusId };
+                StateHasChanged();
+            }
+
+            Logger.LogWarning(
+                "Failed to change card {CardId} status from {From} to {To}: {Error}",
+                card.Id, previousStatusId, newStatusId, result.Error);
+
+            Snackbar.Add("Failed to move card. Please try again.", Severity.Error);
+            return;
+        }
+
+        // ── Workflow Trigger Evaluation (SPEC-C8 placeholder) ────────────────
+        // TODO(SPEC-C8): Add per-card trigger-executing indicator once SPEC-C8
+        // wires the execution pipeline. The visual indicator (AC: "Card displays
+        // a loading indicator during trigger execution") is intentionally deferred.
+        // Query for matching triggers on this transition. The result is intentionally
+        // discarded — SPEC-C8 will wire the actual trigger execution pipeline.
+        // Fire-and-forget: we do not await the trigger query result.
+        _ = GetTriggersHandler.Handle(
+            new GetWorkflowTriggersByTransitionQuery
+            {
+                ProjectId = ProjectId,
+                FromStatusId = previousStatusId,
+                ToStatusId = newStatusId
+            },
+            _cts.Token);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -190,7 +363,7 @@ else if (_project is not null)
 
     /// <summary>
     /// Opens the project selector modal so the user can pick a different project.
-    /// Used as the CTA on the "Project not found" error state (FR-20).
+    /// Used as the CTA on the "Project not found" error state.
     /// </summary>
     private async Task OpenProjectSelectorAsync()
     {

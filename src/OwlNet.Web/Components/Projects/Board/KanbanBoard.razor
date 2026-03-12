@@ -1,62 +1,78 @@
 @* ═══════════════════════════════════════════════════════════════════════════════
    KanbanBoard — Presentational (Dumb) Component
    ═══════════════════════════════════════════════════════════════════════════════
-   Renders the full project Kanban board with five fixed columns:
-   Backlog, To Evaluate, Develop, Review, and Done.
+   Renders the full project Kanban board with dynamic columns driven by the
+   project's BoardStatusDto list. Columns are ordered by SortOrder and colored
+   deterministically from a fixed palette based on their index position.
 
    Uses MudBlazor's MudDropContainer<T> / MudDropZone<T> for drag-and-drop
-   card movement between columns. Each column is identified by its
-   BoardStatus enum name. Dropping a card updates its Status property.
+   card movement between columns. Each drop zone is identified by the status
+   Guid string. Dropping a card into a different column raises the
+   OnCardStatusChanged callback so the parent can persist the change.
 
-   This is a pure presentational component: it receives the card list via
-   a parameter and delegates card click handling to a MudDialog. No data
-   fetching or business logic — only rendering and user interaction.
+   This is a pure presentational component: it receives data via parameters
+   and communicates user interactions via EventCallback. No data fetching or
+   business logic — only rendering and event forwarding.
 
-   Spec reference: SPEC-project-board-page (FR-5 through FR-14, FR-20 through FR-25)
+   Spec reference: SPEC-C4-board-wiring
    ═══════════════════════════════════════════════════════════════════════════════ *@
+
+@using OwlNet.Application.Common.Models
 
 @inject IDialogService DialogService
 
 @* ═══════════════════════════════════════════════════════════════════════════════
    MudDropContainer — wraps the entire board.
-   - Items: the full list of draggable cards
-   - ItemsSelector: maps each card to its column by comparing Status to zone ID
-   - ItemDropped: fires when a card is dropped into a (possibly different) zone
+   - Items: the full list of draggable cards (CardDto)
+   - ItemsSelector: maps each card to its column by matching StatusId to zone ID
+   - ItemDropped: fires synchronously when a card is dropped; delegates to async
    - ItemRenderer: renders each card using the KanbanCard component
-   - ChildContent: the column layout (5 drop zones)
+   - ChildContent: the dynamic column layout (one drop zone per status)
    ═══════════════════════════════════════════════════════════════════════════════ *@
-<MudDropContainer T="BoardCardItem"
+<MudDropContainer T="CardDto"
                   Items="Cards"
-                  ItemsSelector="@((item, zone) => item.Status.ToString() == zone)"
+                  ItemsSelector="@((item, zone) => item.StatusId.ToString() == zone)"
                   ItemDropped="OnItemDropped"
                   Class="board-drop-container">
     <ChildContent>
         <div class="board-layout">
-            @foreach (var column in _columns)
+            @{
+                // Sort statuses by SortOrder to ensure consistent column ordering
+                var orderedStatuses = Statuses.OrderBy(s => s.SortOrder).ToList();
+            }
+            @for (var i = 0; i < orderedStatuses.Count; i++)
             {
+                var status = orderedStatuses[i];
+
+                @* Capture loop variable for use in lambda — avoids closure capture bug *@
+                var columnIndex = i;
+
+                @* Deterministic color from the fixed palette based on column position *@
+                var headerColor = _colorPalette[columnIndex % _colorPalette.Length];
+
                 <div class="board-column">
 
                     @* ── Column Header ────────────────────────────────────────
-                       Colored bar with card count badge, column name, and an
-                       "Add card" button (non-functional placeholder per FR-23).
-                       The CSS modifier class determines the header color. *@
-                    <div class="board-column-header board-column-header--@column.CssModifier">
-                        <div class="board-column-count">@GetColumnCount(column.Status)</div>
-                        <span class="board-column-title">@column.Name</span>
+                       Colored bar with card count badge, status name, and an
+                       "Add card" button (SPEC-C5 placeholder).
+                       Color is applied as an inline style since statuses are
+                       dynamic — CSS modifier classes are no longer used. *@
+                    <div class="board-column-header" style="background-color: @headerColor">
+                        <div class="board-column-count">@GetColumnCount(status.Id)</div>
+                        <span class="board-column-title">@status.Name</span>
                         <MudTooltip Text="Coming soon">
                             <MudIconButton Icon="@Icons.Material.Filled.Add"
                                            Size="Size.Small"
                                            Class="board-column-add"
-                                           aria-label="@($"Add card to {column.Name}")" />
+                                           aria-label="@($"Add card to {status.Name}")" />
                         </MudTooltip>
                     </div>
 
                     @* ── Drop Zone ────────────────────────────────────────────
-                       Each zone is identified by the BoardStatus enum name.
-                       AllowReorder enables card reordering within the same
-                       column (FR-12). *@
-                    <MudDropZone T="BoardCardItem"
-                                 Identifier="@column.Status.ToString()"
+                       Each zone is identified by the status Guid string.
+                       AllowReorder enables card reordering within the same column. *@
+                    <MudDropZone T="CardDto"
+                                 Identifier="@status.Id.ToString()"
                                  AllowReorder="true"
                                  Class="board-dropzone" />
                 </div>
@@ -66,7 +82,7 @@
 
     @* ── Item Renderer ────────────────────────────────────────────────────────
        Delegates card rendering to the KanbanCard component, which handles
-       priority badge, title, and Markdown description display (FR-9). *@
+       priority badge, card number, title, Markdown description, and tags. *@
     <ItemRenderer>
         <KanbanCard Card="@context" OnCardClicked="OnCardClicked" />
     </ItemRenderer>
@@ -78,68 +94,108 @@
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// The list of board cards to display across the five columns.
-    /// Each card's <see cref="BoardCardItem.Status"/> determines which column
-    /// it appears in. This list is mutated in-place when cards are dragged
-    /// between columns (MudDropContainer updates the item's Status).
+    /// The board statuses that define the columns, ordered by SortOrder.
+    /// Each status becomes one drop zone on the board.
     /// </summary>
     [Parameter, EditorRequired]
-    public List<BoardCardItem> Cards { get; set; } = [];
+    public List<BoardStatusDto> Statuses { get; set; } = [];
+
+    /// <summary>
+    /// The list of cards to display across the columns.
+    /// Each card's <see cref="CardDto.StatusId"/> determines which column it appears in.
+    /// Cards whose StatusId does not match any loaded status are silently excluded.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public List<CardDto> Cards { get; set; } = [];
+
+    /// <summary>
+    /// The owning project ID. Passed to child components for context
+    /// (e.g., the "Add card" dialog in SPEC-C5).
+    /// </summary>
+    [Parameter, EditorRequired]
+    public Guid ProjectId { get; set; }
+
+    /// <summary>
+    /// Callback raised when a card is dropped into a different column.
+    /// The parent (Board.razor) handles persistence via ChangeCardStatusCommand.
+    /// The tuple carries the original CardDto and the target status Guid.
+    /// </summary>
+    [Parameter]
+    public EventCallback<(CardDto Card, Guid NewStatusId)> OnCardStatusChanged { get; set; }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    //  Column Definitions
+    //  Color Palette
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Static metadata for the five board columns (FR-5). Each entry defines
-    /// the column's display name, corresponding <see cref="BoardStatus"/>,
-    /// and CSS class modifier for the header color.
+    /// Fixed color palette for column headers. Colors are assigned deterministically
+    /// by index (position in the SortOrder-sorted status list) so the same status
+    /// always gets the same color within a session. The palette cycles if there
+    /// are more than 10 statuses.
     /// </summary>
-    private static readonly ColumnDefinition[] _columns =
+    private static readonly string[] _colorPalette =
     [
-        new("Backlog", BoardStatus.Backlog, "backlog"),
-        new("To Evaluate", BoardStatus.ToEvaluate, "evaluate"),
-        new("Develop", BoardStatus.Develop, "develop"),
-        new("Review", BoardStatus.Review, "review"),
-        new("Done", BoardStatus.Done, "done")
+        "#6B7280", // 0 — slate gray
+        "#8B5CF6", // 1 — violet
+        "#3B82F6", // 2 — blue
+        "#F59E0B", // 3 — amber
+        "#10B981", // 4 — emerald
+        "#EF4444", // 5 — red
+        "#F97316", // 6 — orange
+        "#06B6D4", // 7 — cyan
+        "#84CC16", // 8 — lime
+        "#EC4899"  // 9 — pink
     ];
-
-    /// <summary>
-    /// Immutable record describing a single board column's metadata.
-    /// </summary>
-    /// <param name="Name">Display name shown in the column header.</param>
-    /// <param name="Status">The <see cref="BoardStatus"/> this column represents.</param>
-    /// <param name="CssModifier">CSS class suffix for the column header color.</param>
-    private sealed record ColumnDefinition(string Name, BoardStatus Status, string CssModifier);
 
     // ═══════════════════════════════════════════════════════════════════════════
     //  Event Handlers
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Handles a card being dropped into a column (FR-10, FR-11).
-    /// Parses the drop zone identifier back to a <see cref="BoardStatus"/>
-    /// and updates the card's Status, causing MudDropContainer to re-evaluate
-    /// which zone the card belongs to.
+    /// Synchronous MudDropContainer callback — bridges to the async handler.
+    /// MudDropContainer's ItemDropped is synchronous (Action&lt;T&gt;), but we need
+    /// to call async operations. We use InvokeAsync to marshal back onto the
+    /// Blazor synchronization context and fire the async handler.
     /// </summary>
-    /// <param name="info">
-    /// Drop event info containing the dragged item and the target zone identifier.
-    /// </param>
-    private void OnItemDropped(MudItemDropInfo<BoardCardItem> info)
+    /// <param name="info">Drop event info containing the dragged item and target zone.</param>
+    private void OnItemDropped(MudItemDropInfo<CardDto> info)
     {
-        if (info.Item is not null
-            && Enum.TryParse<BoardStatus>(info.DropzoneIdentifier, out var newStatus))
-        {
-            info.Item.Status = newStatus;
-        }
+        _ = InvokeAsync(() => HandleDropAsync(info));
     }
 
     /// <summary>
-    /// Handles a card click by opening the <see cref="CardDetailDialog"/> modal (FR-14).
-    /// Displays the card's title, priority, and full Markdown description.
+    /// Async drop handler. Parses the drop zone identifier as a Guid and raises
+    /// <see cref="OnCardStatusChanged"/> if the card moved to a different column.
+    /// Same-column drops are silently ignored.
+    /// </summary>
+    /// <param name="info">Drop event info containing the dragged item and target zone.</param>
+    private async Task HandleDropAsync(MudItemDropInfo<CardDto> info)
+    {
+        if (info.Item is null)
+        {
+            return;
+        }
+
+        if (!Guid.TryParse(info.DropzoneIdentifier, out var newStatusId))
+        {
+            return;
+        }
+
+        // Same-column drop — no-op, nothing to persist
+        if (info.Item.StatusId == newStatusId)
+        {
+            return;
+        }
+
+        await OnCardStatusChanged.InvokeAsync((info.Item, newStatusId));
+    }
+
+    /// <summary>
+    /// Handles a card click by opening the <see cref="CardDetailDialog"/> modal.
+    /// Displays the card's number, priority, and full Markdown description.
     /// </summary>
     /// <param name="card">The card that was clicked.</param>
-    private async Task OnCardClicked(BoardCardItem card)
+    private async Task OnCardClicked(CardDto card)
     {
         var parameters = new DialogParameters<CardDetailDialog>
         {
@@ -165,11 +221,11 @@
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Returns the number of cards currently in the specified column (FR-6).
+    /// Returns the number of cards currently in the specified column.
     /// Used by the column header to display a live count badge.
     /// </summary>
-    /// <param name="status">The board status (column) to count cards for.</param>
-    /// <returns>The number of cards with the given status.</returns>
-    private int GetColumnCount(BoardStatus status) =>
-        Cards.Count(c => c.Status == status);
+    /// <param name="statusId">The board status ID (column) to count cards for.</param>
+    /// <returns>The number of cards with the given status ID.</returns>
+    private int GetColumnCount(Guid statusId) =>
+        Cards.Count(c => c.StatusId == statusId);
 }

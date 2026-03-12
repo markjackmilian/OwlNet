@@ -8,7 +8,7 @@
    compatibility. Priority badge colors use pastel backgrounds with dark text
    for readability in both light and dark modes.
 
-   Spec reference: SPEC-project-board-page (FR-9, FR-13, FR-15, FR-20)
+   Spec reference: SPEC-C4-board-wiring
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 
@@ -39,7 +39,7 @@
 
 
 /* ── Priority Badge ────────────────────────────────────────────────────────── */
-/* Small colored pill indicating the card's priority level (FR-15).
+/* Small colored pill indicating the card's priority level.
    Each variant uses a pastel background with a dark contrasting text color
    for accessibility and readability. */
 
@@ -82,8 +82,22 @@
 }
 
 
+/* ── Card Number ───────────────────────────────────────────────────────────── */
+/* Small muted label showing the sequential card number (e.g., "#42").
+   Displayed below the priority badge to help users reference cards in
+   conversations, commits, and external tools. */
+
+.board-card-number {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--mud-palette-text-secondary);
+    margin-bottom: 4px;
+    font-weight: 400;
+}
+
+
 /* ── Card Title ────────────────────────────────────────────────────────────── */
-/* Bold title text clamped to 2 lines with ellipsis overflow (FR-9).
+/* Bold title text clamped to 2 lines with ellipsis overflow.
    Uses ::deep because MudText renders an inner element that scoped CSS
    cannot reach without the combinator. */
 
@@ -101,7 +115,7 @@
 
 
 /* ── Card Description ──────────────────────────────────────────────────────── */
-/* Markdown-rendered HTML clamped to 3 lines (FR-9, FR-19).
+/* Markdown-rendered HTML clamped to 3 lines.
    Inner HTML elements (p, ul, li) have their margins reset to keep the
    card compact. Uses ::deep to penetrate into the rendered Markdown HTML. */
 
@@ -140,10 +154,41 @@
 }
 
 
+/* ── Tags ──────────────────────────────────────────────────────────────────── */
+/* Tag chips displayed below the description. Each tag uses its stored color
+   value as the background. The "+N more" overflow indicator uses neutral
+   theme colors to avoid visual noise. */
+
+/* Tags container — wraps chips in a flex row with gap */
+.board-card-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 8px;
+}
+
+/* Individual tag chip */
+.board-card-tag {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    font-weight: 500;
+    line-height: 1.4;
+}
+
+/* "+N more" indicator — neutral styling so it doesn't compete with real tags */
+.board-card-tag--more {
+    background-color: var(--mud-palette-background);
+    color: var(--mud-palette-text-secondary);
+    border: 1px solid var(--mud-palette-divider);
+}
+
+
 /* ── Drag Feedback ─────────────────────────────────────────────────────────── */
 /* When MudDropContainer is dragging a card, it applies .mud-drop-item-dragging
    to the drag source element. The card inside becomes semi-transparent with a
-   subtle rotation to indicate it's being moved (FR-13). */
+   subtle rotation to indicate it's being moved. */
 
 ::deep .mud-drop-item-dragging .board-card {
     opacity: 0.4;
