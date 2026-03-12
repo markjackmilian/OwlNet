@@ -64,6 +64,11 @@ public sealed class ApplicationDbContext : IdentityDbContext<ApplicationUser, Id
     public DbSet<CardTag> CardTags => Set<CardTag>();
 
     /// <summary>
+    /// Gets the set of <see cref="CardComment"/> entities representing comments posted on cards.
+    /// </summary>
+    public DbSet<CardComment> CardComments => Set<CardComment>();
+
+    /// <summary>
     /// Gets the set of <see cref="WorkflowTrigger"/> entities representing workflow automation triggers.
     /// </summary>
     public DbSet<WorkflowTrigger> WorkflowTriggers => Set<WorkflowTrigger>();

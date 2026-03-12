@@ -14,6 +14,7 @@ public sealed class Card
 {
     private readonly List<CardStatusHistory> _statusHistory = [];
     private readonly List<CardTag> _tags = [];
+    private readonly List<CardComment> _comments = [];
 
     /// <summary>
     /// Gets the unique identifier for this card.
@@ -78,6 +79,12 @@ public sealed class Card
     /// Gets the read-only list of tags assigned to this card.
     /// </summary>
     public IReadOnlyList<CardTag> Tags => _tags;
+
+    /// <summary>
+    /// Gets the read-only list of comments posted on this card,
+    /// in the order they were appended (oldest first).
+    /// </summary>
+    public IReadOnlyList<CardComment> Comments => _comments;
 
     /// <summary>
     /// Required by EF Core for materialization. Do not call directly.
@@ -286,6 +293,62 @@ public sealed class Card
 
         _tags.Remove(existing);
         UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    /// <summary>
+    /// Creates a new <see cref="CardComment"/> on this card and appends it to <see cref="Comments"/>.
+    /// All validation is delegated to <see cref="CardComment.Create"/>; no validation logic is
+    /// duplicated here.
+    /// </summary>
+    /// <remarks>
+    /// This method does <b>not</b> update <see cref="UpdatedAt"/> — comments are a separate concern
+    /// from card data and do not constitute a modification to the card itself.
+    /// </remarks>
+    /// <param name="content">
+    /// The comment body. Must not be <see langword="null"/> or whitespace and must not exceed
+    /// 10,000 characters. Supports Markdown.
+    /// </param>
+    /// <param name="authorType">
+    /// Whether the comment is authored by a human user or an AI agent.
+    /// </param>
+    /// <param name="authorId">
+    /// The authenticated user's identifier. Required (must not be <see langword="null"/> or
+    /// whitespace) when <paramref name="authorType"/> is <see cref="CommentAuthorType.Human"/>.
+    /// Must be <see langword="null"/> when <paramref name="authorType"/> is
+    /// <see cref="CommentAuthorType.Agent"/>.
+    /// </param>
+    /// <param name="agentName">
+    /// The agent's identifier (the name of the <c>.md</c> agent file, without extension).
+    /// Required (must not be <see langword="null"/> or whitespace) when
+    /// <paramref name="authorType"/> is <see cref="CommentAuthorType.Agent"/>.
+    /// Must be <see langword="null"/> when <paramref name="authorType"/> is
+    /// <see cref="CommentAuthorType.Human"/>.
+    /// </param>
+    /// <param name="workflowTriggerId">
+    /// The optional identifier of the workflow trigger whose execution produced this comment.
+    /// Pass <see langword="null"/> for human comments or agent comments posted outside a trigger context.
+    /// </param>
+    /// <returns>The newly created <see cref="CardComment"/> instance.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="content"/> is <see langword="null"/>, whitespace, or exceeds
+    /// 10,000 characters; when <paramref name="authorType"/> is
+    /// <see cref="CommentAuthorType.Human"/> and <paramref name="authorId"/> is
+    /// <see langword="null"/> or whitespace; or when <paramref name="authorType"/> is
+    /// <see cref="CommentAuthorType.Agent"/> and <paramref name="agentName"/> is
+    /// <see langword="null"/> or whitespace.
+    /// </exception>
+    public CardComment AddComment(
+        string content,
+        CommentAuthorType authorType,
+        string? authorId = null,
+        string? agentName = null,
+        Guid? workflowTriggerId = null)
+    {
+        var comment = CardComment.Create(Id, content, authorType, authorId, agentName, workflowTriggerId);
+
+        _comments.Add(comment);
+
+        return comment;
     }
 
     private static void ValidateTitle(string title)
