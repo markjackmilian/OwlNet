@@ -34,7 +34,7 @@ public interface IProjectRepository
     Task<Project?> GetEntityByIdAsync(Guid id, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Checks whether a project with the given name already exists (case-insensitive).
+    /// Checks whether an active (non-archived) project with the given name already exists (case-insensitive).
     /// </summary>
     /// <param name="name">The project name to check.</param>
     /// <param name="excludeId">
@@ -42,19 +42,20 @@ public interface IProjectRepository
     /// so the current project's own name does not trigger a duplicate).
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns><see langword="true"/> if a project with the name exists; otherwise <see langword="false"/>.</returns>
+    /// <returns><see langword="true"/> if an active project with the name exists; otherwise <see langword="false"/>.</returns>
     Task<bool> ExistsWithNameAsync(string name, Guid? excludeId = null, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Checks whether a project with the given filesystem path already exists.
-    /// The check includes all projects (active and archived) to prevent path conflicts.
+    /// Checks whether an active (non-archived) project with the given filesystem path already exists.
+    /// Only active projects are considered; archived projects do not block path reuse.
     /// </summary>
     /// <param name="path">The filesystem path to check.</param>
     /// <param name="excludeId">
-    /// An optional project ID to exclude from the check (for future use during updates).
+    /// An optional project ID to exclude from the check (used during updates
+    /// so the current project's own path does not trigger a duplicate).
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns><see langword="true"/> if a project with the path exists; otherwise <see langword="false"/>.</returns>
+    /// <returns><see langword="true"/> if an active project with the path exists; otherwise <see langword="false"/>.</returns>
     Task<bool> ExistsWithPathAsync(string path, Guid? excludeId = null, CancellationToken cancellationToken = default);
 
     /// <summary>

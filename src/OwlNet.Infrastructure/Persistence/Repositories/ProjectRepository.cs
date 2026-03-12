@@ -78,13 +78,11 @@ public sealed class ProjectRepository : IProjectRepository
         Guid? excludeId = null,
         CancellationToken cancellationToken = default)
     {
-        // Name uniqueness is enforced across ALL projects (including archived ones).
-        // This prevents name conflicts when restoring archived projects and ensures
-        // the database unique index on Name is never violated. If a user needs to
-        // reuse an archived project's name, they must first restore and rename or
-        // permanently delete the archived project (future feature).
+        // Name uniqueness is enforced only among active (non-archived) projects.
+        // Archived projects are excluded so that their names can be freely reused
+        // by new or restored projects without triggering a false conflict.
         var query = _dbContext.Projects
-            .Where(p => p.Name.ToLower() == name.ToLower());
+            .Where(p => !p.IsArchived && p.Name.ToLower() == name.ToLower());
 
         if (excludeId.HasValue)
         {
@@ -100,12 +98,13 @@ public sealed class ProjectRepository : IProjectRepository
         Guid? excludeId = null,
         CancellationToken cancellationToken = default)
     {
-        // Path uniqueness is enforced across ALL projects (including archived ones).
+        // Path uniqueness is enforced only among active (non-archived) projects.
+        // Archived projects are excluded so that their filesystem path can be
+        // reused by a new project without triggering a false conflict.
         // Comparison is case-insensitive because Windows filesystem paths are
-        // case-insensitive. This prevents two projects from pointing at the same
-        // directory even when casing differs (e.g. "C:\Code" vs "c:\code").
+        // case-insensitive (e.g. "C:\Code" and "c:\code" are the same directory).
         var query = _dbContext.Projects
-            .Where(p => p.Path.ToLower() == path.Trim().ToLower());
+            .Where(p => !p.IsArchived && p.Path.ToLower() == path.Trim().ToLower());
 
         if (excludeId.HasValue)
         {

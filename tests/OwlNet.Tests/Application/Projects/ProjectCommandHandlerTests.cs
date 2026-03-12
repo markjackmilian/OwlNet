@@ -1405,4 +1405,370 @@ public sealed class ProjectCommandHandlerTests
         // Assert
         await _repository.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
+
+    // ──────────────────────────────────────────────
+    // Relaxed Uniqueness — Active-Only Scenarios
+    // ──────────────────────────────────────────────
+
+    /// <summary>
+    /// Scenario 1: il repository restituisce false per il nome perché il progetto
+    /// che lo usa è archiviato (ExistsWithNameAsync filtra solo attivi).
+    /// Il handler vede false → la creazione deve avere successo.
+    /// </summary>
+    [Fact]
+    public async Task CreateProject_NameUsedByArchivedProject_ReturnsSuccess()
+    {
+        // Arrange
+        var command = new CreateProjectCommand
+        {
+            Name = "Archived Project Name",
+            Path = DefaultPath,
+            Description = "Same name as an archived project"
+        };
+
+        // Il repository filtra solo i progetti attivi: il nome esiste solo su un
+        // progetto archiviato, quindi restituisce false.
+        _repository.ExistsWithNameAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _repository.ExistsWithPathAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _fileSystem.DirectoryExists(Arg.Any<string>()).Returns(true);
+        _repository.AddAsync(Arg.Any<Project>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        _repository.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var sut = new CreateProjectCommandHandler(
+            _repository,
+            _boardStatusRepository,
+            _fileSystem,
+            NullLogger<CreateProjectCommandHandler>.Instance);
+
+        // Act
+        var result = await sut.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.ShouldSatisfyAllConditions(
+            () => result.IsSuccess.ShouldBeTrue(),
+            () => result.Value.ShouldNotBe(Guid.Empty)
+        );
+    }
+
+    /// <summary>
+    /// Scenario 1 (side-effect): quando il nome è libero tra i progetti attivi,
+    /// il progetto viene effettivamente persistito nel repository.
+    /// </summary>
+    [Fact]
+    public async Task CreateProject_NameUsedByArchivedProject_PersistsNewProject()
+    {
+        // Arrange
+        const string reusedName = "Archived Project Name";
+        var command = new CreateProjectCommand
+        {
+            Name = reusedName,
+            Path = DefaultPath,
+            Description = "Reusing a name freed by archiving"
+        };
+
+        _repository.ExistsWithNameAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _repository.ExistsWithPathAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _fileSystem.DirectoryExists(Arg.Any<string>()).Returns(true);
+        _repository.AddAsync(Arg.Any<Project>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        _repository.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var sut = new CreateProjectCommandHandler(
+            _repository,
+            _boardStatusRepository,
+            _fileSystem,
+            NullLogger<CreateProjectCommandHandler>.Instance);
+
+        // Act
+        await sut.Handle(command, CancellationToken.None);
+
+        // Assert — il progetto con il nome riutilizzato viene salvato
+        await _repository.Received(1).AddAsync(
+            Arg.Is<Project>(p => p.Name == reusedName),
+            Arg.Any<CancellationToken>());
+        await _repository.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// Scenario 2: il repository restituisce false per il path perché il progetto
+    /// che lo usa è archiviato (ExistsWithPathAsync filtra solo attivi).
+    /// Il handler vede false → la creazione deve avere successo.
+    /// </summary>
+    [Fact]
+    public async Task CreateProject_PathUsedByArchivedProject_ReturnsSuccess()
+    {
+        // Arrange
+        var command = new CreateProjectCommand
+        {
+            Name = "Brand New Project",
+            Path = DefaultPath,
+            Description = "Same path as an archived project"
+        };
+
+        // Il repository filtra solo i progetti attivi: il path esiste solo su un
+        // progetto archiviato, quindi restituisce false.
+        _repository.ExistsWithNameAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _repository.ExistsWithPathAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _fileSystem.DirectoryExists(Arg.Any<string>()).Returns(true);
+        _repository.AddAsync(Arg.Any<Project>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        _repository.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var sut = new CreateProjectCommandHandler(
+            _repository,
+            _boardStatusRepository,
+            _fileSystem,
+            NullLogger<CreateProjectCommandHandler>.Instance);
+
+        // Act
+        var result = await sut.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.ShouldSatisfyAllConditions(
+            () => result.IsSuccess.ShouldBeTrue(),
+            () => result.Value.ShouldNotBe(Guid.Empty)
+        );
+    }
+
+    /// <summary>
+    /// Scenario 2 (side-effect): quando il path è libero tra i progetti attivi,
+    /// il progetto viene effettivamente persistito nel repository.
+    /// </summary>
+    [Fact]
+    public async Task CreateProject_PathUsedByArchivedProject_PersistsNewProject()
+    {
+        // Arrange
+        var command = new CreateProjectCommand
+        {
+            Name = "Brand New Project",
+            Path = DefaultPath,
+            Description = "Reusing a path freed by archiving"
+        };
+
+        _repository.ExistsWithNameAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _repository.ExistsWithPathAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _fileSystem.DirectoryExists(Arg.Any<string>()).Returns(true);
+        _repository.AddAsync(Arg.Any<Project>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        _repository.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var sut = new CreateProjectCommandHandler(
+            _repository,
+            _boardStatusRepository,
+            _fileSystem,
+            NullLogger<CreateProjectCommandHandler>.Instance);
+
+        // Act
+        await sut.Handle(command, CancellationToken.None);
+
+        // Assert — il progetto con il path riutilizzato viene salvato
+        await _repository.Received(1).AddAsync(
+            Arg.Is<Project>(p => p.Path == DefaultPath),
+            Arg.Any<CancellationToken>());
+        await _repository.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// Scenario 3: nome uguale a un progetto attivo → il repository restituisce true
+    /// → il handler deve rifiutare con il messaggio esatto della nuova semantica.
+    /// </summary>
+    [Fact]
+    public async Task CreateProject_NameUsedByActiveProject_ReturnsFailureWithExactMessage()
+    {
+        // Arrange
+        var command = new CreateProjectCommand
+        {
+            Name = "Active Project Name",
+            Path = DefaultPath,
+            Description = "Conflicts with an active project"
+        };
+
+        // Il repository filtra solo i progetti attivi: il nome è già usato da un attivo.
+        _repository.ExistsWithNameAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(true));
+
+        var sut = new CreateProjectCommandHandler(
+            _repository,
+            _boardStatusRepository,
+            _fileSystem,
+            NullLogger<CreateProjectCommandHandler>.Instance);
+
+        // Act
+        var result = await sut.Handle(command, CancellationToken.None);
+
+        // Assert — messaggio esatto come da spec
+        result.ShouldSatisfyAllConditions(
+            () => result.IsFailure.ShouldBeTrue(),
+            () => result.Error.ShouldBe("A project with this name already exists.")
+        );
+    }
+
+    /// <summary>
+    /// Scenario 4: path uguale a un progetto attivo → il repository restituisce true
+    /// → il handler deve rifiutare con il messaggio esatto della nuova semantica.
+    /// </summary>
+    [Fact]
+    public async Task CreateProject_PathUsedByActiveProject_ReturnsFailureWithExactMessage()
+    {
+        // Arrange
+        var command = new CreateProjectCommand
+        {
+            Name = "Unique Name",
+            Path = DefaultPath,
+            Description = "Conflicts with an active project path"
+        };
+
+        // Nome libero, ma il path è già usato da un progetto attivo.
+        _repository.ExistsWithNameAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _repository.ExistsWithPathAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(true));
+
+        var sut = new CreateProjectCommandHandler(
+            _repository,
+            _boardStatusRepository,
+            _fileSystem,
+            NullLogger<CreateProjectCommandHandler>.Instance);
+
+        // Act
+        var result = await sut.Handle(command, CancellationToken.None);
+
+        // Assert — messaggio esatto come da spec
+        result.ShouldSatisfyAllConditions(
+            () => result.IsFailure.ShouldBeTrue(),
+            () => result.Error.ShouldBe("A project with this path already exists.")
+        );
+    }
+
+    /// <summary>
+    /// Scenario 5: aggiornare il nome di un progetto a uno già usato da un altro
+    /// progetto attivo → il handler deve rifiutare con il messaggio esatto.
+    /// </summary>
+    [Fact]
+    public async Task UpdateProject_NameUsedByActiveProject_ReturnsFailureWithExactMessage()
+    {
+        // Arrange
+        var project = Project.Create("Original Name", DefaultPath, "Will try to rename");
+        var command = new UpdateProjectCommand
+        {
+            Id = project.Id,
+            Name = "Active Taken Name",
+            Description = "Updated description"
+        };
+
+        _repository.GetEntityByIdAsync(project.Id, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<Project?>(project));
+        // Il repository (filtrando solo attivi, escludendo il progetto stesso) trova un conflitto.
+        _repository.ExistsWithNameAsync("Active Taken Name", project.Id, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(true));
+
+        var sut = new UpdateProjectCommandHandler(
+            _repository,
+            NullLogger<UpdateProjectCommandHandler>.Instance);
+
+        // Act
+        var result = await sut.Handle(command, CancellationToken.None);
+
+        // Assert — messaggio esatto come da spec
+        result.ShouldSatisfyAllConditions(
+            () => result.IsFailure.ShouldBeTrue(),
+            () => result.Error.ShouldBe("A project with this name already exists.")
+        );
+    }
+
+    /// <summary>
+    /// Scenario 6: verifica che CreateProject chiami ExistsWithNameAsync senza excludeId
+    /// (null), poiché in fase di creazione non esiste ancora un ID da escludere.
+    /// </summary>
+    [Fact]
+    public async Task CreateProject_ValidCommand_CallsExistsWithNameAsyncWithNullExcludeId()
+    {
+        // Arrange
+        const string projectName = "New Unique Project";
+        var command = new CreateProjectCommand
+        {
+            Name = projectName,
+            Path = DefaultPath,
+            Description = "Verifying repository call parameters"
+        };
+
+        _repository.ExistsWithNameAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _repository.ExistsWithPathAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _fileSystem.DirectoryExists(Arg.Any<string>()).Returns(true);
+        _repository.AddAsync(Arg.Any<Project>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        _repository.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var sut = new CreateProjectCommandHandler(
+            _repository,
+            _boardStatusRepository,
+            _fileSystem,
+            NullLogger<CreateProjectCommandHandler>.Instance);
+
+        // Act
+        await sut.Handle(command, CancellationToken.None);
+
+        // Assert — il handler non deve passare alcun excludeId in fase di creazione
+        await _repository.Received(1).ExistsWithNameAsync(
+            projectName,
+            Arg.Is<Guid?>(id => id == null),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// Scenario 7: verifica che CreateProject chiami ExistsWithPathAsync senza excludeId
+    /// (null), poiché in fase di creazione non esiste ancora un ID da escludere.
+    /// </summary>
+    [Fact]
+    public async Task CreateProject_ValidCommand_CallsExistsWithPathAsyncWithNullExcludeId()
+    {
+        // Arrange
+        var command = new CreateProjectCommand
+        {
+            Name = "New Unique Project",
+            Path = DefaultPath,
+            Description = "Verifying repository call parameters"
+        };
+
+        _repository.ExistsWithNameAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _repository.ExistsWithPathAsync(Arg.Any<string>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+        _fileSystem.DirectoryExists(Arg.Any<string>()).Returns(true);
+        _repository.AddAsync(Arg.Any<Project>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        _repository.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+
+        var sut = new CreateProjectCommandHandler(
+            _repository,
+            _boardStatusRepository,
+            _fileSystem,
+            NullLogger<CreateProjectCommandHandler>.Instance);
+
+        // Act
+        await sut.Handle(command, CancellationToken.None);
+
+        // Assert — il handler non deve passare alcun excludeId in fase di creazione
+        await _repository.Received(1).ExistsWithPathAsync(
+            DefaultPath,
+            Arg.Is<Guid?>(id => id == null),
+            Arg.Any<CancellationToken>());
+    }
 }
