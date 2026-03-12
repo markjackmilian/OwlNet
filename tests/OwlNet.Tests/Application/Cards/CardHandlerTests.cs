@@ -77,7 +77,8 @@ public sealed class CardHandlerTests
         // Assert
         result.ShouldSatisfyAllConditions(
             () => result.IsSuccess.ShouldBeTrue(),
-            () => result.Value.ShouldNotBe(Guid.Empty)
+            () => result.Value.Id.ShouldNotBe(Guid.Empty),
+            () => result.Value.Number.ShouldBe(1)
         );
     }
 
@@ -277,6 +278,227 @@ public sealed class CardHandlerTests
             () => result.IsFailure.ShouldBeTrue(),
             () => result.Error.ShouldContain("conflict", Case.Insensitive)
         );
+    }
+
+    // ── CreateCardCommand — StatusId Resolution ───
+    // ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task Handle_ExplicitStatusId_UsesProvidedStatus()
+    {
+        // Arrange — two statuses; command targets the higher-SortOrder one ("In Progress")
+        var projectId = Guid.NewGuid();
+        var backlogStatusId    = Guid.NewGuid(); // SortOrder 0 — must NOT be chosen
+        var inProgressStatusId = Guid.NewGuid(); // SortOrder 1 — must be chosen
+
+        var statuses = new List<BoardStatusDto>
+        {
+            new(backlogStatusId,    "Backlog",     0, true,  projectId),
+            new(inProgressStatusId, "In Progress", 1, false, projectId)
+        };
+
+        _boardStatusRepository.GetByProjectIdAsync(projectId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(statuses));
+        _cardRepository.GetNextNumberAsync(projectId, Arg.Any<CancellationToken>())
+            .Returns(new ValueTask<int>(1));
+        _cardRepository.AddAsync(Arg.Any<Card>(), Arg.Any<CancellationToken>())
+            .Returns(ValueTask.CompletedTask);
+        _cardRepository.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(ValueTask.CompletedTask);
+
+        var command = new CreateCardCommand
+        {
+            Title     = "Explicit Status Card",
+            Priority  = CardPriority.Medium,
+            ProjectId = projectId,
+            StatusId  = inProgressStatusId,
+            CreatedBy = "user-123"
+        };
+
+        var sut = new CreateCardCommandHandler(
+            _cardRepository,
+            _boardStatusRepository,
+            NullLogger<CreateCardCommandHandler>.Instance);
+
+        // Act
+        await sut.Handle(command, CancellationToken.None);
+
+        // Assert — card must be persisted with the explicitly requested status, not the fallback
+        await _cardRepository.Received(1).AddAsync(
+            Arg.Is<Card>(c => c.StatusId == inProgressStatusId),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ExplicitStatusId_ReturnsSuccess()
+    {
+        // Arrange — same two-status project; command targets "In Progress"
+        var projectId = Guid.NewGuid();
+        var backlogStatusId    = Guid.NewGuid(); // SortOrder 0
+        var inProgressStatusId = Guid.NewGuid(); // SortOrder 1 — explicitly requested
+
+        var statuses = new List<BoardStatusDto>
+        {
+            new(backlogStatusId,    "Backlog",     0, true,  projectId),
+            new(inProgressStatusId, "In Progress", 1, false, projectId)
+        };
+
+        _boardStatusRepository.GetByProjectIdAsync(projectId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(statuses));
+        _cardRepository.GetNextNumberAsync(projectId, Arg.Any<CancellationToken>())
+            .Returns(new ValueTask<int>(1));
+        _cardRepository.AddAsync(Arg.Any<Card>(), Arg.Any<CancellationToken>())
+            .Returns(ValueTask.CompletedTask);
+        _cardRepository.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(ValueTask.CompletedTask);
+
+        var command = new CreateCardCommand
+        {
+            Title     = "Explicit Status Card",
+            Priority  = CardPriority.Medium,
+            ProjectId = projectId,
+            StatusId  = inProgressStatusId,
+            CreatedBy = "user-123"
+        };
+
+        var sut = new CreateCardCommandHandler(
+            _cardRepository,
+            _boardStatusRepository,
+            NullLogger<CreateCardCommandHandler>.Instance);
+
+        // Act
+        var result = await sut.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.ShouldSatisfyAllConditions(
+            () => result.IsSuccess.ShouldBeTrue(),
+            () => result.Value.Id.ShouldNotBe(Guid.Empty),
+            () => result.Value.Number.ShouldBe(1)
+        );
+    }
+
+    [Fact]
+    public async Task Handle_ExplicitStatusIdNotInProject_ReturnsFailure()
+    {
+        // Arrange — project has one status; command references a completely foreign status ID
+        var projectId      = Guid.NewGuid();
+        var knownStatusId  = Guid.NewGuid();
+        var foreignStatusId = Guid.NewGuid(); // does not exist in this project's status list
+
+        var statuses = new List<BoardStatusDto>
+        {
+            new(knownStatusId, "Backlog", 0, true, projectId)
+        };
+
+        _boardStatusRepository.GetByProjectIdAsync(projectId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(statuses));
+
+        var command = new CreateCardCommand
+        {
+            Title     = "Bad Status Card",
+            Priority  = CardPriority.Low,
+            ProjectId = projectId,
+            StatusId  = foreignStatusId,
+            CreatedBy = "user-123"
+        };
+
+        var sut = new CreateCardCommandHandler(
+            _cardRepository,
+            _boardStatusRepository,
+            NullLogger<CreateCardCommandHandler>.Instance);
+
+        // Act
+        var result = await sut.Handle(command, CancellationToken.None);
+
+        // Assert
+        result.ShouldSatisfyAllConditions(
+            () => result.IsFailure.ShouldBeTrue(),
+            () => result.Error.ShouldContain("does not belong to this project")
+        );
+    }
+
+    [Fact]
+    public async Task Handle_ExplicitStatusIdNotInProject_DoesNotPersistCard()
+    {
+        // Arrange — same setup: foreign StatusId that is not in the project's status list
+        var projectId       = Guid.NewGuid();
+        var knownStatusId   = Guid.NewGuid();
+        var foreignStatusId = Guid.NewGuid();
+
+        var statuses = new List<BoardStatusDto>
+        {
+            new(knownStatusId, "Backlog", 0, true, projectId)
+        };
+
+        _boardStatusRepository.GetByProjectIdAsync(projectId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(statuses));
+
+        var command = new CreateCardCommand
+        {
+            Title     = "Bad Status Card",
+            Priority  = CardPriority.Low,
+            ProjectId = projectId,
+            StatusId  = foreignStatusId,
+            CreatedBy = "user-123"
+        };
+
+        var sut = new CreateCardCommandHandler(
+            _cardRepository,
+            _boardStatusRepository,
+            NullLogger<CreateCardCommandHandler>.Instance);
+
+        // Act
+        await sut.Handle(command, CancellationToken.None);
+
+        // Assert — handler must short-circuit before touching the card repository
+        await _cardRepository.DidNotReceive().AddAsync(Arg.Any<Card>(), Arg.Any<CancellationToken>());
+        await _cardRepository.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_NullStatusId_FallsBackToLowestSortOrder()
+    {
+        // Arrange — two statuses with non-contiguous SortOrders; null StatusId must pick SortOrder=0
+        var projectId    = Guid.NewGuid();
+        var backlogStatusId = Guid.NewGuid(); // SortOrder 0 — must be chosen
+        var doneStatusId    = Guid.NewGuid(); // SortOrder 2 — must NOT be chosen
+
+        var statuses = new List<BoardStatusDto>
+        {
+            new(doneStatusId,    "Done",    2, false, projectId),
+            new(backlogStatusId, "Backlog", 0, true,  projectId)
+        };
+
+        _boardStatusRepository.GetByProjectIdAsync(projectId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(statuses));
+        _cardRepository.GetNextNumberAsync(projectId, Arg.Any<CancellationToken>())
+            .Returns(new ValueTask<int>(1));
+        _cardRepository.AddAsync(Arg.Any<Card>(), Arg.Any<CancellationToken>())
+            .Returns(ValueTask.CompletedTask);
+        _cardRepository.SaveChangesAsync(Arg.Any<CancellationToken>())
+            .Returns(ValueTask.CompletedTask);
+
+        var command = new CreateCardCommand
+        {
+            Title     = "Fallback Status Card",
+            Priority  = CardPriority.Medium,
+            ProjectId = projectId,
+            StatusId  = null,           // explicit null — triggers fallback path
+            CreatedBy = "user-123"
+        };
+
+        var sut = new CreateCardCommandHandler(
+            _cardRepository,
+            _boardStatusRepository,
+            NullLogger<CreateCardCommandHandler>.Instance);
+
+        // Act
+        await sut.Handle(command, CancellationToken.None);
+
+        // Assert — card must be assigned to the status with the lowest SortOrder (Backlog, SortOrder=0)
+        await _cardRepository.Received(1).AddAsync(
+            Arg.Is<Card>(c => c.StatusId == backlogStatusId),
+            Arg.Any<CancellationToken>());
     }
 
     // ──────────────────────────────────────────────

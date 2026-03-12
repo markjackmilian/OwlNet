@@ -122,7 +122,20 @@ else if (_hasNoStatuses)
    ═══════════════════════════════════════════════════════════════════════════════ *@
 else if (_project is not null)
 {
-    <KanbanBoard Statuses="_statuses"
+    @* ── Board Page Header ────────────────────────────────────────────────────
+       Sits above the Kanban columns. Right-aligned "New Card" button opens
+       CreateCardDialog with no pre-filled status (SPEC-C5 FR #2). *@
+    <MudStack Row="true" Justify="Justify.FlexEnd" Class="mb-3">
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="@OpenNewCardDialogAsync">
+            New Card
+        </MudButton>
+    </MudStack>
+
+    <KanbanBoard @ref="_kanbanBoard"
+                 Statuses="_statuses"
                  Cards="_cards"
                  ProjectId="ProjectId"
                  OnCardStatusChanged="HandleCardStatusChangedAsync"
@@ -174,6 +187,13 @@ else if (_project is not null)
 
     /// <summary>Cancellation token source for all async operations in this component.</summary>
     private readonly CancellationTokenSource _cts = new();
+
+    /// <summary>
+    /// Reference to the KanbanBoard child component.
+    /// Used to call <see cref="KanbanBoard.RefreshItems"/> after the card list
+    /// is updated so MudDropContainer re-distributes cards into their zones.
+    /// </summary>
+    private KanbanBoard? _kanbanBoard;
 
     // ═══════════════════════════════════════════════════════════════════════════
     //  Lifecycle
@@ -275,6 +295,50 @@ else if (_project is not null)
     {
         await LoadBoardDataAsync();
         StateHasChanged();
+        // Notify MudDropContainer to re-distribute cards into their drop zones.
+        // Required because MudDropContainer does not automatically react when the
+        // Items list reference is replaced from outside the component.
+        _kanbanBoard?.RefreshItems();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Card Creation
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Opens <see cref="CreateCardDialog"/> with no pre-filled status.
+    /// Called from the "New Card" button in the board page header (SPEC-C5 FR #2).
+    /// The user must select a status manually inside the dialog.
+    /// After a successful creation the board is refreshed via
+    /// <see cref="RefreshBoardAsync"/>.
+    /// </summary>
+    private async Task OpenNewCardDialogAsync()
+    {
+        var parameters = new DialogParameters<CreateCardDialog>
+        {
+            { x => x.ProjectId, ProjectId }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseOnEscapeKey = true,
+            CloseButton = true
+        };
+
+        var dialogRef = await DialogService.ShowAsync<CreateCardDialog>(
+            string.Empty, // Title is rendered inside TitleContent — no outer title needed
+            parameters,
+            options);
+
+        var result = await dialogRef.Result;
+
+        // If the card was created, refresh the board so the new card appears
+        if (result is { Canceled: false, Data: true })
+        {
+            await RefreshBoardAsync();
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

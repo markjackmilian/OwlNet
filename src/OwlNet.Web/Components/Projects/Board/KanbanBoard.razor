@@ -30,6 +30,7 @@
    - ChildContent: the dynamic column layout (one drop zone per status)
    ═══════════════════════════════════════════════════════════════════════════════ *@
 <MudDropContainer T="CardDto"
+                  @key="_dropContainerKey"
                   Items="Cards"
                   ItemsSelector="@((item, zone) => item.StatusId.ToString() == zone)"
                   ItemDropped="OnItemDropped"
@@ -60,12 +61,12 @@
                     <div class="board-column-header" style="background-color: @headerColor">
                         <div class="board-column-count">@GetColumnCount(status.Id)</div>
                         <span class="board-column-title">@status.Name</span>
-                        <MudTooltip Text="Coming soon">
-                            <MudIconButton Icon="@Icons.Material.Filled.Add"
-                                           Size="Size.Small"
-                                           Class="board-column-add"
-                                           aria-label="@($"Add card to {status.Name}")" />
-                        </MudTooltip>
+                        @* Opens CreateCardDialog with this column's status pre-filled (SPEC-C5 FR #1) *@
+                        <MudIconButton Icon="@Icons.Material.Filled.Add"
+                                       Size="Size.Small"
+                                       Class="board-column-add"
+                                       OnClick="@(() => _ = InvokeAsync(() => OpenCreateCardDialogAsync(status)))"
+                                       aria-label="@($"Add card to {status.Name}")" />
                     </div>
 
                     @* ── Drop Zone ────────────────────────────────────────────
@@ -155,6 +156,38 @@
     ];
 
     // ═══════════════════════════════════════════════════════════════════════════
+    //  Drop Container Reference
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Incrementing key used as <c>@key</c> on the <see cref="MudDropContainer{T}"/>.
+    /// When the key changes, Blazor destroys and recreates the container, which is
+    /// necessary because <c>MudDropContainer.Refresh()</c> does not reliably update
+    /// the rendered items when the underlying collection changes (known MudBlazor
+    /// bug — see GitHub issues #4642 and #7312).
+    /// </summary>
+    private int _dropContainerKey;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Public API
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Forces the <see cref="MudDropContainer{T}"/> to be destroyed and recreated by
+    /// incrementing the <c>@key</c> value. This is necessary because
+    /// <c>MudDropContainer.Refresh()</c> does not reliably update the rendered items
+    /// when the underlying collection changes (known MudBlazor bug — see GitHub
+    /// issues #4642 and #7312).
+    /// Must be called by the parent after the <see cref="Cards"/> list is replaced
+    /// (e.g., after a card is created or the board is refreshed).
+    /// </summary>
+    public void RefreshItems()
+    {
+        _dropContainerKey++;
+        StateHasChanged();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     //  Event Handlers
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -227,6 +260,47 @@
         var result = await dialogRef.Result;
 
         // If the card was modified, notify the parent board to refresh its data
+        if (result is { Canceled: false, Data: true })
+        {
+            await OnCardChanged.InvokeAsync();
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Card Creation
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Opens <see cref="CreateCardDialog"/> with the given column's status pre-filled.
+    /// Called from the "Add card" icon button in each column header (SPEC-C5 FR #1).
+    /// After a successful creation the parent board is notified via
+    /// <see cref="OnCardChanged"/> so it can refresh its card list.
+    /// </summary>
+    /// <param name="status">The board status whose ID is pre-filled in the dialog.</param>
+    private async Task OpenCreateCardDialogAsync(BoardStatusDto status)
+    {
+        var parameters = new DialogParameters<CreateCardDialog>
+        {
+            { x => x.ProjectId, ProjectId },
+            { x => x.PrefilledStatusId, status.Id }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseOnEscapeKey = true,
+            CloseButton = true
+        };
+
+        var dialogRef = await DialogService.ShowAsync<CreateCardDialog>(
+            string.Empty, // Title is rendered inside TitleContent — no outer title needed
+            parameters,
+            options);
+
+        var result = await dialogRef.Result;
+
+        // If the card was created, notify the parent board to refresh its data
         if (result is { Canceled: false, Data: true })
         {
             await OnCardChanged.InvokeAsync();
