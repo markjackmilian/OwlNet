@@ -30,7 +30,7 @@
    - ChildContent: the dynamic column layout (one drop zone per status)
    ═══════════════════════════════════════════════════════════════════════════════ *@
 <MudDropContainer T="CardDto"
-                  @ref="_dropContainer"
+                  @key="_dropContainerKey"
                   Items="Cards"
                   ItemsSelector="@((item, zone) => item.StatusId.ToString() == zone)"
                   ItemDropped="OnItemDropped"
@@ -160,25 +160,31 @@
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Reference to the MudDropContainer. Used by the parent (Board.razor) to
-    /// call <see cref="RefreshItems"/> after the card list is updated, so the
-    /// container re-distributes cards into their correct drop zones.
+    /// Incrementing key used as <c>@key</c> on the <see cref="MudDropContainer{T}"/>.
+    /// When the key changes, Blazor destroys and recreates the container, which is
+    /// necessary because <c>MudDropContainer.Refresh()</c> does not reliably update
+    /// the rendered items when the underlying collection changes (known MudBlazor
+    /// bug — see GitHub issues #4642 and #7312).
     /// </summary>
-    private MudDropContainer<CardDto>? _dropContainer;
+    private int _dropContainerKey;
 
     // ═══════════════════════════════════════════════════════════════════════════
     //  Public API
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Instructs the <see cref="MudDropContainer{T}"/> to re-evaluate its
-    /// <c>ItemsSelector</c> and redistribute all items into their correct drop zones.
+    /// Forces the <see cref="MudDropContainer{T}"/> to be destroyed and recreated by
+    /// incrementing the <c>@key</c> value. This is necessary because
+    /// <c>MudDropContainer.Refresh()</c> does not reliably update the rendered items
+    /// when the underlying collection changes (known MudBlazor bug — see GitHub
+    /// issues #4642 and #7312).
     /// Must be called by the parent after the <see cref="Cards"/> list is replaced
     /// (e.g., after a card is created or the board is refreshed).
     /// </summary>
     public void RefreshItems()
     {
-        _dropContainer?.Refresh();
+        _dropContainerKey++;
+        StateHasChanged();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
