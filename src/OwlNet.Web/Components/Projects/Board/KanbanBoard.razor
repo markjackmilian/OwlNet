@@ -123,6 +123,13 @@
     [Parameter]
     public EventCallback<(CardDto Card, Guid NewStatusId)> OnCardStatusChanged { get; set; }
 
+    /// <summary>
+    /// Callback raised when a card was modified inside the detail dialog.
+    /// The parent (Board.razor) handles this to refresh the board data.
+    /// </summary>
+    [Parameter]
+    public EventCallback OnCardChanged { get; set; }
+
     // ═══════════════════════════════════════════════════════════════════════════
     //  Color Palette
     // ═══════════════════════════════════════════════════════════════════════════
@@ -192,28 +199,38 @@
 
     /// <summary>
     /// Handles a card click by opening the <see cref="CardDetailDialog"/> modal.
-    /// Displays the card's number, priority, and full Markdown description.
+    /// Passes both the card and the project ID so the dialog can load
+    /// project-scoped statuses and tags (SPEC-C6).
     /// </summary>
     /// <param name="card">The card that was clicked.</param>
     private async Task OnCardClicked(CardDto card)
     {
         var parameters = new DialogParameters<CardDetailDialog>
         {
-            { x => x.Card, card }
+            { x => x.Card, card },
+            { x => x.ProjectId, ProjectId }
         };
 
         var options = new DialogOptions
         {
-            MaxWidth = MaxWidth.Small,
+            MaxWidth = MaxWidth.Large,
             FullWidth = true,
             CloseOnEscapeKey = true,
             CloseButton = true
         };
 
-        await DialogService.ShowAsync<CardDetailDialog>(
-            card.Title,
+        var dialogRef = await DialogService.ShowAsync<CardDetailDialog>(
+            string.Empty, // Title is rendered inside TitleContent — no outer title needed
             parameters,
             options);
+
+        var result = await dialogRef.Result;
+
+        // If the card was modified, notify the parent board to refresh its data
+        if (result is { Canceled: false, Data: true })
+        {
+            await OnCardChanged.InvokeAsync();
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

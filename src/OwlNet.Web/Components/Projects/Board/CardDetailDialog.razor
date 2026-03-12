@@ -1,58 +1,684 @@
 @* ═══════════════════════════════════════════════════════════════════════════════
-   CardDetailDialog — Card Detail Modal (Placeholder)
+   CardDetailDialog — Card Detail Modal (Full Implementation)
    ═══════════════════════════════════════════════════════════════════════════════
-   Displays a card's number, priority, full Markdown description (un-clamped),
-   and a "Coming soon" placeholder message. Opened when the user clicks a card
-   on the Kanban board.
+   Full-featured dialog for viewing and editing a single Kanban card.
 
-   This is a temporary placeholder dialog. The full card detail view with
-   editing, comments, assignments, and activity history will be implemented
-   in SPEC-C6.
+   Layout: two-panel (MudGrid xs=8 left / xs=4 right)
+   ┌─────────────────────────────────────────────────────────────────────────────┐
+   │ Left panel (~65%)                │ Right panel (~35%)                       │
+   │  • Title (auto-save on blur)     │  • Status (MudSelect, immediate save)    │
+   │  • Description (Markdown edit +  │  • Priority (MudSelect, immediate save)  │
+   │    preview toggle, auto-save)    │  • Tags (chip list + add popover)        │
+   │  • Comments thread               │  • Status History (collapsible)          │
+   │  • Attachments list              │  • Metadata (CreatedAt / UpdatedAt)      │
+   └─────────────────────────────────────────────────────────────────────────────┘
 
-   Spec reference: SPEC-C4-board-wiring (placeholder), SPEC-C6 (full implementation)
+   All mutations are auto-saved immediately (no explicit Save/Cancel buttons).
+   On failure: field reverts + snackbar error. On success: silent.
+
+   The dialog closes with DialogResult.Ok(_cardChanged) so the board can decide
+   whether to refresh the affected card.
+
+   Spec reference: SPEC-C6-card-detail-dialog
    ═══════════════════════════════════════════════════════════════════════════════ *@
 
+@using DispatchR.Abstractions.Send
 @using OwlNet.Application.Common.Models
+@using OwlNet.Application.Cards.Commands.UpdateCard
+@using OwlNet.Application.Cards.Commands.ChangeCardStatus
+@using OwlNet.Application.Cards.Commands.AddTagToCard
+@using OwlNet.Application.Cards.Commands.RemoveTagFromCard
+@using OwlNet.Application.Cards.Commands.AddHumanComment
+@using OwlNet.Application.Cards.Queries.GetCardComments
+@using OwlNet.Application.Cards.Queries.GetCardAttachments
+@using OwlNet.Application.Cards.Queries.GetCardAttachmentContent
+@using OwlNet.Application.Cards.Queries.GetCardStatusHistory
+@using OwlNet.Application.BoardStatuses.Queries.GetProjectStatuses
+@using OwlNet.Application.ProjectTags.Queries.GetProjectTags
 @using OwlNet.Domain.Enums
 @using OwlNet.Web.Services
 
+@inject IRequestHandler<UpdateCardCommand, ValueTask<Result>> UpdateCardHandler
+@inject IRequestHandler<ChangeCardStatusCommand, ValueTask<Result>> ChangeCardStatusHandler
+@inject IRequestHandler<AddTagToCardCommand, ValueTask<Result>> AddTagHandler
+@inject IRequestHandler<RemoveTagFromCardCommand, ValueTask<Result>> RemoveTagHandler
+@inject IRequestHandler<AddHumanCommentCommand, ValueTask<Result<Guid>>> AddCommentHandler
+@inject IRequestHandler<GetCardCommentsQuery, ValueTask<IReadOnlyList<CardCommentDto>>> GetCommentsHandler
+@inject IRequestHandler<GetCardAttachmentsQuery, ValueTask<IReadOnlyList<CardAttachmentDto>>> GetAttachmentsHandler
+@inject IRequestHandler<GetCardAttachmentContentQuery, ValueTask<Result<string>>> GetAttachmentContentHandler
+@inject IRequestHandler<GetCardStatusHistoryQuery, ValueTask<List<CardStatusHistoryDto>>> GetStatusHistoryHandler
+@inject IRequestHandler<GetProjectStatusesQuery, ValueTask<List<BoardStatusDto>>> GetStatusesHandler
+@inject IRequestHandler<GetProjectTagsQuery, ValueTask<IReadOnlyList<ProjectTagDto>>> GetTagsHandler
 @inject IMarkdownService MarkdownService
+@inject ISnackbar Snackbar
+@inject ILogger<CardDetailDialog> Logger
+
+@implements IDisposable
 
 <MudDialog>
-    <DialogContent>
-        <MudStack Spacing="3">
-
-            @* ── Card Number ──────────────────────────────────────────────────
-               Small muted caption showing the sequential card number (e.g., "#42").
-               Displayed at the top so users can reference the card easily. *@
-            <MudText Typo="Typo.caption" Color="Color.Secondary">
+    <TitleContent>
+        @* ── Dialog Header ─────────────────────────────────────────────────────
+           Card number as muted caption + card title as heading.
+           The close button is rendered automatically by MudDialog (CloseButton=true). *@
+        <MudStack Spacing="0">
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="card-detail-number">
                 #@Card.Number
             </MudText>
-
-            @* ── Priority Badge ───────────────────────────────────────────────
-               Colored chip showing the card's priority level. *@
-            <MudChip T="string"
-                     Size="Size.Small"
-                     Color="@GetPriorityColor(Card.Priority)"
-                     Variant="Variant.Filled">
-                @Card.Priority.ToString()
-            </MudChip>
-
-            @* ── Full Description ─────────────────────────────────────────────
-               Renders the card's Markdown description as HTML without line-clamp,
-               so the user can read the full content in the modal. *@
-            <MudText Typo="Typo.body1" Class="card-detail-description">
-                @((MarkupString)MarkdownService.ToHtml(Card.Description))
-            </MudText>
-
-            @* ── Placeholder Notice ───────────────────────────────────────────
-               Indicates that the full card detail view is not yet implemented. *@
-            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true">
-                Card Detail — Coming soon
-            </MudAlert>
-
+            <MudText Typo="Typo.h6">@_editTitle</MudText>
         </MudStack>
+    </TitleContent>
+
+    <DialogContent>
+        <MudGrid Spacing="4">
+
+            @* ══════════════════════════════════════════════════════════════════
+               LEFT PANEL — Title, Description, Comments, Attachments
+               ══════════════════════════════════════════════════════════════════ *@
+            <MudItem xs="8">
+                <MudStack Spacing="4">
+
+                    @* ── Title ─────────────────────────────────────────────────
+                       Large editable text field. Auto-saves on blur if changed.
+                       Shows a subtle saving indicator while the request is in flight. *@
+                    <div class="card-detail-field-group">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-1">
+                            <MudText Typo="Typo.overline" Color="Color.Secondary">Title</MudText>
+                            @if (_isSavingTitle)
+                            {
+                                <MudProgressCircular Size="Size.Small"
+                                                     Indeterminate="true"
+                                                     Class="card-detail-saving-indicator" />
+                            }
+                        </MudStack>
+                        <MudTextField T="string"
+                                      @bind-Value="_editTitle"
+                                      Variant="Variant.Outlined"
+                                      Typo="Typo.h6"
+                                      FullWidth="true"
+                                      Disabled="@_isSavingTitle"
+                                      OnBlur="@HandleTitleBlurAsync"
+                                      aria-label="Card title" />
+                    </div>
+
+                    @* ── Description ───────────────────────────────────────────
+                       Multi-line Markdown editor with a preview toggle.
+                       Edit mode: raw Markdown textarea.
+                       Preview mode: rendered HTML via IMarkdownService.
+                       Auto-saves on blur (edit mode only) if content changed. *@
+                    <div class="card-detail-field-group">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-1">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudText Typo="Typo.overline" Color="Color.Secondary">Description</MudText>
+                                @if (_isSavingDescription)
+                                {
+                                    <MudProgressCircular Size="Size.Small"
+                                                         Indeterminate="true"
+                                                         Class="card-detail-saving-indicator" />
+                                }
+                            </MudStack>
+                            @* Toggle between edit and preview modes *@
+                            <MudToggleIconButton @bind-Toggled="_isDescriptionPreview"
+                                                 Icon="@Icons.Material.Outlined.Visibility"
+                                                 ToggledIcon="@Icons.Material.Outlined.Edit"
+                                                 Size="Size.Small"
+                                                 Color="Color.Default"
+                                                 ToggledColor="Color.Primary"
+                                                 aria-label="@(_isDescriptionPreview ? "Switch to edit mode" : "Preview Markdown")" />
+                        </MudStack>
+
+                        @if (_isDescriptionPreview)
+                        {
+                            @* Preview mode — rendered Markdown *@
+                            <div class="card-detail-description-preview mud-paper mud-elevation-0">
+                                @if (string.IsNullOrWhiteSpace(_editDescription))
+                                {
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="font-italic">
+                                        No description provided.
+                                    </MudText>
+                                }
+                                else
+                                {
+                                    @((MarkupString)MarkdownService.ToHtml(_editDescription))
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            @* Edit mode — raw Markdown textarea *@
+                            <MudTextField T="string"
+                                          @bind-Value="_editDescription"
+                                          Variant="Variant.Outlined"
+                                          Lines="6"
+                                          FullWidth="true"
+                                          Placeholder="Add a description (Markdown supported)..."
+                                          Disabled="@_isSavingDescription"
+                                          OnBlur="@HandleDescriptionBlurAsync"
+                                          aria-label="Card description (Markdown)" />
+                        }
+                    </div>
+
+                    @* ── Comments Section ───────────────────────────────────────
+                       Chronological thread (oldest first). Human and agent comments
+                       are visually distinct via left-border color and icon. *@
+                    <div class="card-detail-section">
+                        <MudText Typo="Typo.subtitle1" Class="card-detail-section-heading">
+                            <MudIcon Icon="@Icons.Material.Outlined.Comment" Size="Size.Small" Class="mr-1" />
+                            Comments
+                        </MudText>
+                        <MudDivider Class="mb-3" />
+
+                        @if (_isLoadingSecondary)
+                        {
+                            @* Skeleton while comments are loading *@
+                            <MudStack Spacing="2">
+                                @for (var i = 0; i < 3; i++)
+                                {
+                                    <MudSkeleton SkeletonType="SkeletonType.Rectangle"
+                                                 Height="64px"
+                                                 Class="rounded" />
+                                }
+                            </MudStack>
+                        }
+                        else if (_comments.Count == 0)
+                        {
+                            @* Empty state *@
+                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="py-2">
+                                No comments yet. Be the first to comment.
+                            </MudText>
+                        }
+                        else
+                        {
+                            @* Comment thread *@
+                            <MudStack Spacing="2" Class="mb-4">
+                                @foreach (var comment in _comments)
+                                {
+                                    <div class="@GetCommentClass(comment.AuthorType)">
+                                        @* Comment header: icon + author + timestamp *@
+                                        <MudStack Row="true"
+                                                  AlignItems="AlignItems.Center"
+                                                  Spacing="1"
+                                                  Class="mb-1">
+                                            @if (comment.AuthorType == CommentAuthorType.Human)
+                                            {
+                                                <MudIcon Icon="@Icons.Material.Filled.Person"
+                                                         Size="Size.Small"
+                                                         Color="Color.Primary" />
+                                                <MudText Typo="Typo.caption"
+                                                         Style="font-weight: 600;">
+                                                    @(comment.AuthorId ?? "user")
+                                                </MudText>
+                                            }
+                                            else
+                                            {
+                                                <MudIcon Icon="@Icons.Material.Filled.SmartToy"
+                                                         Size="Size.Small"
+                                                         Color="Color.Secondary" />
+                                                <MudText Typo="Typo.caption"
+                                                         Style="font-weight: 600;">
+                                                    @(comment.AgentName ?? "Agent")
+                                                </MudText>
+                                                @* Trigger badge for agent comments *@
+                                                @if (comment.WorkflowTriggerId is not null)
+                                                {
+                                                    <MudChip T="string"
+                                                             Size="Size.Small"
+                                                             Variant="Variant.Outlined"
+                                                             Color="Color.Secondary"
+                                                             Class="card-detail-trigger-badge">
+                                                        @(comment.WorkflowTriggerName ?? "Workflow")
+                                                    </MudChip>
+                                                }
+                                            }
+                                            <MudSpacer />
+                                            @* Relative timestamp with full timestamp on hover *@
+                                            <MudTooltip Text="@comment.CreatedAt.ToLocalTime().ToString("f")">
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                    @GetRelativeTime(comment.CreatedAt)
+                                                </MudText>
+                                            </MudTooltip>
+                                        </MudStack>
+                                        @* Comment body — rendered Markdown *@
+                                        <div class="card-detail-comment-body">
+                                            @((MarkupString)MarkdownService.ToHtml(comment.Content))
+                                        </div>
+                                    </div>
+                                }
+                            </MudStack>
+                        }
+
+                        @* ── New Comment Input ──────────────────────────────────
+                           Multi-line textarea + Post button.
+                           Button disabled when input is empty or request is in flight. *@
+                        <MudStack Spacing="2" Class="card-detail-comment-input">
+                            <MudTextField T="string"
+                                          @bind-Value="_newCommentText"
+                                          Variant="Variant.Outlined"
+                                          Lines="3"
+                                          Placeholder="Write a comment (Markdown supported)..."
+                                          Disabled="@_isPostingComment"
+                                          aria-label="New comment" />
+                            <MudStack Row="true" Justify="Justify.FlexEnd">
+                                <MudButton Variant="Variant.Filled"
+                                           Color="Color.Primary"
+                                           StartIcon="@Icons.Material.Filled.Send"
+                                           Disabled="@(string.IsNullOrWhiteSpace(_newCommentText) || _isPostingComment)"
+                                           OnClick="@PostCommentAsync">
+                                    @if (_isPostingComment)
+                                    {
+                                        <MudProgressCircular Size="Size.Small"
+                                                             Indeterminate="true"
+                                                             Class="mr-2" />
+                                        @:Posting...
+                                    }
+                                    else
+                                    {
+                                        @:Post comment
+                                    }
+                                </MudButton>
+                            </MudStack>
+                        </MudStack>
+                    </div>
+
+                    @* ── Attachments Section ────────────────────────────────────
+                       Metadata-only list. Content is loaded on demand via "View". *@
+                    <div class="card-detail-section">
+                        <MudText Typo="Typo.subtitle1" Class="card-detail-section-heading">
+                            <MudIcon Icon="@Icons.Material.Outlined.AttachFile" Size="Size.Small" Class="mr-1" />
+                            Attachments
+                        </MudText>
+                        <MudDivider Class="mb-3" />
+
+                        @if (_isLoadingSecondary)
+                        {
+                            @* Skeleton while attachments are loading *@
+                            <MudStack Spacing="2">
+                                @for (var i = 0; i < 2; i++)
+                                {
+                                    <MudSkeleton SkeletonType="SkeletonType.Rectangle"
+                                                 Height="56px"
+                                                 Class="rounded" />
+                                }
+                            </MudStack>
+                        }
+                        else if (_attachments.Count == 0)
+                        {
+                            @* Empty state *@
+                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="py-2">
+                                No attachments yet. Attachments are generated automatically by workflow triggers.
+                            </MudText>
+                        }
+                        else
+                        {
+                            <MudStack Spacing="2">
+                                @foreach (var attachment in _attachments)
+                                {
+                                    <div class="card-detail-attachment">
+                                        @* Attachment metadata row *@
+                                        <MudStack Row="true"
+                                                  AlignItems="AlignItems.Center"
+                                                  Justify="Justify.SpaceBetween"
+                                                  Spacing="2">
+                                            <MudStack Spacing="0" Style="min-width: 0; flex: 1;">
+                                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                                    <MudIcon Icon="@Icons.Material.Outlined.Description"
+                                                             Size="Size.Small"
+                                                             Color="Color.Secondary" />
+                                                    <MudText Typo="Typo.body2"
+                                                             Style="font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                                        @attachment.FileName
+                                                    </MudText>
+                                                </MudStack>
+                                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                        by @attachment.AgentName
+                                                    </MudText>
+                                                    @if (attachment.WorkflowTriggerId is not null)
+                                                    {
+                                                        <MudText Typo="Typo.caption" Color="Color.Secondary">·</MudText>
+                                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                            @(attachment.WorkflowTriggerName ?? "Workflow")
+                                                        </MudText>
+                                                    }
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">·</MudText>
+                                                    <MudTooltip Text="@attachment.CreatedAt.ToLocalTime().ToString("f")">
+                                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                            @GetRelativeTime(attachment.CreatedAt)
+                                                        </MudText>
+                                                    </MudTooltip>
+                                                </MudStack>
+                                            </MudStack>
+                                            @* View button — loads content on demand *@
+                                            <MudButton Variant="Variant.Outlined"
+                                                       Size="Size.Small"
+                                                       StartIcon="@Icons.Material.Outlined.Visibility"
+                                                       Disabled="@IsAttachmentLoading(attachment.Id)"
+                                                       OnClick="@(() => ToggleAttachmentContentAsync(attachment.Id))">
+                                                @if (IsAttachmentLoading(attachment.Id))
+                                                {
+                                                    <MudProgressCircular Size="Size.Small"
+                                                                         Indeterminate="true"
+                                                                         Class="mr-1" />
+                                                    @:Loading...
+                                                }
+                                                else if (IsAttachmentExpanded(attachment.Id))
+                                                {
+                                                    @:Hide
+                                                }
+                                                else
+                                                {
+                                                    @:View
+                                                }
+                                            </MudButton>
+                                        </MudStack>
+
+                                        @* Expanded content area — rendered Markdown *@
+                                        @if (IsAttachmentExpanded(attachment.Id))
+                                        {
+                                            <MudDivider Class="my-2" />
+                                            @if (_attachmentErrors.TryGetValue(attachment.Id, out var attachError))
+                                            {
+                                                <MudAlert Severity="Severity.Error"
+                                                          Variant="Variant.Outlined"
+                                                          Dense="true">
+                                                    @attachError
+                                                </MudAlert>
+                                            }
+                                            else if (_attachmentContents.TryGetValue(attachment.Id, out var content))
+                                            {
+                                                <div class="card-detail-attachment-content">
+                                                    @((MarkupString)MarkdownService.ToHtml(content))
+                                                </div>
+                                            }
+                                        }
+                                    </div>
+                                }
+                            </MudStack>
+                        }
+                    </div>
+
+                </MudStack>
+            </MudItem>
+
+            @* ══════════════════════════════════════════════════════════════════
+               RIGHT PANEL — Status, Priority, Tags, Status History, Metadata
+               ══════════════════════════════════════════════════════════════════ *@
+            <MudItem xs="4">
+                <MudStack Spacing="4">
+
+                    @* ── Status ────────────────────────────────────────────────
+                       Dropdown populated from GetProjectStatusesQuery.
+                       On change: calls ChangeCardStatusCommand immediately.
+                       On failure: reverts + snackbar. *@
+                    <div class="card-detail-field-group">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-1">
+                            <MudText Typo="Typo.overline" Color="Color.Secondary">Status</MudText>
+                            @if (_isSavingStatus)
+                            {
+                                <MudProgressCircular Size="Size.Small"
+                                                     Indeterminate="true"
+                                                     Class="card-detail-saving-indicator" />
+                            }
+                        </MudStack>
+                        @if (_isLoadingSecondary)
+                        {
+                            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="56px" Class="rounded" />
+                        }
+                        else
+                        {
+                            <MudSelect T="Guid"
+                                       Value="_editStatusId"
+                                       ValueChanged="@HandleStatusChangedAsync"
+                                       Variant="Variant.Outlined"
+                                       FullWidth="true"
+                                       Disabled="@_isSavingStatus"
+                                       aria-label="Card status">
+                                @foreach (var status in _statuses)
+                                {
+                                    <MudSelectItem Value="@status.Id">@status.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                        }
+                    </div>
+
+                    @* ── Priority ───────────────────────────────────────────────
+                       Dropdown for all CardPriority values.
+                       On change: calls UpdateCardCommand immediately.
+                       On failure: reverts + snackbar. *@
+                    <div class="card-detail-field-group">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-1">
+                            <MudText Typo="Typo.overline" Color="Color.Secondary">Priority</MudText>
+                            @if (_isSavingPriority)
+                            {
+                                <MudProgressCircular Size="Size.Small"
+                                                     Indeterminate="true"
+                                                     Class="card-detail-saving-indicator" />
+                            }
+                        </MudStack>
+                        <MudSelect T="CardPriority"
+                                   Value="_editPriority"
+                                   ValueChanged="@HandlePriorityChangedAsync"
+                                   Variant="Variant.Outlined"
+                                   FullWidth="true"
+                                   Disabled="@_isSavingPriority"
+                                   aria-label="Card priority">
+                            @foreach (CardPriority p in Enum.GetValues<CardPriority>())
+                            {
+                                <MudSelectItem Value="@p">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                        <MudIcon Icon="@GetPriorityIcon(p)"
+                                                 Size="Size.Small"
+                                                 Color="@GetPriorityColor(p)" />
+                                        @p.ToString()
+                                    </MudStack>
+                                </MudSelectItem>
+                            }
+                        </MudSelect>
+                    </div>
+
+                    @* ── Tags ───────────────────────────────────────────────────
+                       Chip list of current tags. Click chip to remove.
+                       "Add tag" button opens a popover with available tags. *@
+                    <div class="card-detail-field-group">
+                        <MudText Typo="Typo.overline" Color="Color.Secondary" Class="mb-1">Tags</MudText>
+
+                        @if (_isLoadingSecondary)
+                        {
+                            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="36px" Class="rounded" />
+                        }
+                        else
+                        {
+                            <div class="card-detail-tags-container">
+                                @* Current tag chips — click to remove *@
+                                @foreach (var tag in _editTags)
+                                {
+                                    var tagCapture = tag;
+                                    <MudTooltip Text="Click to remove">
+                                        <MudChip T="string"
+                                                 Style="@GetTagChipStyle(tagCapture)"
+                                                 Size="Size.Small"
+                                                 OnClose="@(() => RemoveTagAsync(tagCapture))"
+                                                 Disabled="@_isSavingTags"
+                                                 aria-label="@($"Remove tag {tagCapture.Name}")">
+                                            @tagCapture.Name
+                                        </MudChip>
+                                    </MudTooltip>
+                                }
+
+                                @* Add tag button — activates the popover below.
+                                   MudPopover uses Open + ChildContent only; the activator
+                                   is a sibling element, not a child of the popover. *@
+                                <div class="card-detail-tag-popover-anchor">
+                                    <MudChip T="string"
+                                             Icon="@Icons.Material.Filled.Add"
+                                             Size="Size.Small"
+                                             Variant="Variant.Outlined"
+                                             OnClick="@ToggleTagPopover"
+                                             Disabled="@_isSavingTags"
+                                             aria-label="Add tag">
+                                        Add tag
+                                    </MudChip>
+                                    <MudPopover Open="_isTagPopoverOpen"
+                                                AnchorOrigin="Origin.BottomLeft"
+                                                TransformOrigin="Origin.TopLeft">
+                                        <MudPaper Class="pa-2" Elevation="4" Style="min-width: 180px; max-height: 240px; overflow-y: auto;">
+                                            @{
+                                                // Tags available to add = all project tags minus already-assigned ones
+                                                var availableTags = _allProjectTags
+                                                    .Where(t => !_editTags.Any(et => et.Id == t.Id))
+                                                    .ToList();
+                                            }
+                                            @if (availableTags.Count == 0)
+                                            {
+                                                @if (_allProjectTags.Count == 0)
+                                                {
+                                                    <MudText Typo="Typo.body2"
+                                                             Color="Color.Secondary"
+                                                             Class="pa-2">
+                                                        No tags defined. Add tags in Project Settings.
+                                                    </MudText>
+                                                }
+                                                else
+                                                {
+                                                    <MudText Typo="Typo.body2"
+                                                             Color="Color.Secondary"
+                                                             Class="pa-2">
+                                                        All tags are already assigned.
+                                                    </MudText>
+                                                }
+                                            }
+                                            else
+                                            {
+                                                <MudList T="ProjectTagDto" Dense="true" Padding="false">
+                                                    @foreach (var tag in availableTags)
+                                                    {
+                                                        var tagCapture = tag;
+                                                        <MudListItem T="ProjectTagDto"
+                                                                     OnClick="@(() => AddTagAsync(tagCapture))">
+                                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                                                <span class="card-detail-tag-dot"
+                                                                      style="background-color: @(tagCapture.Color ?? "#9CA3AF");"></span>
+                                                                <MudText Typo="Typo.body2">@tagCapture.Name</MudText>
+                                                            </MudStack>
+                                                        </MudListItem>
+                                                    }
+                                                </MudList>
+                                            }
+                                        </MudPaper>
+                                    </MudPopover>
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    @* ── Status History ─────────────────────────────────────────
+                       Collapsible section. Most recent first (query returns desc order).
+                       Each entry: previous → new status, actor, source, timestamp. *@
+                    <div class="card-detail-field-group">
+                        <MudExpansionPanels Elevation="0" Class="card-detail-history-panel">
+                            <MudExpansionPanel Text="Status History"
+                                               Icon="@Icons.Material.Outlined.History"
+                                               Dense="true">
+                                @if (_isLoadingSecondary)
+                                {
+                                    <MudStack Spacing="1">
+                                        @for (var i = 0; i < 3; i++)
+                                        {
+                                            <MudSkeleton Height="40px" Class="rounded" />
+                                        }
+                                    </MudStack>
+                                }
+                                else if (_statusHistory.Count == 0)
+                                {
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                        No status changes recorded.
+                                    </MudText>
+                                }
+                                else
+                                {
+                                    <MudStack Spacing="1">
+                                        @foreach (var entry in _statusHistory)
+                                        {
+                                            <div class="card-detail-history-entry">
+                                                @* Status transition arrow *@
+                                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-0">
+                                                    @if (entry.PreviousStatusName is not null)
+                                                    {
+                                                        <MudText Typo="Typo.caption"
+                                                                 Color="Color.Secondary"
+                                                                 Style="text-decoration: line-through;">
+                                                            @entry.PreviousStatusName
+                                                        </MudText>
+                                                        <MudIcon Icon="@Icons.Material.Filled.ArrowForward"
+                                                                 Size="Size.Small"
+                                                                 Color="Color.Secondary" />
+                                                    }
+                                                    <MudText Typo="Typo.caption" Style="font-weight: 600;">
+                                                        @entry.NewStatusName
+                                                    </MudText>
+                                                </MudStack>
+                                                @* Actor + source + timestamp *@
+                                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                        @entry.ChangedBy
+                                                    </MudText>
+                                                    <MudChip T="string"
+                                                             Size="Size.Small"
+                                                             Variant="Variant.Outlined"
+                                                             Color="@(entry.ChangeSource == ChangeSource.Manual ? Color.Primary : Color.Secondary)"
+                                                             Class="card-detail-source-badge">
+                                                        @entry.ChangeSource.ToString()
+                                                    </MudChip>
+                                                    <MudSpacer />
+                                                    <MudTooltip Text="@entry.ChangedAt.ToLocalTime().ToString("f")">
+                                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                            @GetRelativeTime(entry.ChangedAt)
+                                                        </MudText>
+                                                    </MudTooltip>
+                                                </MudStack>
+                                            </div>
+                                        }
+                                    </MudStack>
+                                }
+                            </MudExpansionPanel>
+                        </MudExpansionPanels>
+                    </div>
+
+                    @* ── Metadata ───────────────────────────────────────────────
+                       Read-only timestamps for created and last updated. *@
+                    <div class="card-detail-field-group card-detail-metadata">
+                        <MudStack Spacing="1">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Created</MudText>
+                                <MudTooltip Text="@Card.CreatedAt.ToLocalTime().ToString("f")">
+                                    <MudText Typo="Typo.caption">
+                                        @GetRelativeTime(Card.CreatedAt)
+                                    </MudText>
+                                </MudTooltip>
+                            </MudStack>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Updated</MudText>
+                                <MudTooltip Text="@Card.UpdatedAt.ToLocalTime().ToString("f")">
+                                    <MudText Typo="Typo.caption">
+                                        @GetRelativeTime(Card.UpdatedAt)
+                                    </MudText>
+                                </MudTooltip>
+                            </MudStack>
+                        </MudStack>
+                    </div>
+
+                </MudStack>
+            </MudItem>
+
+        </MudGrid>
     </DialogContent>
+
+    <DialogActions>
+        @* Close button — passes _cardChanged so the board can decide whether to refresh *@
+        <MudButton Variant="Variant.Text"
+                   OnClick="@CloseDialog">
+            Close
+        </MudButton>
+    </DialogActions>
 </MudDialog>
 
 @code {
@@ -62,7 +688,7 @@
 
     /// <summary>
     /// The dialog instance provided by MudBlazor's dialog system.
-    /// Used to close or cancel the dialog programmatically.
+    /// Used to close the dialog and pass back the <see cref="_cardChanged"/> result.
     /// </summary>
     [CascadingParameter]
     private IMudDialogInstance MudDialog { get; set; } = null!;
@@ -72,23 +698,657 @@
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// The card whose details are displayed in this dialog.
-    /// Contains the number, title, description (Markdown), priority, and status.
+    /// The card whose details are displayed and edited in this dialog.
+    /// Provides the initial values for all editable fields.
     /// </summary>
     [Parameter, EditorRequired]
     public CardDto Card { get; set; } = null!;
 
+    /// <summary>
+    /// The owning project ID. Required to load project-scoped statuses and tags.
+    /// Must be passed by the caller (KanbanBoard.razor).
+    /// </summary>
+    [Parameter, EditorRequired]
+    public Guid ProjectId { get; set; }
+
     // ═══════════════════════════════════════════════════════════════════════════
-    //  Helpers
+    //  Editable Field State
+    //  These mirror the Card's current values and are mutated by the user.
+    //  On save failure they are reverted to the last-saved values.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>Current value of the title text field.</summary>
+    private string _editTitle = string.Empty;
+
+    /// <summary>Last successfully saved title — used for revert on failure.</summary>
+    private string _savedTitle = string.Empty;
+
+    /// <summary>Current value of the description text field.</summary>
+    private string _editDescription = string.Empty;
+
+    /// <summary>Last successfully saved description — used for revert on failure.</summary>
+    private string _savedDescription = string.Empty;
+
+    /// <summary>Current selected status ID in the status dropdown.</summary>
+    private Guid _editStatusId;
+
+    /// <summary>Last successfully saved status ID — used for revert on failure.</summary>
+    private Guid _savedStatusId;
+
+    /// <summary>Current selected priority in the priority dropdown.</summary>
+    private CardPriority _editPriority;
+
+    /// <summary>Last successfully saved priority — used for revert on failure.</summary>
+    private CardPriority _savedPriority;
+
+    /// <summary>
+    /// Current list of tags assigned to the card.
+    /// Mutated optimistically on add/remove; reverted on failure.
+    /// </summary>
+    private List<ProjectTagDto> _editTags = [];
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Secondary Data (loaded in parallel on init)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>Comments for this card, ordered oldest-first.</summary>
+    private IReadOnlyList<CardCommentDto> _comments = [];
+
+    /// <summary>Attachment metadata for this card (no content).</summary>
+    private IReadOnlyList<CardAttachmentDto> _attachments = [];
+
+    /// <summary>Status transition history, ordered most-recent-first.</summary>
+    private List<CardStatusHistoryDto> _statusHistory = [];
+
+    /// <summary>All board statuses for this project (for the status dropdown).</summary>
+    private List<BoardStatusDto> _statuses = [];
+
+    /// <summary>All project tags (for the add-tag popover).</summary>
+    private IReadOnlyList<ProjectTagDto> _allProjectTags = [];
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Loading / Saving Flags
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// True while comments, attachments, history, statuses, and tags are loading.
+    /// Drives skeleton loaders in the secondary sections.
+    /// </summary>
+    private bool _isLoadingSecondary = true;
+
+    /// <summary>True while a title auto-save is in flight.</summary>
+    private bool _isSavingTitle;
+
+    /// <summary>True while a description auto-save is in flight.</summary>
+    private bool _isSavingDescription;
+
+    /// <summary>True while a status change is being persisted.</summary>
+    private bool _isSavingStatus;
+
+    /// <summary>True while a priority change is being persisted.</summary>
+    private bool _isSavingPriority;
+
+    /// <summary>True while a tag add/remove is being persisted.</summary>
+    private bool _isSavingTags;
+
+    /// <summary>True while a new comment is being posted.</summary>
+    private bool _isPostingComment;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  UI State
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// True when the description is in preview (rendered Markdown) mode.
+    /// False = edit mode (raw textarea).
+    /// </summary>
+    private bool _isDescriptionPreview;
+
+    /// <summary>True when the "Add tag" popover is open.</summary>
+    private bool _isTagPopoverOpen;
+
+    /// <summary>The text currently typed in the new comment input.</summary>
+    private string _newCommentText = string.Empty;
+
+    /// <summary>
+    /// Tracks which attachment IDs have their content expanded (visible).
+    /// Key = attachment ID, Value = rendered HTML content.
+    /// </summary>
+    private readonly Dictionary<Guid, string> _attachmentContents = [];
+
+    /// <summary>
+    /// Tracks attachment IDs that are currently loading their content.
+    /// </summary>
+    private readonly HashSet<Guid> _attachmentLoadingIds = [];
+
+    /// <summary>
+    /// Tracks inline error messages for attachment content load failures.
+    /// Key = attachment ID, Value = error message.
+    /// </summary>
+    private readonly Dictionary<Guid, string> _attachmentErrors = [];
+
+    /// <summary>
+    /// True if any card field (title, description, priority, status, tags) was
+    /// successfully changed. Used to notify the board to refresh on close.
+    /// </summary>
+    private bool _cardChanged;
+
+    /// <summary>Cancellation token source for all async operations in this component.</summary>
+    private readonly CancellationTokenSource _cts = new();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Lifecycle
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Initialises editable fields from the Card parameter, then loads all
+    /// secondary data (comments, attachments, history, statuses, tags) in parallel.
+    /// </summary>
+    protected override async Task OnInitializedAsync()
+    {
+        // Seed editable fields from the incoming CardDto
+        _editTitle = Card.Title;
+        _savedTitle = Card.Title;
+        _editDescription = Card.Description;
+        _savedDescription = Card.Description;
+        _editStatusId = Card.StatusId;
+        _savedStatusId = Card.StatusId;
+        _editPriority = Card.Priority;
+        _savedPriority = Card.Priority;
+        _editTags = [.. Card.Tags];
+
+        // Load all secondary data in parallel to minimise perceived latency
+        await LoadSecondaryDataAsync();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Data Loading
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Loads comments, attachments, status history, project statuses, and project
+    /// tags in parallel. Skeleton loaders are shown until all tasks complete.
+    /// Individual failures are logged but do not block the rest of the dialog.
+    /// </summary>
+    private async Task LoadSecondaryDataAsync()
+    {
+        _isLoadingSecondary = true;
+
+        try
+        {
+            // Fire all five queries simultaneously — none depend on each other.
+            // Convert ValueTask<T> to Task<T> immediately so we can safely await
+            // the same instance twice (once via WhenAll, once to read the result).
+            var commentsTask = GetCommentsHandler.Handle(
+                new GetCardCommentsQuery { CardId = Card.Id }, _cts.Token).AsTask();
+
+            var attachmentsTask = GetAttachmentsHandler.Handle(
+                new GetCardAttachmentsQuery { CardId = Card.Id }, _cts.Token).AsTask();
+
+            var historyTask = GetStatusHistoryHandler.Handle(
+                new GetCardStatusHistoryQuery { CardId = Card.Id }, _cts.Token).AsTask();
+
+            var statusesTask = GetStatusesHandler.Handle(
+                new GetProjectStatusesQuery { ProjectId = ProjectId }, _cts.Token).AsTask();
+
+            var tagsTask = GetTagsHandler.Handle(
+                new GetProjectTagsQuery { ProjectId = ProjectId }, _cts.Token).AsTask();
+
+            // Await all in parallel
+            await Task.WhenAll(commentsTask, attachmentsTask, historyTask, statusesTask, tagsTask);
+
+            _comments = await commentsTask;
+            _attachments = await attachmentsTask;
+            _statusHistory = await historyTask;
+            _statuses = await statusesTask;
+            _allProjectTags = await tagsTask;
+        }
+        catch (OperationCanceledException)
+        {
+            // Dialog was closed before loading completed — no action needed
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load secondary data for card {CardId}", Card.Id);
+            Snackbar.Add("Some card data could not be loaded. Please try again.", Severity.Warning);
+        }
+        finally
+        {
+            _isLoadingSecondary = false;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Auto-Save Handlers — Title & Description
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Called when the title field loses focus. If the value has changed since
+    /// the last successful save, persists the change via UpdateCardCommand.
+    /// On failure: reverts to the last saved value and shows a snackbar error.
+    /// </summary>
+    private async Task HandleTitleBlurAsync()
+    {
+        var trimmed = _editTitle.Trim();
+
+        // No-op if unchanged or empty (empty would fail validation anyway)
+        if (trimmed == _savedTitle || string.IsNullOrWhiteSpace(trimmed))
+        {
+            _editTitle = _savedTitle;
+            return;
+        }
+
+        _isSavingTitle = true;
+
+        var command = new UpdateCardCommand
+        {
+            Id = Card.Id,
+            Title = trimmed,
+            Description = _savedDescription,
+            Priority = _editPriority
+        };
+
+        var result = await UpdateCardHandler.Handle(command, _cts.Token);
+
+        if (result.IsSuccess)
+        {
+            _savedTitle = trimmed;
+            _editTitle = trimmed;
+            _cardChanged = true;
+        }
+        else
+        {
+            Logger.LogWarning("Failed to save title for card {CardId}: {Error}", Card.Id, result.Error);
+            _editTitle = _savedTitle; // Revert
+            Snackbar.Add("Failed to save title. Please try again.", Severity.Error);
+        }
+
+        _isSavingTitle = false;
+    }
+
+    /// <summary>
+    /// Called when the description field loses focus. If the value has changed
+    /// since the last successful save, persists the change via UpdateCardCommand.
+    /// On failure: reverts to the last saved value and shows a snackbar error.
+    /// </summary>
+    private async Task HandleDescriptionBlurAsync()
+    {
+        // No-op if unchanged
+        if (_editDescription == _savedDescription)
+        {
+            return;
+        }
+
+        _isSavingDescription = true;
+
+        var command = new UpdateCardCommand
+        {
+            Id = Card.Id,
+            Title = _savedTitle,
+            Description = string.IsNullOrWhiteSpace(_editDescription) ? null : _editDescription,
+            Priority = _editPriority
+        };
+
+        var result = await UpdateCardHandler.Handle(command, _cts.Token);
+
+        if (result.IsSuccess)
+        {
+            _savedDescription = _editDescription;
+            _cardChanged = true;
+        }
+        else
+        {
+            Logger.LogWarning("Failed to save description for card {CardId}: {Error}", Card.Id, result.Error);
+            _editDescription = _savedDescription; // Revert
+            Snackbar.Add("Failed to save description. Please try again.", Severity.Error);
+        }
+
+        _isSavingDescription = false;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Status Change Handler
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Called when the user selects a different status from the dropdown.
+    /// Persists the change via ChangeCardStatusCommand immediately.
+    /// On failure: reverts the dropdown and shows a snackbar error.
+    /// On success: fires a fire-and-forget trigger evaluation log (SPEC-C8 placeholder).
+    /// </summary>
+    /// <param name="newStatusId">The newly selected status ID.</param>
+    private async Task HandleStatusChangedAsync(Guid newStatusId)
+    {
+        if (newStatusId == _savedStatusId)
+        {
+            return;
+        }
+
+        var previousStatusId = _savedStatusId;
+        _editStatusId = newStatusId; // Optimistic UI update
+        _isSavingStatus = true;
+
+        var command = new ChangeCardStatusCommand
+        {
+            CardId = Card.Id,
+            NewStatusId = newStatusId,
+            ChangedBy = "user",
+            ChangeSource = ChangeSource.Manual
+        };
+
+        var result = await ChangeCardStatusHandler.Handle(command, _cts.Token);
+
+        if (result.IsSuccess)
+        {
+            _savedStatusId = newStatusId;
+            _cardChanged = true;
+
+            // SPEC-C8 placeholder: log the trigger evaluation intent.
+            // The actual trigger execution pipeline will be wired in SPEC-C8.
+            Logger.LogInformation(
+                "Card {CardId} status changed from {From} to {To} — trigger evaluation pending (SPEC-C8)",
+                Card.Id, previousStatusId, newStatusId);
+        }
+        else
+        {
+            Logger.LogWarning(
+                "Failed to change status for card {CardId}: {Error}", Card.Id, result.Error);
+            _editStatusId = previousStatusId; // Revert
+            Snackbar.Add("Failed to change status. Please try again.", Severity.Error);
+        }
+
+        _isSavingStatus = false;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Priority Change Handler
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Called when the user selects a different priority from the dropdown.
+    /// Persists the change via UpdateCardCommand immediately.
+    /// On failure: reverts the dropdown and shows a snackbar error.
+    /// </summary>
+    /// <param name="newPriority">The newly selected priority.</param>
+    private async Task HandlePriorityChangedAsync(CardPriority newPriority)
+    {
+        if (newPriority == _savedPriority)
+        {
+            return;
+        }
+
+        var previousPriority = _savedPriority;
+        _editPriority = newPriority; // Optimistic UI update
+        _isSavingPriority = true;
+
+        var command = new UpdateCardCommand
+        {
+            Id = Card.Id,
+            Title = _savedTitle,
+            Description = string.IsNullOrWhiteSpace(_savedDescription) ? null : _savedDescription,
+            Priority = newPriority
+        };
+
+        var result = await UpdateCardHandler.Handle(command, _cts.Token);
+
+        if (result.IsSuccess)
+        {
+            _savedPriority = newPriority;
+            _cardChanged = true;
+        }
+        else
+        {
+            Logger.LogWarning(
+                "Failed to change priority for card {CardId}: {Error}", Card.Id, result.Error);
+            _editPriority = previousPriority; // Revert
+            Snackbar.Add("Failed to change priority. Please try again.", Severity.Error);
+        }
+
+        _isSavingPriority = false;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Tag Handlers
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Adds a tag to the card via AddTagToCardCommand.
+    /// Applies an optimistic UI update immediately; reverts on failure.
+    /// Closes the tag popover after the operation.
+    /// </summary>
+    /// <param name="tag">The tag to add.</param>
+    private async Task AddTagAsync(ProjectTagDto tag)
+    {
+        // Close the popover immediately for responsive feel
+        _isTagPopoverOpen = false;
+
+        // Optimistic update — add to local list before server confirms
+        _editTags.Add(tag);
+        _isSavingTags = true;
+
+        var command = new AddTagToCardCommand
+        {
+            CardId = Card.Id,
+            TagId = tag.Id
+        };
+
+        var result = await AddTagHandler.Handle(command, _cts.Token);
+
+        if (result.IsSuccess)
+        {
+            _cardChanged = true;
+        }
+        else
+        {
+            Logger.LogWarning(
+                "Failed to add tag {TagId} to card {CardId}: {Error}", tag.Id, Card.Id, result.Error);
+            _editTags.Remove(tag); // Revert optimistic update
+            Snackbar.Add("Failed to add tag. Please try again.", Severity.Error);
+        }
+
+        _isSavingTags = false;
+    }
+
+    /// <summary>
+    /// Removes a tag from the card via RemoveTagFromCardCommand.
+    /// Applies an optimistic UI update immediately; reverts on failure.
+    /// </summary>
+    /// <param name="tag">The tag to remove.</param>
+    private async Task RemoveTagAsync(ProjectTagDto tag)
+    {
+        // Optimistic update — remove from local list before server confirms
+        _editTags.Remove(tag);
+        _isSavingTags = true;
+
+        var command = new RemoveTagFromCardCommand
+        {
+            CardId = Card.Id,
+            TagId = tag.Id
+        };
+
+        var result = await RemoveTagHandler.Handle(command, _cts.Token);
+
+        if (result.IsSuccess)
+        {
+            _cardChanged = true;
+        }
+        else
+        {
+            Logger.LogWarning(
+                "Failed to remove tag {TagId} from card {CardId}: {Error}", tag.Id, Card.Id, result.Error);
+            _editTags.Add(tag); // Revert optimistic update
+            Snackbar.Add("Failed to remove tag. Please try again.", Severity.Error);
+        }
+
+        _isSavingTags = false;
+    }
+
+    /// <summary>Toggles the tag selection popover open/closed.</summary>
+    private void ToggleTagPopover() => _isTagPopoverOpen = !_isTagPopoverOpen;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Comment Handler
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Posts a new human comment via AddHumanCommentCommand.
+    /// On success: appends the new comment to the thread and clears the input.
+    /// On failure: shows a snackbar error and retains the input text.
+    /// </summary>
+    private async Task PostCommentAsync()
+    {
+        var content = _newCommentText.Trim();
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return;
+        }
+
+        _isPostingComment = true;
+
+        var command = new AddHumanCommentCommand
+        {
+            CardId = Card.Id,
+            Content = content,
+            AuthorId = "user"
+        };
+
+        var result = await AddCommentHandler.Handle(command, _cts.Token);
+
+        if (result.IsSuccess)
+        {
+            // Append the new comment to the thread immediately without a full reload.
+            // We construct a local CardCommentDto from the known data.
+            var newComment = new CardCommentDto(
+                Id: result.Value,
+                CardId: Card.Id,
+                Content: content,
+                AuthorType: CommentAuthorType.Human,
+                AuthorId: "user",
+                AgentName: null,
+                WorkflowTriggerId: null,
+                WorkflowTriggerName: null,
+                CreatedAt: DateTimeOffset.UtcNow);
+
+            // IReadOnlyList — rebuild as a new list with the appended comment
+            _comments = [.. _comments, newComment];
+            _newCommentText = string.Empty;
+        }
+        else
+        {
+            Logger.LogWarning(
+                "Failed to post comment on card {CardId}: {Error}", Card.Id, result.Error);
+            Snackbar.Add("Failed to post comment. Please try again.", Severity.Error);
+            // Input is retained so the user doesn't lose their text
+        }
+
+        _isPostingComment = false;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Attachment Content Handler
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Toggles the expanded content view for an attachment.
+    /// If not yet loaded, fetches the content via GetCardAttachmentContentQuery.
+    /// If already expanded, collapses it (removes from the content dictionary).
+    /// On failure: shows an inline error message below the attachment row.
+    /// </summary>
+    /// <param name="attachmentId">The ID of the attachment to toggle.</param>
+    private async Task ToggleAttachmentContentAsync(Guid attachmentId)
+    {
+        // If already expanded, collapse it
+        if (_attachmentContents.ContainsKey(attachmentId))
+        {
+            _attachmentContents.Remove(attachmentId);
+            _attachmentErrors.Remove(attachmentId);
+            return;
+        }
+
+        // Clear any previous error for this attachment
+        _attachmentErrors.Remove(attachmentId);
+        _attachmentLoadingIds.Add(attachmentId);
+
+        var query = new GetCardAttachmentContentQuery { AttachmentId = attachmentId };
+        var result = await GetAttachmentContentHandler.Handle(query, _cts.Token);
+
+        _attachmentLoadingIds.Remove(attachmentId);
+
+        if (result.IsSuccess)
+        {
+            _attachmentContents[attachmentId] = result.Value;
+        }
+        else
+        {
+            Logger.LogWarning(
+                "Failed to load content for attachment {AttachmentId}: {Error}",
+                attachmentId, result.Error);
+            _attachmentErrors[attachmentId] = "Failed to load attachment content. Please try again.";
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Dialog Close
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Closes the dialog, passing back whether the card was modified.
+    /// The board uses this result to decide whether to refresh the card.
+    /// </summary>
+    private void CloseDialog()
+    {
+        MudDialog.Close(DialogResult.Ok(_cardChanged));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Helpers — Attachment State
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>Returns true if the attachment's content is currently being fetched.</summary>
+    private bool IsAttachmentLoading(Guid attachmentId) =>
+        _attachmentLoadingIds.Contains(attachmentId);
+
+    /// <summary>Returns true if the attachment's content is currently expanded/visible.</summary>
+    private bool IsAttachmentExpanded(Guid attachmentId) =>
+        _attachmentContents.ContainsKey(attachmentId) || _attachmentErrors.ContainsKey(attachmentId);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Helpers — Comment Styling
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Returns the CSS class for a comment bubble based on the author type.
+    /// Human comments get a blue left border; agent comments get a purple left border.
+    /// </summary>
+    /// <param name="authorType">The comment's author type.</param>
+    private static string GetCommentClass(CommentAuthorType authorType) =>
+        authorType == CommentAuthorType.Human
+            ? "card-detail-comment card-detail-comment--human"
+            : "card-detail-comment card-detail-comment--agent";
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Helpers — Tag Styling
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Builds an inline style string for a tag chip using the tag's stored color.
+    /// Falls back to a neutral gray if no color is defined.
+    /// </summary>
+    /// <param name="tag">The tag to style.</param>
+    private static string GetTagChipStyle(ProjectTagDto tag)
+    {
+        var bg = tag.Color ?? "#E5E7EB";
+        return $"background-color: {bg}; color: var(--mud-palette-text-primary);";
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Helpers — Priority
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// <summary>
     /// Maps a <see cref="CardPriority"/> to a MudBlazor <see cref="Color"/>
-    /// for the priority chip. Each priority level has a distinct color to
-    /// provide clear visual differentiation.
+    /// for the priority dropdown icon.
     /// </summary>
-    /// <param name="priority">The card's priority level.</param>
-    /// <returns>The MudBlazor color for the priority chip.</returns>
     private static Color GetPriorityColor(CardPriority priority) => priority switch
     {
         CardPriority.Critical => Color.Error,
@@ -97,4 +1357,78 @@
         CardPriority.Low      => Color.Success,
         _                     => Color.Default
     };
+
+    /// <summary>
+    /// Maps a <see cref="CardPriority"/> to a Material icon for the priority dropdown.
+    /// </summary>
+    private static string GetPriorityIcon(CardPriority priority) => priority switch
+    {
+        CardPriority.Critical => Icons.Material.Filled.KeyboardDoubleArrowUp,
+        CardPriority.High     => Icons.Material.Filled.KeyboardArrowUp,
+        CardPriority.Medium   => Icons.Material.Filled.Remove,
+        CardPriority.Low      => Icons.Material.Filled.KeyboardArrowDown,
+        _                     => Icons.Material.Filled.Remove
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Helpers — Relative Time
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Converts a <see cref="DateTimeOffset"/> to a human-readable relative time string
+    /// (e.g., "just now", "5 minutes ago", "2 hours ago", "3 days ago").
+    /// The full timestamp is shown in a MudTooltip on hover.
+    /// </summary>
+    /// <param name="timestamp">The UTC timestamp to format.</param>
+    /// <returns>A relative time string.</returns>
+    private static string GetRelativeTime(DateTimeOffset timestamp)
+    {
+        var elapsed = DateTimeOffset.UtcNow - timestamp;
+        var totalSeconds = elapsed.TotalSeconds;
+
+        // Use if/else instead of switch expression with '<' to avoid Razor parser
+        // misinterpreting the less-than operator as an HTML tag open character.
+        if (totalSeconds < 60)
+        {
+            return "just now";
+        }
+
+        if (totalSeconds < 3600)
+        {
+            var minutes = (int)elapsed.TotalMinutes;
+            return $"{minutes} minute{(minutes == 1 ? "" : "s")} ago";
+        }
+
+        if (totalSeconds < 86400)
+        {
+            var hours = (int)elapsed.TotalHours;
+            return $"{hours} hour{(hours == 1 ? "" : "s")} ago";
+        }
+
+        if (totalSeconds < 2592000)
+        {
+            var days = (int)elapsed.TotalDays;
+            return $"{days} day{(days == 1 ? "" : "s")} ago";
+        }
+
+        if (totalSeconds < 31536000)
+        {
+            var months = (int)(elapsed.TotalDays / 30);
+            return $"{months} month{(months == 1 ? "" : "s")} ago";
+        }
+
+        var years = (int)(elapsed.TotalDays / 365);
+        return $"{years} year{(years == 1 ? "" : "s")} ago";
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Cleanup
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
 }
