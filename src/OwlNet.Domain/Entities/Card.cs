@@ -13,6 +13,7 @@ namespace OwlNet.Domain.Entities;
 public sealed class Card
 {
     private readonly List<CardStatusHistory> _statusHistory = [];
+    private readonly List<CardTag> _tags = [];
 
     /// <summary>
     /// Gets the unique identifier for this card.
@@ -72,6 +73,11 @@ public sealed class Card
     /// Includes the initial status assignment at creation (with <c>PreviousStatusId = null</c>).
     /// </summary>
     public IReadOnlyList<CardStatusHistory> StatusHistory => _statusHistory;
+
+    /// <summary>
+    /// Gets the read-only list of tags assigned to this card.
+    /// </summary>
+    public IReadOnlyList<CardTag> Tags => _tags;
 
     /// <summary>
     /// Required by EF Core for materialization. Do not call directly.
@@ -228,6 +234,58 @@ public sealed class Card
         UpdatedAt = DateTimeOffset.UtcNow;
 
         return DomainResult.Success();
+    }
+
+    /// <summary>
+    /// Assigns a <see cref="ProjectTag"/> to this card.
+    /// </summary>
+    /// <param name="tagId">The identifier of the <see cref="ProjectTag"/> to assign.</param>
+    /// <param name="tagProjectId">
+    /// The <c>ProjectId</c> of the <see cref="ProjectTag"/> being assigned.
+    /// Must equal <see cref="ProjectId"/> — cross-project tag assignments are rejected.
+    /// </param>
+    /// <returns>
+    /// <see cref="DomainResult.Success"/> when the tag was added or when it was already present
+    /// (idempotent — no duplicate entry is created).
+    /// <see cref="DomainResult.Failure"/> when <paramref name="tagProjectId"/> does not match
+    /// <see cref="ProjectId"/>.
+    /// </returns>
+    public DomainResult AddTag(Guid tagId, Guid tagProjectId)
+    {
+        // Guard: the tag must belong to this card's project.
+        if (tagProjectId != ProjectId)
+        {
+            return DomainResult.Failure("Tag does not belong to this project.");
+        }
+
+        // Idempotent: tag already present — no-op, no error.
+        if (_tags.Any(t => t.TagId == tagId))
+        {
+            return DomainResult.Success();
+        }
+
+        _tags.Add(CardTag.Create(Id, tagId));
+        UpdatedAt = DateTimeOffset.UtcNow;
+
+        return DomainResult.Success();
+    }
+
+    /// <summary>
+    /// Removes a <see cref="ProjectTag"/> from this card.
+    /// This method is a no-op when the tag is not currently assigned to the card.
+    /// </summary>
+    /// <param name="tagId">The identifier of the <see cref="ProjectTag"/> to remove.</param>
+    public void RemoveTag(Guid tagId)
+    {
+        var existing = _tags.FirstOrDefault(t => t.TagId == tagId);
+
+        if (existing is null)
+        {
+            return;
+        }
+
+        _tags.Remove(existing);
+        UpdatedAt = DateTimeOffset.UtcNow;
     }
 
     private static void ValidateTitle(string title)

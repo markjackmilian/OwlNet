@@ -54,6 +54,16 @@ public sealed class ApplicationDbContext : IdentityDbContext<ApplicationUser, Id
     public DbSet<CardStatusHistory> CardStatusHistories => Set<CardStatusHistory>();
 
     /// <summary>
+    /// Gets the set of <see cref="ProjectTag"/> entities representing project-scoped tag vocabulary.
+    /// </summary>
+    public DbSet<ProjectTag> ProjectTags => Set<ProjectTag>();
+
+    /// <summary>
+    /// Gets the set of <see cref="CardTag"/> entities representing card-tag associations.
+    /// </summary>
+    public DbSet<CardTag> CardTags => Set<CardTag>();
+
+    /// <summary>
     /// Gets the set of <see cref="WorkflowTrigger"/> entities representing workflow automation triggers.
     /// </summary>
     public DbSet<WorkflowTrigger> WorkflowTriggers => Set<WorkflowTrigger>();

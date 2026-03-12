@@ -24,6 +24,21 @@ public interface ICardRepository
     ValueTask<Card?> GetEntityByIdAsync(Guid id, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Returns the <see cref="Card"/> domain entity by its ID, with the <see cref="Card.Tags"/>
+    /// navigation property eagerly loaded.
+    /// The returned entity is tracked by EF Core and can be mutated and saved.
+    /// Use this overload when the handler needs to call <see cref="Card.AddTag"/> or
+    /// <see cref="Card.RemoveTag"/> to ensure the tag collection is populated.
+    /// </summary>
+    /// <param name="id">The card identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    /// The tracked <see cref="Card"/> entity with <see cref="Card.Tags"/> loaded if found;
+    /// otherwise <see langword="null"/>.
+    /// </returns>
+    ValueTask<Card?> GetEntityByIdWithTagsAsync(Guid id, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Returns all cards belonging to the specified project as read-only projections,
     /// with optional filtering by status and/or priority.
     /// Results are ordered by <see cref="Card.Number"/> ascending.

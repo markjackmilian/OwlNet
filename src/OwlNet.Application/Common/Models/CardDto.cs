@@ -17,6 +17,7 @@ namespace OwlNet.Application.Common.Models;
 /// <param name="ProjectId">The identifier of the owning project.</param>
 /// <param name="CreatedAt">The UTC timestamp when the card was created.</param>
 /// <param name="UpdatedAt">The UTC timestamp of the last update to the card.</param>
+/// <param name="Tags">The list of tags associated with the card.</param>
 public sealed record CardDto(
     Guid Id,
     int Number,
@@ -27,4 +28,5 @@ public sealed record CardDto(
     string StatusName,
     Guid ProjectId,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    IReadOnlyList<ProjectTagDto> Tags);

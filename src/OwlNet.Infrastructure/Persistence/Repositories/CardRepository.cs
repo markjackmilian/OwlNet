@@ -40,6 +40,16 @@ public sealed class CardRepository : ICardRepository
     }
 
     /// <inheritdoc />
+    public async ValueTask<Card?> GetEntityByIdWithTagsAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Fetching card entity {CardId} with tags", id);
+
+        return await _context.Cards
+            .Include(c => c.Tags)
+            .FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
+    }
+
+    /// <inheritdoc />
     public async ValueTask<List<CardDto>> GetByProjectIdAsync(
         Guid projectId,
         Guid? statusId = null,
@@ -69,7 +79,16 @@ public sealed class CardRepository : ICardRepository
                     .FirstOrDefault() ?? string.Empty,
                 c.ProjectId,
                 c.CreatedAt,
-                c.UpdatedAt))
+                c.UpdatedAt,
+                c.Tags
+                    .Select(ct => new ProjectTagDto(
+                        ct.Tag.Id,
+                        ct.Tag.ProjectId,
+                        ct.Tag.Name,
+                        ct.Tag.Color,
+                        ct.Tag.CreatedAt,
+                        ct.Tag.UpdatedAt))
+                    .ToList()))
             .ToListAsync(cancellationToken);
     }
 
