@@ -806,9 +806,9 @@ public sealed class CardHandlerTests
 
         var expectedCards = new List<CardDto>
         {
-            new(Guid.NewGuid(), 1, "Card One",   "Desc 1", CardPriority.Low,    statusId, "Backlog", projectId, now, now),
-            new(Guid.NewGuid(), 2, "Card Two",   "Desc 2", CardPriority.Medium, statusId, "Backlog", projectId, now, now),
-            new(Guid.NewGuid(), 3, "Card Three", "Desc 3", CardPriority.High,   statusId, "Backlog", projectId, now, now)
+            new(Guid.NewGuid(), 1, "Card One",   "Desc 1", CardPriority.Low,    statusId, "Backlog", projectId, now, now, []),
+            new(Guid.NewGuid(), 2, "Card Two",   "Desc 2", CardPriority.Medium, statusId, "Backlog", projectId, now, now, []),
+            new(Guid.NewGuid(), 3, "Card Three", "Desc 3", CardPriority.High,   statusId, "Backlog", projectId, now, now, [])
         };
 
         _cardRepository.GetByProjectIdAsync(
