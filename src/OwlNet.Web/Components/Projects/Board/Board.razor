@@ -125,7 +125,8 @@ else if (_project is not null)
     <KanbanBoard Statuses="_statuses"
                  Cards="_cards"
                  ProjectId="ProjectId"
-                 OnCardStatusChanged="HandleCardStatusChangedAsync" />
+                 OnCardStatusChanged="HandleCardStatusChangedAsync"
+                 OnCardChanged="RefreshBoardAsync" />
 }
 
 @code {

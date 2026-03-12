@@ -1,0 +1,265 @@
+/* ═══════════════════════════════════════════════════════════════════════════════
+   CardDetailDialog.razor scoped styles
+   ═══════════════════════════════════════════════════════════════════════════════
+   Styles for the full card detail dialog (SPEC-C6).
+
+   Naming convention: "card-detail-" prefix for all classes in this file.
+   Colors use MudBlazor CSS custom properties (--mud-palette-*) for theme
+   compatibility in both light and dark modes.
+
+   Spec reference: SPEC-C6-card-detail-dialog
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+
+/* ── Card Number Caption ───────────────────────────────────────────────────── */
+/* Small muted label above the title in the dialog header. */
+
+.card-detail-number {
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+}
+
+
+/* ── Field Groups ──────────────────────────────────────────────────────────── */
+/* Wrapper for a label + input pair. Provides consistent vertical spacing
+   between the overline label and the input control. */
+
+.card-detail-field-group {
+    display: flex;
+    flex-direction: column;
+}
+
+
+/* ── Saving Indicator ──────────────────────────────────────────────────────── */
+/* Tiny spinner shown inline next to the field label during auto-save.
+   Kept small so it doesn't disrupt the layout. */
+
+.card-detail-saving-indicator {
+    width: 14px !important;
+    height: 14px !important;
+}
+
+
+/* ── Description Preview ───────────────────────────────────────────────────── */
+/* Container for the rendered Markdown preview of the description.
+   Matches the visual footprint of the textarea (min-height) so the layout
+   doesn't jump when toggling between edit and preview modes. */
+
+.card-detail-description-preview {
+    min-height: 144px; /* ~6 lines at 1.5 line-height */
+    padding: 12px 14px;
+    border: 1px solid var(--mud-palette-lines-inputs);
+    border-radius: 4px;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    color: var(--mud-palette-text-primary);
+}
+
+/* Reset margins on Markdown-rendered elements inside the preview
+   to prevent excessive spacing from default browser styles. */
+::deep .card-detail-description-preview p,
+::deep .card-detail-description-preview ul,
+::deep .card-detail-description-preview ol {
+    margin-top: 0;
+    margin-bottom: 0.5em;
+}
+
+::deep .card-detail-description-preview ul,
+::deep .card-detail-description-preview ol {
+    padding-left: 1.4em;
+}
+
+::deep .card-detail-description-preview code {
+    background-color: var(--mud-palette-background);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 0.8rem;
+}
+
+::deep .card-detail-description-preview pre {
+    background-color: var(--mud-palette-background);
+    padding: 10px 12px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: 0.8rem;
+}
+
+
+/* ── Section Headings ──────────────────────────────────────────────────────── */
+/* Consistent heading style for Comments and Attachments sections. */
+
+.card-detail-section {
+    display: flex;
+    flex-direction: column;
+}
+
+.card-detail-section-heading {
+    display: flex;
+    align-items: center;
+    font-weight: 600 !important;
+    margin-bottom: 8px;
+}
+
+
+/* ── Comments ──────────────────────────────────────────────────────────────── */
+/* Individual comment bubble. Human and agent comments are visually distinct
+   via a colored left border. */
+
+.card-detail-comment {
+    padding: 10px 12px;
+    border-radius: 6px;
+    border-left: 3px solid transparent;
+    background-color: var(--mud-palette-background);
+}
+
+/* Human comment — blue left border */
+.card-detail-comment--human {
+    border-left-color: var(--mud-palette-primary);
+}
+
+/* Agent comment — secondary (muted) left border */
+.card-detail-comment--agent {
+    border-left-color: var(--mud-palette-secondary);
+    background-color: var(--mud-palette-surface);
+}
+
+/* Comment body — rendered Markdown content */
+.card-detail-comment-body {
+    font-size: 0.875rem;
+    line-height: 1.6;
+    color: var(--mud-palette-text-primary);
+}
+
+::deep .card-detail-comment-body p {
+    margin: 0 0 0.4em;
+}
+
+::deep .card-detail-comment-body p:last-child {
+    margin-bottom: 0;
+}
+
+::deep .card-detail-comment-body code {
+    background-color: var(--mud-palette-lines-default);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 0.8rem;
+}
+
+/* Trigger badge on agent comments — compact chip */
+::deep .card-detail-trigger-badge {
+    height: 18px !important;
+    font-size: 0.6rem !important;
+    padding: 0 6px !important;
+}
+
+/* New comment input area — slight top separation from the thread */
+.card-detail-comment-input {
+    margin-top: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--mud-palette-divider);
+}
+
+
+/* ── Attachments ───────────────────────────────────────────────────────────── */
+/* Individual attachment row with metadata and View button. */
+
+.card-detail-attachment {
+    padding: 10px 12px;
+    border: 1px solid var(--mud-palette-divider);
+    border-radius: 6px;
+    background-color: var(--mud-palette-background);
+}
+
+/* Expanded attachment content — rendered Markdown */
+.card-detail-attachment-content {
+    font-size: 0.875rem;
+    line-height: 1.6;
+    color: var(--mud-palette-text-primary);
+    padding: 4px 0;
+}
+
+::deep .card-detail-attachment-content p {
+    margin: 0 0 0.5em;
+}
+
+::deep .card-detail-attachment-content p:last-child {
+    margin-bottom: 0;
+}
+
+::deep .card-detail-attachment-content code {
+    background-color: var(--mud-palette-background);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 0.8rem;
+}
+
+::deep .card-detail-attachment-content pre {
+    background-color: var(--mud-palette-background);
+    padding: 10px 12px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: 0.8rem;
+}
+
+
+/* ── Tags ──────────────────────────────────────────────────────────────────── */
+/* Flex-wrap container for tag chips and the "Add tag" chip. */
+
+.card-detail-tags-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+
+/* Small colored dot used in the tag popover list items */
+.card-detail-tag-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* Tag popover — ensure it appears above other content */
+::deep .card-detail-tag-popover {
+    z-index: 1400;
+}
+
+
+/* ── Status History ────────────────────────────────────────────────────────── */
+/* Expansion panel wrapper — remove default MudBlazor border/shadow so it
+   blends with the right panel's field groups. */
+
+.card-detail-history-panel {
+    border: 1px solid var(--mud-palette-divider) !important;
+    border-radius: 4px !important;
+}
+
+/* Individual history entry row */
+.card-detail-history-entry {
+    padding: 6px 0;
+    border-bottom: 1px solid var(--mud-palette-divider);
+}
+
+.card-detail-history-entry:last-child {
+    border-bottom: none;
+}
+
+/* Source badge (Manual / Trigger) — compact chip */
+::deep .card-detail-source-badge {
+    height: 18px !important;
+    font-size: 0.6rem !important;
+    padding: 0 6px !important;
+}
+
+
+/* ── Metadata ──────────────────────────────────────────────────────────────── */
+/* Read-only created/updated timestamps at the bottom of the right panel. */
+
+.card-detail-metadata {
+    padding: 8px 10px;
+    border: 1px solid var(--mud-palette-divider);
+    border-radius: 4px;
+    background-color: var(--mud-palette-background);
+}
