@@ -15,6 +15,7 @@ public sealed class Card
     private readonly List<CardStatusHistory> _statusHistory = [];
     private readonly List<CardTag> _tags = [];
     private readonly List<CardComment> _comments = [];
+    private readonly List<CardAttachment> _attachments = [];
 
     /// <summary>
     /// Gets the unique identifier for this card.
@@ -85,6 +86,12 @@ public sealed class Card
     /// in the order they were appended (oldest first).
     /// </summary>
     public IReadOnlyList<CardComment> Comments => _comments;
+
+    /// <summary>
+    /// Gets the read-only list of attachments added to this card by agents during workflow trigger execution,
+    /// in the order they were appended (oldest first).
+    /// </summary>
+    public IReadOnlyList<CardAttachment> Attachments => _attachments;
 
     /// <summary>
     /// Required by EF Core for materialization. Do not call directly.
@@ -349,6 +356,45 @@ public sealed class Card
         _comments.Add(comment);
 
         return comment;
+    }
+
+    /// <summary>
+    /// Creates a new <see cref="CardAttachment"/> on this card and appends it to <see cref="Attachments"/>.
+    /// All validation is delegated to <see cref="CardAttachment.Create"/>; no validation logic is
+    /// duplicated here.
+    /// </summary>
+    /// <remarks>
+    /// This method does <b>not</b> update <see cref="UpdatedAt"/> — attachments are produced by agents
+    /// and do not constitute a modification to the card data itself.
+    /// </remarks>
+    /// <param name="fileName">
+    /// The human-readable file name (e.g., <c>code-review-summary.md</c>).
+    /// Must not be <see langword="null"/> or whitespace and must not exceed 200 characters.
+    /// </param>
+    /// <param name="content">
+    /// The full Markdown content of the attachment.
+    /// Must not be <see langword="null"/> or whitespace.
+    /// </param>
+    /// <param name="agentName">
+    /// The name of the agent that generated the attachment (filename without <c>.md</c> extension).
+    /// Must not be <see langword="null"/> or whitespace and must not exceed 200 characters.
+    /// </param>
+    /// <param name="workflowTriggerId">
+    /// The identifier of the <see cref="WorkflowTrigger"/> whose execution produced this attachment.
+    /// </param>
+    /// <returns>The newly created <see cref="CardAttachment"/> instance.</returns>
+    /// <exception cref="ArgumentException">
+    /// Thrown when any required field fails validation (see <see cref="CardAttachment.Create"/>).
+    /// </exception>
+    public CardAttachment AddAttachment(
+        string fileName,
+        string content,
+        string agentName,
+        Guid workflowTriggerId)
+    {
+        var attachment = CardAttachment.Create(Id, fileName, content, agentName, workflowTriggerId);
+        _attachments.Add(attachment);
+        return attachment;
     }
 
     private static void ValidateTitle(string title)
