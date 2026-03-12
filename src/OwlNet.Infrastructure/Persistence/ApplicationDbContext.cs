@@ -79,6 +79,11 @@ public sealed class ApplicationDbContext : IdentityDbContext<ApplicationUser, Id
     public DbSet<WorkflowTriggerAgent> WorkflowTriggerAgents => Set<WorkflowTriggerAgent>();
 
     /// <summary>
+    /// Gets the set of <see cref="CardAttachment"/> entities representing agent-generated attachments on cards.
+    /// </summary>
+    public DbSet<CardAttachment> CardAttachments => Set<CardAttachment>();
+
+    /// <summary>
     /// Configures the model by applying Identity table mappings and all
     /// <see cref="IEntityTypeConfiguration{TEntity}"/> implementations from the Infrastructure assembly.
     /// </summary>

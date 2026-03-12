@@ -257,6 +257,45 @@ namespace OwlNet.Infrastructure.Persistence.Migrations.Sqlite
                     b.ToTable("Cards", (string)null);
                 });
 
+            modelBuilder.Entity("OwlNet.Domain.Entities.CardAttachment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AgentName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CardId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasMaxLength(2147483647)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("WorkflowTriggerId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CardId");
+
+                    b.HasIndex("WorkflowTriggerId");
+
+                    b.ToTable("CardAttachments", (string)null);
+                });
+
             modelBuilder.Entity("OwlNet.Domain.Entities.CardComment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -690,6 +729,20 @@ namespace OwlNet.Infrastructure.Persistence.Migrations.Sqlite
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("OwlNet.Domain.Entities.CardAttachment", b =>
+                {
+                    b.HasOne("OwlNet.Domain.Entities.Card", null)
+                        .WithMany("Attachments")
+                        .HasForeignKey("CardId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("OwlNet.Domain.Entities.WorkflowTrigger", null)
+                        .WithMany()
+                        .HasForeignKey("WorkflowTriggerId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
             modelBuilder.Entity("OwlNet.Domain.Entities.CardComment", b =>
                 {
                     b.HasOne("OwlNet.Domain.Entities.Card", null)
@@ -784,6 +837,8 @@ namespace OwlNet.Infrastructure.Persistence.Migrations.Sqlite
 
             modelBuilder.Entity("OwlNet.Domain.Entities.Card", b =>
                 {
+                    b.Navigation("Attachments");
+
                     b.Navigation("Comments");
 
                     b.Navigation("StatusHistory");
