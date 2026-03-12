@@ -1,0 +1,599 @@
+@* ═══════════════════════════════════════════════════════════════════════════════
+   CreateCardDialog — New Card Creation Modal
+   ═══════════════════════════════════════════════════════════════════════════════
+   MudDialog for creating a new Kanban card. Opened from two entry points:
+
+     1. Column header "Add card" button — PrefilledStatusId is set, so the
+        Status dropdown is pre-selected with that column's status.
+     2. Global "New Card" button — PrefilledStatusId is null, user must pick
+        a status manually.
+
+   Both entry points open the same dialog component.
+
+   Fields: Title (required, max 200), Status (required), Priority (required,
+   default Medium), Description (optional, max 5000), Tags (multi-select chips).
+
+   Submission flow:
+     1. Validate form — stop if invalid.
+      2. CreateCardCommand → returns Result<(Guid Id, int Number)> (new card ID and sequential number).
+     3. For each selected tag → AddTagToCardCommand (failures are noted but
+        do not roll back the card creation).
+     4. Close dialog with DialogResult.Ok(true) + success snackbar.
+
+   Spec reference: SPEC-C5-card-create (FR #4–15)
+   ═══════════════════════════════════════════════════════════════════════════════ *@
+
+@using DispatchR.Abstractions.Send
+@using OwlNet.Application.Common.Models
+@using OwlNet.Application.BoardStatuses.Queries.GetProjectStatuses
+@using OwlNet.Application.ProjectTags.Queries.GetProjectTags
+@using OwlNet.Application.Cards.Commands.CreateCard
+@using OwlNet.Application.Cards.Commands.AddTagToCard
+@using OwlNet.Domain.Enums
+
+@inject IRequestHandler<GetProjectStatusesQuery, ValueTask<List<BoardStatusDto>>> GetStatusesHandler
+@inject IRequestHandler<GetProjectTagsQuery, ValueTask<IReadOnlyList<ProjectTagDto>>> GetTagsHandler
+@inject IRequestHandler<CreateCardCommand, ValueTask<Result<(Guid Id, int Number)>>> CreateCardHandler
+@inject IRequestHandler<AddTagToCardCommand, ValueTask<Result>> AddTagHandler
+@inject ISnackbar Snackbar
+@inject ILogger<CreateCardDialog> Logger
+
+@implements IDisposable
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">New Card</MudText>
+    </TitleContent>
+
+    <DialogContent>
+        @if (_isLoading)
+        {
+            @* ── Loading Skeleton ─────────────────────────────────────────────
+               Show placeholder shapes while statuses and tags are fetched.
+               Heights approximate the real controls to prevent layout shift. *@
+            <MudStack Spacing="3">
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="56px" Class="rounded" />
+                <MudGrid>
+                    <MudItem xs="6">
+                        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="56px" Class="rounded" />
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="56px" Class="rounded" />
+                    </MudItem>
+                </MudGrid>
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="120px" Class="rounded" />
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="36px" Class="rounded" />
+            </MudStack>
+        }
+        else if (_statuses.Count == 0)
+        {
+            @* ── No Statuses Warning ──────────────────────────────────────────
+               The project has no board statuses configured. The Create button
+               is disabled in this state (see IsSubmitDisabled). *@
+            <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined">
+                No board statuses configured. Configure board statuses in Settings.
+            </MudAlert>
+        }
+        else
+        {
+            @* ── Create Card Form ─────────────────────────────────────────────
+               MudForm provides programmatic Validate() + IsValid tracking.
+               Validation runs on blur for text fields and on submit for all. *@
+            <MudForm @ref="_form">
+                <MudStack Spacing="3">
+
+                    @* ── Title ───────────────────────────────────────────────
+                       Required, max 200 chars. Validation fires on blur so the
+                       user gets immediate feedback without waiting for submit. *@
+                    <MudTextField T="string"
+                                  @bind-Value="_title"
+                                  Label="Title"
+                                  Variant="Variant.Outlined"
+                                  FullWidth="true"
+                                  Required="true"
+                                  RequiredError="Title is required."
+                                  Validation="@_titleValidation"
+                                  Immediate="false"
+                                  aria-label="Card title" />
+
+                    @* ── Status + Priority (side by side) ────────────────────
+                       Two dropdowns in a 50/50 grid. Status is pre-filled when
+                       the dialog is opened from a column header. *@
+                    <MudGrid Spacing="2">
+                        <MudItem xs="6">
+                        @* Status — required. Uses a Validation delegate so MudForm.IsValid
+                           tracks it. The manual null-check in SubmitAsync is kept as a
+                           belt-and-suspenders guard. *@
+                            <MudSelect T="Guid?"
+                                       @bind-Value="_selectedStatusId"
+                                       Label="Status"
+                                       Variant="Variant.Outlined"
+                                       FullWidth="true"
+                                       Required="true"
+                                       RequiredError="Status is required."
+                                       Validation="@_statusValidation"
+                                       aria-label="Card status">
+                                @foreach (var status in _statuses)
+                                {
+                                    <MudSelectItem T="Guid?" Value="@((Guid?)status.Id)">
+                                        @status.Name
+                                    </MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="6">
+                            @* Priority — required, defaults to Medium.
+                               Each item shows a colored icon matching the KanbanCard display. *@
+                            <MudSelect T="CardPriority"
+                                       @bind-Value="_priority"
+                                       Label="Priority"
+                                       Variant="Variant.Outlined"
+                                       FullWidth="true"
+                                       aria-label="Card priority">
+                                @foreach (CardPriority p in Enum.GetValues<CardPriority>())
+                                {
+                                    <MudSelectItem Value="@p">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                            <MudIcon Icon="@GetPriorityIcon(p)"
+                                                     Size="Size.Small"
+                                                     Color="@GetPriorityColor(p)" />
+                                            @p.ToString()
+                                        </MudStack>
+                                    </MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                    </MudGrid>
+
+                    @* ── Description ─────────────────────────────────────────
+                       Optional, max 5000 chars. Multi-line textarea.
+                       Validation fires on blur (max-length check only). *@
+                    <MudTextField T="string"
+                                  @bind-Value="_description"
+                                  Label="Description"
+                                  Variant="Variant.Outlined"
+                                  FullWidth="true"
+                                  Lines="5"
+                                  Placeholder="Add a description (optional)..."
+                                  Validation="@_descriptionValidation"
+                                  Immediate="false"
+                                  aria-label="Card description" />
+
+                    @* ── Tags ────────────────────────────────────────────────
+                       Chip-toggle multi-select. All project tags are shown;
+                       clicking a chip toggles its selection state.
+                       Selected chips use Color.Primary; unselected are outlined. *@
+                    <div>
+                        <MudText Typo="Typo.overline" Color="Color.Secondary" Class="mb-1">Tags</MudText>
+
+                        @if (_allTags.Count == 0)
+                        {
+                            @* Empty state — guide the user to Project Settings *@
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                No tags defined. Add tags in Project Settings.
+                            </MudText>
+                        }
+                        else
+                        {
+                            @* Tag chip list — each chip toggles selection on click *@
+                            <div class="create-card-tags-container">
+                                @foreach (var tag in _allTags)
+                                {
+                                    @* Capture loop variable to avoid closure capture bug *@
+                                    var tagCapture = tag;
+                                    var isSelected = _selectedTagIds.Contains(tagCapture.Id);
+
+                                    <MudChip T="string"
+                                             Color="@(isSelected ? Color.Primary : Color.Default)"
+                                             Variant="@(isSelected ? Variant.Filled : Variant.Outlined)"
+                                             Size="Size.Small"
+                                             OnClick="@(() => ToggleTag(tagCapture.Id))"
+                                             aria-label="@($"{(isSelected ? "Deselect" : "Select")} tag {tagCapture.Name}")"
+                                             aria-pressed="@isSelected">
+                                        @* Small colored dot matching the tag's configured color *@
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                            <span class="create-card-tag-dot"
+                                                  style="background-color: @(tagCapture.Color ?? "#9CA3AF");"></span>
+                                            @tagCapture.Name
+                                        </MudStack>
+                                    </MudChip>
+                                }
+                            </div>
+                        }
+                    </div>
+
+                </MudStack>
+            </MudForm>
+        }
+    </DialogContent>
+
+    <DialogActions>
+        @* Cancel — closes without saving. Always enabled. *@
+        <MudButton Variant="Variant.Text"
+                   OnClick="@Cancel">
+            Cancel
+        </MudButton>
+
+        @* Create — submits the form. Disabled while loading, submitting, or no statuses.
+           Shows an inline spinner while the request is in flight. *@
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Disabled="@IsSubmitDisabled"
+                   OnClick="@SubmitAsync">
+            @if (_isSubmitting)
+            {
+                <MudProgressCircular Size="Size.Small"
+                                     Indeterminate="true"
+                                     Class="mr-2" />
+                @:Creating...
+            }
+            else
+            {
+                @:Create
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Cascading Parameters
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// The dialog instance provided by MudBlazor's dialog system.
+    /// Used to close the dialog and pass back the creation result.
+    /// </summary>
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Parameters
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// The owning project ID. Used to load statuses and tags, and passed to
+    /// <see cref="CreateCardCommand"/> so the card is created in the correct project.
+    /// </summary>
+    [Parameter, EditorRequired]
+    public Guid ProjectId { get; set; }
+
+    /// <summary>
+    /// Optional pre-filled status ID. When set (dialog opened from a column header),
+    /// the Status dropdown is pre-selected with this value. The user can still change it.
+    /// When <see langword="null"/> (dialog opened from the global "New Card" button),
+    /// no status is pre-selected and the user must choose one.
+    /// </summary>
+    [Parameter]
+    public Guid? PrefilledStatusId { get; set; }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Form Field State
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>MudForm reference for programmatic Validate() and IsValid access.</summary>
+    private MudForm _form = null!;
+
+    /// <summary>Current value of the Title text field.</summary>
+    private string _title = string.Empty;
+
+    /// <summary>
+    /// Currently selected status ID. Null means no selection yet.
+    /// Pre-populated from <see cref="PrefilledStatusId"/> when set.
+    /// </summary>
+    private Guid? _selectedStatusId;
+
+    /// <summary>Currently selected priority. Defaults to Medium per spec.</summary>
+    private CardPriority _priority = CardPriority.Medium;
+
+    /// <summary>Current value of the Description textarea. Empty string = no description.</summary>
+    private string _description = string.Empty;
+
+    /// <summary>IDs of tags the user has toggled on. Populated by chip clicks.</summary>
+    private List<Guid> _selectedTagIds = [];
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Loaded Data
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>Board statuses for this project, ordered by SortOrder (from query).</summary>
+    private List<BoardStatusDto> _statuses = [];
+
+    /// <summary>All project tags available for selection.</summary>
+    private IReadOnlyList<ProjectTagDto> _allTags = [];
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Loading / Submitting Flags
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>True while statuses and tags are being fetched. Drives skeleton loaders.</summary>
+    private bool _isLoading = true;
+
+    /// <summary>True while the CreateCardCommand (and tag assignments) are in flight.</summary>
+    private bool _isSubmitting;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Validation Delegates
+    //  Defined as fields so they are not re-allocated on every render cycle.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Validates the Title field: required + max 200 characters.
+    /// Assigned to <see cref="MudTextField{T}.Validation"/> so MudForm tracks it.
+    /// </summary>
+    private readonly Func<string, IEnumerable<string>> _titleValidation = value =>
+    {
+        var errors = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            errors.Add("Title is required.");
+        }
+        else if (value.Trim().Length > 200)
+        {
+            errors.Add("Title must be 200 characters or fewer.");
+        }
+
+        return errors;
+    };
+
+    /// <summary>
+    /// Validates the Description field: optional, but max 5000 characters when provided.
+    /// Assigned to <see cref="MudTextField{T}.Validation"/> so MudForm tracks it.
+    /// </summary>
+    private readonly Func<string, IEnumerable<string>> _descriptionValidation = value =>
+    {
+        if (!string.IsNullOrEmpty(value) && value.Length > 5000)
+        {
+            return ["Description must be 5000 characters or fewer."];
+        }
+
+        return [];
+    };
+
+    /// <summary>
+    /// Validates the Status field: required (must not be null).
+    /// Assigned to <see cref="MudSelect{T}.Validation"/> so MudForm tracks it.
+    /// </summary>
+    private readonly Func<Guid?, IEnumerable<string>> _statusValidation = value =>
+    {
+        if (!value.HasValue)
+            return ["Status is required."];
+        return [];
+    };
+
+    /// <summary>Cancellation token source for all async operations in this component.</summary>
+    private readonly CancellationTokenSource _cts = new();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Computed Properties
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// True when the Create button should be disabled.
+    /// Covers: still loading, currently submitting, or no statuses available.
+    /// Note: MudForm.IsValid is checked inside SubmitAsync after calling Validate().
+    /// </summary>
+    private bool IsSubmitDisabled => _isSubmitting || _isLoading || (_statuses.Count == 0);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Lifecycle
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Loads project statuses and tags in parallel, then applies the pre-filled
+    /// status if one was provided by the caller.
+    /// </summary>
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // Fire both queries simultaneously — they are independent of each other.
+            // Convert ValueTask<T> to Task<T> immediately so the same instance can
+            // be safely awaited twice (once via WhenAll, once to read the result).
+            var statusesTask = GetStatusesHandler.Handle(
+                new GetProjectStatusesQuery { ProjectId = ProjectId }, _cts.Token).AsTask();
+
+            var tagsTask = GetTagsHandler.Handle(
+                new GetProjectTagsQuery { ProjectId = ProjectId }, _cts.Token).AsTask();
+
+            await Task.WhenAll(statusesTask, tagsTask);
+
+            _statuses = await statusesTask;
+            _allTags = await tagsTask;
+
+            // Pre-select the status when opened from a column header "Add card" button.
+            // The user can still change it — this is just a convenience pre-fill.
+            if (PrefilledStatusId.HasValue)
+            {
+                _selectedStatusId = PrefilledStatusId.Value;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Dialog was closed before loading completed — no action needed
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load statuses/tags for CreateCardDialog (project {ProjectId})", ProjectId);
+            Snackbar.Add("Could not load board data. Please close and try again.", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Tag Toggle
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Toggles the selection state of a tag chip.
+    /// If the tag is already selected, it is removed; otherwise it is added.
+    /// </summary>
+    /// <param name="tagId">The ID of the tag to toggle.</param>
+    private void ToggleTag(Guid tagId)
+    {
+        if (_selectedTagIds.Contains(tagId))
+        {
+            _selectedTagIds.Remove(tagId);
+        }
+        else
+        {
+            _selectedTagIds.Add(tagId);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Submit
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Validates the form and, if valid, creates the card then assigns any
+    /// selected tags. Closes the dialog on full success.
+    ///
+    /// Failure modes:
+    ///   - Form invalid → stop, MudForm shows inline errors.
+    ///   - Status not selected → warning snackbar, keep dialog open.
+    ///   - CreateCardCommand failure → error snackbar, keep dialog open.
+    ///   - Tag assignment failure → warning snackbar, close dialog (card was created).
+    /// </summary>
+    private async Task SubmitAsync()
+    {
+        // Trigger MudForm validation so all inline error messages appear
+        await _form.ValidateAsync();
+
+        if (!_form.IsValid)
+        {
+            // Inline errors are already shown by MudForm — no extra snackbar needed
+            return;
+        }
+
+        // Belt-and-suspenders guard: MudForm's _statusValidation already catches this,
+        // but we keep this check as a defensive fallback.
+        if (!_selectedStatusId.HasValue)
+        {
+            Logger.LogWarning("SubmitAsync reached without a selected status — MudForm validation should have prevented this");
+            return;
+        }
+
+        _isSubmitting = true;
+
+        try
+        {
+            // ── Step 1: Create the card ──────────────────────────────────────
+            var command = new CreateCardCommand
+            {
+                Title = _title.Trim(),
+                Description = string.IsNullOrWhiteSpace(_description) ? null : _description.Trim(),
+                Priority = _priority,
+                ProjectId = ProjectId,
+                StatusId = _selectedStatusId,
+                CreatedBy = "user"
+            };
+
+            var result = await CreateCardHandler.Handle(command, _cts.Token);
+
+            if (result.IsFailure)
+            {
+                // Card creation failed — keep the dialog open so the user can retry
+                Logger.LogWarning(
+                    "CreateCardCommand failed for project {ProjectId}: {Error}",
+                    ProjectId, result.Error);
+                Snackbar.Add(result.Error, Severity.Error);
+                return;
+            }
+
+            var (cardId, cardNumber) = result.Value;
+
+            // ── Step 2: Assign selected tags ─────────────────────────────────
+            // Tag failures are non-fatal: the card exists, so we note the failure
+            // and show a warning rather than rolling back.
+            var tagsFailed = false;
+
+            foreach (var tagId in _selectedTagIds)
+            {
+                var tagResult = await AddTagHandler.Handle(
+                    new AddTagToCardCommand { CardId = cardId, TagId = tagId },
+                    _cts.Token);
+
+                if (tagResult.IsFailure)
+                {
+                    tagsFailed = true;
+                    Logger.LogWarning(
+                        "Failed to assign tag {TagId} to card {CardId}: {Error}",
+                        tagId, cardId, tagResult.Error);
+                }
+            }
+
+            // ── Step 3: Show result snackbar and close ───────────────────────
+            if (tagsFailed)
+            {
+                Snackbar.Add("Card created, but some tags could not be assigned.", Severity.Warning);
+            }
+            else
+            {
+                Snackbar.Add($"Card #{cardNumber} created.", Severity.Success);
+            }
+
+            // Pass true so the board knows to refresh its card list
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        finally
+        {
+            // Always reset the submitting flag, even if an exception escapes
+            _isSubmitting = false;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Cancel
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>Closes the dialog without saving. The board will not refresh.</summary>
+    private void Cancel() => MudDialog.Cancel();
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Helpers — Priority
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Maps a <see cref="CardPriority"/> to a MudBlazor <see cref="Color"/>
+    /// for the priority dropdown icon. Matches the colors used in CardDetailDialog.
+    /// </summary>
+    /// <param name="priority">The priority level to map.</param>
+    private static Color GetPriorityColor(CardPriority priority) => priority switch
+    {
+        CardPriority.Critical => Color.Error,
+        CardPriority.High     => Color.Warning,
+        CardPriority.Medium   => Color.Info,
+        CardPriority.Low      => Color.Success,
+        _                     => Color.Info
+    };
+
+    /// <summary>
+    /// Maps a <see cref="CardPriority"/> to a Material icon for the priority dropdown.
+    /// Matches the icons used in CardDetailDialog.
+    /// </summary>
+    /// <param name="priority">The priority level to map.</param>
+    private static string GetPriorityIcon(CardPriority priority) => priority switch
+    {
+        CardPriority.Critical => Icons.Material.Filled.KeyboardDoubleArrowUp,
+        CardPriority.High     => Icons.Material.Filled.KeyboardArrowUp,
+        CardPriority.Medium   => Icons.Material.Filled.DragHandle,
+        CardPriority.Low      => Icons.Material.Filled.KeyboardArrowDown,
+        _                     => Icons.Material.Filled.DragHandle
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Cleanup
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}
