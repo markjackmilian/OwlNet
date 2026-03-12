@@ -1,25 +1,34 @@
 @using DispatchR.Abstractions.Send
 @using OwlNet.Application.Common.Models
 @using OwlNet.Application.BoardStatuses.Queries.GetGlobalDefaultStatuses
+@using OwlNet.Application.BoardStatuses.Queries.GetProjectStatuses
 @using OwlNet.Application.BoardStatuses.Commands.AddBoardStatus
 @using OwlNet.Application.BoardStatuses.Commands.RenameBoardStatus
 @using OwlNet.Application.BoardStatuses.Commands.DeleteBoardStatus
 @using OwlNet.Application.BoardStatuses.Commands.ReorderBoardStatuses
 
 @* ═══════════════════════════════════════════════════════════════════════════════
-   Default Board Statuses Panel — Smart Component
+   Board Statuses Panel — Smart Component (Generalized)
    ═══════════════════════════════════════════════════════════════════════════════
-   Self-contained panel that manages the global default board column statuses.
-   These statuses serve as templates — when a new project is created, the
-   current set of global defaults is copied into the project.
+   Self-contained panel that manages board column statuses for either the global
+   defaults or a specific project, determined by the <see cref="ProjectId"/>
+   parameter.
+
+   Scope behavior:
+   - ProjectId = null  → Global default statuses (used on /settings page).
+                          These serve as templates — when a new project is
+                          created, the current set of global defaults is copied
+                          into the project.
+   - ProjectId = Guid  → Project-scoped statuses (used on /projects/{id}/settings).
+                          These are the actual board columns for a specific project.
 
    UI states:
    ┌──────────┐  success   ┌─────────────────────────────────────────────────┐
    │ Loading   │──────────▶│ Status list (drag-reorder + inline edit/delete) │
    │ (skeleton)│           │  ┌─ Each row: drag | name (or edit field) | ✎ ✕│
    └──────────┘           │  ├─ Add row: text field + add button            │
-                           │  └─ Empty state when no statuses exist         │
-                           └─────────────────────────────────────────────────┘
+                            │  └─ Empty state when no statuses exist         │
+                            └─────────────────────────────────────────────────┘
          │ failure
          ▼
    ┌──────────────────────────────────────────────────────────────────────────┐
@@ -28,17 +37,21 @@
 
    Services injected:
    - IRequestHandler<GetGlobalDefaultStatusesQuery, ...> — fetches global defaults
-   - IRequestHandler<AddBoardStatusCommand, ...> — adds a new global default status
+   - IRequestHandler<GetProjectStatusesQuery, ...> — fetches project-scoped statuses
+   - IRequestHandler<AddBoardStatusCommand, ...> — adds a new status
    - IRequestHandler<RenameBoardStatusCommand, ...> — renames a status
    - IRequestHandler<DeleteBoardStatusCommand, ...> — deletes a status
    - IRequestHandler<ReorderBoardStatusesCommand, ...> — persists new sort order
    - IDialogService — confirmation dialogs for destructive actions
    - ISnackbar — toast notifications for operation feedback
 
-   Spec reference: SPEC-WF1-board-status-management.md (FR-2, FR-6–FR-11)
+   Spec references:
+   - SPEC-WF1-board-status-management.md (FR-2, FR-6–FR-11)
+   - SPEC-project-board-statuses-settings.md (FR-8)
    ═══════════════════════════════════════════════════════════════════════════════ *@
 
 @inject IRequestHandler<GetGlobalDefaultStatusesQuery, ValueTask<List<BoardStatusDto>>> GetGlobalDefaultsHandler
+@inject IRequestHandler<GetProjectStatusesQuery, ValueTask<List<BoardStatusDto>>> GetProjectStatusesHandler
 @inject IRequestHandler<AddBoardStatusCommand, ValueTask<Result<Guid>>> AddBoardStatusHandler
 @inject IRequestHandler<RenameBoardStatusCommand, ValueTask<Result>> RenameBoardStatusHandler
 @inject IRequestHandler<DeleteBoardStatusCommand, ValueTask<Result>> DeleteBoardStatusHandler
@@ -52,7 +65,7 @@
 <MudCard Outlined="true">
 
     @* ── Card Header ──────────────────────────────────────────────────────────
-       FR-10: "Default Board Statuses" title + subtitle.
+       FR-10: Scope-aware title + subtitle.
        No header actions — the add row is inline at the bottom of the list. *@
     <MudCardHeader>
         <CardHeaderAvatar>
@@ -61,11 +74,11 @@
             </MudAvatar>
         </CardHeaderAvatar>
         <CardHeaderContent>
-            @* FR-10: Panel title *@
-            <MudText Typo="Typo.h6">Default Board Statuses</MudText>
-            @* FR-10: Panel subtitle *@
+            @* FR-10: Panel title — scope-aware *@
+            <MudText Typo="Typo.h6">@_title</MudText>
+            @* FR-10: Panel subtitle — scope-aware *@
             <MudText Typo="Typo.body2" Color="Color.Secondary">
-                Manage the default board column statuses applied to new projects.
+                @_subtitle
             </MudText>
         </CardHeaderContent>
     </MudCardHeader>
@@ -124,14 +137,14 @@
                       ShowCloseIcon="false">
                 <MudStack Spacing="2">
                     <MudText Typo="Typo.body2">
-                        Failed to load default statuses: @_errorMessage
+                        @_errorPrefix @_errorMessage
                     </MudText>
                     <div>
                         <MudButton Variant="Variant.Outlined"
                                    Color="Color.Error"
                                    StartIcon="@Icons.Material.Filled.Refresh"
-                                   OnClick="@LoadAsync"
-                                   aria-label="Retry loading default statuses">
+                                   OnClick="@(() => LoadAsync())"
+                                   aria-label="@_retryAriaLabel">
                             Retry
                         </MudButton>
                     </div>
@@ -140,9 +153,9 @@
         }
 
         @* ── Empty State ──────────────────────────────────────────────────────
-           Shown when no global default statuses exist. Provides a centred
-           icon, explanatory text, and the inline add row so the user can
-           create the first status immediately. *@
+           Shown when no statuses exist for the current scope. Provides a
+           centred icon, explanatory text, and the inline add row so the user
+           can create the first status immediately. *@
         else if (_statuses.Count == 0)
         {
             <MudStack AlignItems="AlignItems.Center"
@@ -155,7 +168,7 @@
                 <MudText Typo="Typo.body1"
                          Align="Align.Center"
                          Color="Color.Secondary">
-                    No default statuses defined yet.
+                    @_emptyStateText
                 </MudText>
 
                 @* Inline add row in empty state — same as the one below the list,
@@ -173,7 +186,7 @@
                                    Color="Color.Primary"
                                    Disabled="@(string.IsNullOrWhiteSpace(_newStatusName) || _isSaving)"
                                    OnClick="@AddStatusAsync"
-                                   aria-label="Add new default status" />
+                                   aria-label="@_addAriaLabel" />
                 </MudStack>
             </MudStack>
         }
@@ -185,11 +198,11 @@
         else
         {
             <MudDropContainer T="BoardStatusDto"
-                              @ref="_dropContainer"
-                              Items="_statuses"
-                              ItemsSelector="@((item, zone) => true)"
-                              ItemDropped="OnStatusDroppedAsync"
-                              Class="d-flex flex-column">
+                               @key="_dropContainerKey"
+                               Items="_statuses"
+                               ItemsSelector="@((item, zone) => true)"
+                               ItemDropped="OnStatusDroppedAsync"
+                               Class="d-flex flex-column">
                 <ChildContent>
                     <MudDropZone T="BoardStatusDto"
                                  Identifier="statuses"
@@ -300,7 +313,7 @@
                                Color="Color.Primary"
                                Disabled="@(string.IsNullOrWhiteSpace(_newStatusName) || _isSaving)"
                                OnClick="@AddStatusAsync"
-                               aria-label="Add new default status" />
+                               aria-label="@_addAriaLabel" />
             </MudStack>
         }
 
@@ -309,11 +322,58 @@
 
 @code {
     // ═══════════════════════════════════════════════════════════════════════════
+    //  Parameters — determines global vs. project scope
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Optional project ID that determines the scope of board statuses managed by this panel.
+    /// When <c>null</c>, the panel manages global default statuses (used on the /settings page).
+    /// When set, the panel manages project-scoped statuses (used on /projects/{id}/settings).
+    /// </summary>
+    [Parameter]
+    public Guid? ProjectId { get; set; }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  Scope Helpers — computed properties for scope-aware text and behavior
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>True when managing project-scoped statuses; false for global defaults.</summary>
+    private bool IsProjectScope => ProjectId is not null;
+
+    /// <summary>Panel title — changes based on whether we're managing global defaults or project statuses.</summary>
+    private string _title => IsProjectScope ? "Board Statuses" : "Default Board Statuses";
+
+    /// <summary>Panel subtitle — describes the scope of the statuses being managed.</summary>
+    private string _subtitle => IsProjectScope
+        ? "Manage the board column statuses for this project."
+        : "Manage the default board column statuses applied to new projects.";
+
+    /// <summary>Empty state message — scope-aware text when no statuses exist.</summary>
+    private string _emptyStateText => IsProjectScope
+        ? "No statuses defined for this project."
+        : "No default statuses defined yet.";
+
+    /// <summary>Error message prefix — scope-aware text prepended to the error details.</summary>
+    private string _errorPrefix => IsProjectScope
+        ? "Failed to load project statuses:"
+        : "Failed to load default statuses:";
+
+    /// <summary>Retry button aria-label — scope-aware for screen readers.</summary>
+    private string _retryAriaLabel => IsProjectScope
+        ? "Retry loading project statuses"
+        : "Retry loading default statuses";
+
+    /// <summary>Add button aria-label — scope-aware for screen readers.</summary>
+    private string _addAriaLabel => IsProjectScope
+        ? "Add new status"
+        : "Add new default status";
+
+    // ═══════════════════════════════════════════════════════════════════════════
     //  State — status list, loading flag, error message, and editing state
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// The loaded list of global default board statuses, ordered by SortOrder.
+    /// The loaded list of board statuses, ordered by SortOrder.
     /// Empty until the first successful load; remains empty on error.
     /// Must be a mutable <see cref="List{T}"/> because MudDropContainer mutates
     /// the collection during drag-and-drop reordering.
@@ -351,15 +411,18 @@
     private bool _isSaving;
 
     /// <summary>
-    /// Reference to the MudDropContainer so we can call <c>Refresh()</c> after
-    /// the status list is reloaded to force the container to re-evaluate items.
+    /// Incrementing key used as <c>@key</c> on the <see cref="MudDropContainer{T}"/>.
+    /// When the key changes, Blazor destroys and recreates the container, which is
+    /// necessary because <c>MudDropContainer.Refresh()</c> does not reliably update
+    /// the rendered items when the underlying collection changes (known MudBlazor
+    /// bug — see GitHub issues #4642 and #7312).
     /// </summary>
-    private MudDropContainer<BoardStatusDto>? _dropContainer;
+    private int _dropContainerKey;
 
     /// <summary>
     /// Cancellation token source scoped to this component's lifetime.
     /// Cancelled in <see cref="Dispose"/> to abort any in-flight handler calls
-    /// if the user navigates away from the Settings page.
+    /// if the user navigates away from the page.
     /// </summary>
     private readonly CancellationTokenSource _cts = new();
 
@@ -368,7 +431,7 @@
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// On first load, fetches all global default board statuses from the database.
+    /// On first load, fetches all board statuses for the current scope from the database.
     /// </summary>
     protected override async Task OnInitializedAsync()
     {
@@ -376,51 +439,83 @@
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    //  Data Loading — fetches global default statuses with error handling
+    //  Data Loading — fetches statuses with scope-aware handler selection
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Loads all global default board statuses via <see cref="GetGlobalDefaultsHandler"/>.
+    /// Loads all board statuses for the current scope. When <see cref="ProjectId"/>
+    /// is <c>null</c>, fetches global defaults via <see cref="GetGlobalDefaultsHandler"/>.
+    /// When <see cref="ProjectId"/> has a value, fetches project-scoped statuses via
+    /// <see cref="GetProjectStatusesHandler"/>.
     /// Manages the loading and error states so the UI reflects the current status.
     /// Called from <see cref="OnInitializedAsync"/> and from the Retry button.
     /// </summary>
-    private async Task LoadAsync()
+    /// <param name="showLoading">
+    /// When <c>true</c> (default), shows the skeleton loading state while fetching data.
+    /// This is appropriate for the initial load and Retry, where the user expects a full
+    /// loading indicator. When <c>false</c>, the skeleton is suppressed to avoid a
+    /// jarring flash of skeleton content during mutation reloads (add, rename, delete,
+    /// reorder) — the existing status list remains visible while the fresh data loads.
+    /// </param>
+    private async Task LoadAsync(bool showLoading = true)
     {
-        _isLoading = true;
-        var hadError = _errorMessage is not null;
-        _errorMessage = null;
-
-        // Trigger re-render only on the Retry path (when coming from an error state)
-        // to avoid a redundant render on the initial load path.
-        if (hadError)
+        // Only show the skeleton loading state when explicitly requested (initial load
+        // and Retry). During mutation reloads, suppress the skeleton to avoid a jarring
+        // flash — the @key increment on the MudDropContainer handles the refresh.
+        if (showLoading)
         {
-            StateHasChanged();
+            _isLoading = true;
+            var hadError = _errorMessage is not null;
+            _errorMessage = null;
+
+            // Trigger re-render only on the Retry path (when coming from an error state)
+            // to avoid a redundant render on the initial load path.
+            if (hadError)
+            {
+                StateHasChanged();
+            }
+        }
+        else
+        {
+            _errorMessage = null;
         }
 
         try
         {
-            _statuses = await GetGlobalDefaultsHandler.Handle(
-                new GetGlobalDefaultStatusesQuery(), _cts.Token);
+            // Branch on scope: global defaults vs. project-scoped statuses
+            _statuses = ProjectId is null
+                ? await GetGlobalDefaultsHandler.Handle(
+                    new GetGlobalDefaultStatusesQuery(), _cts.Token)
+                : await GetProjectStatusesHandler.Handle(
+                    new GetProjectStatusesQuery { ProjectId = ProjectId.Value }, _cts.Token);
         }
         catch (Exception ex)
         {
             _errorMessage = ex.Message;
         }
 
-        _isLoading = false;
+        if (showLoading)
+        {
+            _isLoading = false;
+        }
 
-        // After reloading, refresh the drop container so it picks up the new items,
-        // then notify Blazor that state has changed so the DOM is updated.
-        _dropContainer?.Refresh();
+        // Increment the key to force Blazor to destroy and recreate the MudDropContainer.
+        // This is necessary because MudDropContainer.Refresh() does not reliably update
+        // the rendered items when the underlying collection changes (known MudBlazor
+        // bug — see GitHub issues #4642 and #7312). The @key directive causes Blazor
+        // to treat the new container as a completely different component instance.
+        _dropContainerKey++;
         StateHasChanged();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    //  FR-6: Add Status — creates a new global default status
+    //  FR-6: Add Status — creates a new status in the current scope
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Adds a new global default board status with the name from <see cref="_newStatusName"/>.
+    /// Adds a new board status with the name from <see cref="_newStatusName"/>.
+    /// The <see cref="ProjectId"/> parameter determines whether this creates a
+    /// global default status (null) or a project-scoped status (Guid).
     /// On success: reloads the list and shows a success snackbar.
     /// On failure: shows an error snackbar with the validation/error message.
     /// </summary>
@@ -434,7 +529,7 @@
 
         _isSaving = true;
 
-        var command = new AddBoardStatusCommand { Name = name, ProjectId = null };
+        var command = new AddBoardStatusCommand { Name = name, ProjectId = ProjectId };
         var result = await AddBoardStatusHandler.Handle(command, _cts.Token);
 
         // Re-enable controls before reloading so the UI is responsive as soon as
@@ -445,7 +540,7 @@
         {
             _newStatusName = string.Empty;
             Snackbar.Add($"Status '{name}' added.", Severity.Success);
-            await LoadAsync();
+            await LoadAsync(showLoading: false);
         }
         else
         {
@@ -527,7 +622,7 @@
         if (result.IsSuccess)
         {
             Snackbar.Add($"Status renamed to '{newName}'.", Severity.Success);
-            await LoadAsync();
+            await LoadAsync(showLoading: false);
         }
         else
         {
@@ -558,7 +653,7 @@
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Deletes a global default board status after user confirmation.
+    /// Deletes a board status after user confirmation.
     /// Uses <see cref="IDialogService.ShowMessageBoxAsync"/> for a lightweight
     /// confirmation dialog. On success: reloads the list and shows a success
     /// snackbar. On failure: shows an error snackbar with the error message.
@@ -590,7 +685,7 @@
         if (result.IsSuccess)
         {
             Snackbar.Add($"Status '{status.Name}' deleted.", Severity.Success);
-            await LoadAsync();
+            await LoadAsync(showLoading: false);
         }
         else
         {
@@ -607,6 +702,8 @@
     /// Handles the <see cref="MudDropContainer{T}.ItemDropped"/> event.
     /// Updates the local list order based on the drop position, then persists
     /// the new sort order via <see cref="ReorderBoardStatusesHandler"/>.
+    /// The <see cref="ProjectId"/> parameter is passed to scope the reorder
+    /// to either global defaults or a specific project.
     /// Auto-saves on each drop for immediate feedback (FR-9).
     /// </summary>
     /// <param name="info">
@@ -630,7 +727,7 @@
         var orderedIds = _statuses.Select(s => s.Id).ToList();
         var command = new ReorderBoardStatusesCommand
         {
-            ProjectId = null,
+            ProjectId = ProjectId,
             OrderedStatusIds = orderedIds
         };
 
@@ -644,13 +741,13 @@
         {
             Snackbar.Add("Status order updated.", Severity.Success);
             // Reload to get the authoritative sort order from the server
-            await LoadAsync();
+            await LoadAsync(showLoading: false);
         }
         else
         {
             Snackbar.Add(result.Error, Severity.Error);
             // Reload to revert to the server's sort order on failure
-            await LoadAsync();
+            await LoadAsync(showLoading: false);
         }
     }
 
@@ -660,7 +757,7 @@
 
     /// <summary>
     /// Cancels any in-flight handler calls when the component is disposed
-    /// (e.g., user navigates away from the Settings page).
+    /// (e.g., user navigates away from the page).
     /// </summary>
     public void Dispose()
     {
