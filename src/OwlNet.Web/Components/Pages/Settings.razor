@@ -112,10 +112,11 @@ else
            configuration, connection verification, and encrypted storage. *@
         <LlmProviderConfigPanel />
 
-        @* ── Card: Default Board Statuses ────────────────────────────────
-           Panel component for managing the global default board column
-           statuses that are applied to new projects. *@
-        <DefaultBoardStatusesPanel />
+        @* ── Card: Board Statuses (Global Defaults) ─────────────────────
+           Generalized panel component for managing board column statuses.
+           No ProjectId parameter = global default scope — manages the
+           default statuses that are applied to new projects. *@
+        <BoardStatusesPanel />
 
         @* ── Card: System Agents ─────────────────────────────────────────
            Panel component for managing the system-wide agent catalogue:

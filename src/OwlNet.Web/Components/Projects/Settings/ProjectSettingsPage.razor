@@ -1,0 +1,125 @@
+@* ===============================================================================
+   Project Settings Page -- Smart Page Component
+   ===============================================================================
+   Displays the settings for a specific project. Currently contains a single
+   section: Board Statuses, which allows the user to manage the board column
+   statuses (add, rename, delete, reorder) for the project.
+
+   This is a "smart" component: it injects services, validates the project,
+   syncs the ActiveProjectService, and follows the same loading/validation/sync
+   pattern as WorkflowTriggersPage, ProjectAgentsPage, and Board.razor.
+
+   Route: /projects/{ProjectId:guid}/settings
+
+   Layout structure:
+   +---------------------------------------------------------------------+
+   | PAGE HEADER                                                          |
+   | "Settings" (h4) + subtitle                                          |
+   +---------------------------------------------------------------------+
+   | BOARD STATUSES PANEL                                                 |
+   | (delegated to BoardStatusesPanel with ProjectId scope)               |
+   +---------------------------------------------------------------------+
+
+   Spec reference: SPEC-project-board-statuses-settings.md (FR-1, FR-2)
+   =============================================================================== *@
+
+@page "/projects/{ProjectId:guid}/settings"
+
+@using DispatchR.Abstractions.Send
+@using OwlNet.Application.Common.Models
+@using OwlNet.Application.Projects.Queries.GetProjectById
+@using OwlNet.Web.Services
+@using OwlNet.Web.Components.Projects
+@using OwlNet.Web.Components.Settings
+
+@* ===============================================================================
+   Page Title -- updates the browser tab with the project name when loaded
+   (FR-1: "Settings -- {ProjectName} -- OwlNet")
+   =============================================================================== *@
+<PageTitle>@(_project is not null ? $"Settings — {_project.Name} — OwlNet" : "Settings — OwlNet")</PageTitle>
+
+@* ===============================================================================
+   Loading State -- skeleton placeholders while the project data is being fetched.
+   Mirrors the BoardStatusesPanel layout so the skeleton feels natural when the
+   real content appears.
+   =============================================================================== *@
+@if (_isLoading)
+{
+    <MudStack Spacing="4">
+        @* -- Page header skeleton (title + subtitle) -- *@
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="180px" Height="40px" />
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="100%" Height="20px" />
+
+        @* -- BoardStatusesPanel skeleton (card with header + 3 status rows) -- *@
+        <MudCard Outlined="true">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudSkeleton Width="40%" Height="28px" />
+                    <MudSkeleton Width="60%" Height="20px" Class="mt-1" />
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                @for (var i = 0; i < 3; i++)
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="py-3">
+                        @* Drag handle placeholder *@
+                        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="24px" Height="24px" />
+                        @* Status name placeholder *@
+                        <MudSkeleton SkeletonType="SkeletonType.Text" Width="100%" Height="20px" />
+                        @* Edit button placeholder *@
+                        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="28px" Height="28px" />
+                        @* Delete button placeholder *@
+                        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Width="28px" Height="28px" />
+                    </MudStack>
+                }
+            </MudCardContent>
+        </MudCard>
+    </MudStack>
+}
+@* ===============================================================================
+   Error State -- project not found or archived
+   (FR-1: invalid/archived project shows "Project not found" with CTA)
+   =============================================================================== *@
+else if (_isNotFound)
+{
+    <MudStack AlignItems="AlignItems.Center"
+              Justify="Justify.Center"
+              Spacing="3"
+              Class="py-16">
+        <MudIcon Icon="@Icons.Material.Filled.SearchOff"
+                 Size="Size.Large"
+                 Color="Color.Default" />
+        <MudText Typo="Typo.h5" Align="Align.Center">
+            Project not found
+        </MudText>
+        <MudText Typo="Typo.body1" Align="Align.Center" Color="Color.Secondary">
+            The project may have been archived or does not exist.
+        </MudText>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.FolderOpen"
+                   OnClick="@OpenProjectSelectorAsync">
+            Select a project
+        </MudButton>
+    </MudStack>
+}
+@* ===============================================================================
+   Content State -- page header + Board Statuses panel
+   =============================================================================== *@
+else if (_project is not null)
+{
+    @* -- Page Header -- *@
+    <MudStack Spacing="1" Class="mb-6">
+        <MudText Typo="Typo.h4">Settings</MudText>
+        <MudText Typo="Typo.body1" Color="Color.Secondary">
+            Manage project configuration and board settings.
+        </MudText>
+    </MudStack>
+
+    @* -- Board Statuses section (FR-2) --
+       Delegates all status management to the generalized BoardStatusesPanel
+       component, passing the ProjectId to scope it to this project. *@
+    <MudStack Spacing="4">
+        <BoardStatusesPanel ProjectId="@ProjectId" />
+    </MudStack>
+}
